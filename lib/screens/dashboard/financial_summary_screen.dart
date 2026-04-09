@@ -1,0 +1,962 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
+import 'package:share_plus/share_plus.dart';
+import '../../core/constants/app_colors.dart';
+import '../../core/utils/currency_formatter.dart';
+import '../../models/gig.dart';
+import '../../providers/stats_provider.dart';
+import '../../services/pdf_service.dart';
+
+class FinancialSummaryScreen extends ConsumerWidget {
+  const FinancialSummaryScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final period = ref.watch(financialPeriodProvider);
+    final summaryAsync = ref.watch(financialPeriodSummaryProvider(period));
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Resumen Financiero'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.download_rounded),
+            tooltip: 'Descargar resumen',
+            onPressed: () {
+              final summary = summaryAsync.valueOrNull;
+              if (summary != null) {
+                _exportSummary(context, summary, period);
+              }
+            },
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          // Period selectors
+          _PeriodHeader(),
+          const Divider(height: 1),
+
+          Expanded(
+            child: summaryAsync.when(
+              data: (summary) => RefreshIndicator(
+                onRefresh: () async {
+                  ref.invalidate(financialPeriodSummaryProvider(period));
+                },
+                child: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    // Main summary card
+                    _SummaryCard(summary: summary),
+                    const SizedBox(height: 16),
+
+                    // IVA section (quarter + year modes)
+                    if (summary.ivaQuarters.isNotEmpty) ...[
+                      _IvaSection(quarters: summary.ivaQuarters),
+                      const SizedBox(height: 16),
+                    ],
+
+                    // Sub-period breakdown
+                    if (period.mode != DashboardPeriodMode.mes &&
+                        summary.subPeriods.isNotEmpty) ...[
+                      _SubPeriodBreakdown(
+                        subPeriods: summary.subPeriods,
+                        year: period.year,
+                        mode: period.mode,
+                      ),
+                    ],
+
+                    // Gigs list for month mode
+                    if (period.mode == DashboardPeriodMode.mes &&
+                        summary.subPeriods.isNotEmpty &&
+                        summary.subPeriods.first.gigs.isNotEmpty) ...[
+                      _GigsList(gigs: summary.subPeriods.first.gigs),
+                    ],
+
+                    const SizedBox(height: 80),
+                  ],
+                ),
+              ),
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (e, _) => Center(child: Text('Error: $e')),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _exportSummary(
+    BuildContext context,
+    FinancialPeriodSummary summary,
+    DashboardPeriod period,
+  ) async {
+    try {
+      final file = await PdfService().generateSummaryPdf(summary: summary);
+      await Share.shareXFiles(
+        [XFile(file.path)],
+      );
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al generar PDF: $e')),
+        );
+      }
+    }
+  }
+}
+
+// ==================== PERIOD HEADER ====================
+
+class _PeriodHeader extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final period = ref.watch(financialPeriodProvider);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      child: Column(
+        children: [
+          // Mode toggle
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.primaryLight,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            padding: const EdgeInsets.all(3),
+            child: Row(
+              children: DashboardPeriodMode.values.map((mode) {
+                final isSelected = period.mode == mode;
+                final label = switch (mode) {
+                  DashboardPeriodMode.mes => 'Mes',
+                  DashboardPeriodMode.trimestre => 'Trimestre',
+                  DashboardPeriodMode.anio => 'Año',
+                };
+                return Expanded(
+                  child: GestureDetector(
+                    onTap: () {
+                      ref.read(financialPeriodProvider.notifier).state =
+                          period.copyWith(mode: mode);
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      decoration: BoxDecoration(
+                        color: isSelected ? AppColors.primary : Colors.transparent,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: isSelected ? Colors.white : AppColors.primary,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Period navigation
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.chevron_left, size: 28),
+                onPressed: () {
+                  ref.read(financialPeriodProvider.notifier).state = period.previous;
+                },
+              ),
+              GestureDetector(
+                onTap: () {
+                  final now = DateTime.now();
+                  ref.read(financialPeriodProvider.notifier).state = DashboardPeriod(
+                    mode: period.mode,
+                    year: now.year,
+                    month: now.month,
+                    quarter: ((now.month - 1) ~/ 3) + 1,
+                  );
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryLight,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    period.label,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: Icon(
+                  Icons.chevron_right,
+                  size: 28,
+                  color: period.isFuture ? AppColors.cardBorder : null,
+                ),
+                onPressed: period.isFuture
+                    ? null
+                    : () {
+                        ref.read(financialPeriodProvider.notifier).state = period.next;
+                      },
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ==================== SUMMARY CARD ====================
+
+class _SummaryCard extends StatelessWidget {
+  final FinancialPeriodSummary summary;
+  const _SummaryCard({required this.summary});
+
+  @override
+  Widget build(BuildContext context) {
+    final totalCobrado = summary.totalCobrado;
+    final progress = summary.estimado > 0
+        ? (totalCobrado / summary.estimado).clamp(0.0, 1.0)
+        : 0.0;
+
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Resumen · ${summary.period.label}',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${summary.numBolos} bolos · ${summary.numFacturasPagadas} facturas pagadas · ${summary.numFacturasEnviadas} enviadas',
+              style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+            ),
+            const Divider(height: 24),
+
+            // Cobrado oficial
+            _statRow(
+              icon: Icons.check_circle,
+              color: AppColors.success,
+              label: 'Cobrado (Facturas)',
+              value: summary.cobradoOficial,
+            ),
+            const SizedBox(height: 14),
+
+            // Pendiente
+            _statRow(
+              icon: Icons.schedule,
+              color: AppColors.warning,
+              label: 'Pendiente',
+              value: summary.pendienteCobrar,
+            ),
+            const SizedBox(height: 14),
+
+            // Cobrado en B
+            _statRow(
+              icon: Icons.money_off,
+              color: AppColors.purple,
+              label: 'Cobrado en B',
+              value: summary.cobradoEnB,
+            ),
+
+            if (summary.pendienteEnB > 0) ...[
+              const SizedBox(height: 14),
+              _statRow(
+                icon: Icons.hourglass_empty,
+                color: AppColors.purple,
+                label: 'Pendiente en B',
+                value: summary.pendienteEnB,
+              ),
+            ],
+
+            const Divider(height: 28),
+
+            // Estimado + progress
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.primaryLight,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.trending_up, color: AppColors.primary, size: 28),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'ESTIMADO',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 11,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                            Text(
+                              CurrencyFormatter.format(summary.estimado),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 22,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: LinearProgressIndicator(
+                      value: progress,
+                      minHeight: 8,
+                      backgroundColor: AppColors.cardBorder,
+                      valueColor: const AlwaysStoppedAnimation<Color>(AppColors.success),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '${(progress * 100).toStringAsFixed(1)}% cobrado',
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.success),
+                      ),
+                      Text(
+                        'Falta: ${CurrencyFormatter.format((summary.estimado - totalCobrado).clamp(0, double.infinity))}',
+                        style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 14),
+
+            // Total cobrado
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.successBg,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'TOTAL COBRADO',
+                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                      ),
+                      Text(
+                        CurrencyFormatter.format(totalCobrado),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                          color: AppColors.success,
+                        ),
+                      ),
+                    ],
+                  ),
+                  // Comparison
+                  if (summary.prevCobradoTotal != null && summary.prevLabel != null) ...[
+                    const SizedBox(height: 8),
+                    _buildComparison(totalCobrado, summary.prevCobradoTotal!, summary.prevLabel!),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _statRow({
+    required IconData icon,
+    required Color color,
+    required String label,
+    required double value,
+  }) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, color: color, size: 20),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
+        ),
+        Text(
+          CurrencyFormatter.format(value),
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: color),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildComparison(double current, double prev, String label) {
+    if (prev == 0 && current == 0) return const SizedBox.shrink();
+
+    final pct = prev > 0 ? ((current - prev) / prev * 100).round() : 100;
+    final isUp = pct >= 0;
+
+    return Row(
+      children: [
+        Icon(
+          isUp ? Icons.arrow_upward : Icons.arrow_downward,
+          size: 14,
+          color: isUp ? AppColors.success : AppColors.error,
+        ),
+        const SizedBox(width: 4),
+        Text(
+          'vs $label: ${CurrencyFormatter.format(prev)} · ${isUp ? '+' : ''}$pct%',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: isUp ? AppColors.success : AppColors.error,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ==================== IVA SECTION ====================
+
+class _IvaSection extends StatelessWidget {
+  final List<QuarterVatDetail> quarters;
+  const _IvaSection({required this.quarters});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'IVA Trimestral',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 8),
+        ...quarters.map((q) => _IvaQuarterCard(quarter: q)),
+      ],
+    );
+  }
+}
+
+class _IvaQuarterCard extends StatelessWidget {
+  final QuarterVatDetail quarter;
+  const _IvaQuarterCard({required this.quarter});
+
+  @override
+  Widget build(BuildContext context) {
+    // Status badge colors
+    Color badgeBg;
+    Color badgeText;
+    String badgeLabel;
+
+    switch (quarter.status) {
+      case 'pendiente_declarar':
+        badgeBg = AppColors.errorBg;
+        badgeText = AppColors.error;
+        badgeLabel = 'Sin declarar';
+        break;
+      case 'pasado':
+        badgeBg = AppColors.successBg;
+        badgeText = AppColors.success;
+        badgeLabel = 'Declarado';
+        break;
+      case 'en_curso':
+        badgeBg = AppColors.primaryLight;
+        badgeText = AppColors.primary;
+        badgeLabel = 'Actual';
+        break;
+      default:
+        badgeBg = AppColors.draftBg;
+        badgeText = AppColors.draft;
+        badgeLabel = 'Futuro';
+    }
+
+    final declFormat = DateFormat('dd MMM', 'es');
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ExpansionTile(
+        leading: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: badgeBg,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            'T${quarter.quarter}',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: badgeText,
+            ),
+          ),
+        ),
+        title: Row(
+          children: [
+            Text(
+              CurrencyFormatter.format(quarter.ivaTotal),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: badgeBg,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                badgeLabel,
+                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: badgeText),
+              ),
+            ),
+          ],
+        ),
+        subtitle: Text(
+          'Declaración: ${declFormat.format(quarter.declarationDate)}${quarter.daysRemaining > 0 ? ' (${quarter.daysRemaining} días)' : ''}',
+          style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+        ),
+        children: quarter.invoices.isEmpty
+            ? [
+                const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text(
+                    'Sin facturas pagadas en este trimestre',
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                  ),
+                ),
+              ]
+            : [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                  child: Column(
+                    children: [
+                      // Header
+                      const Row(
+                        children: [
+                          Expanded(flex: 3, child: Text('Factura', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary))),
+                          Expanded(flex: 2, child: Text('Base', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary), textAlign: TextAlign.right)),
+                          Expanded(flex: 2, child: Text('IVA', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary), textAlign: TextAlign.right)),
+                        ],
+                      ),
+                      const Divider(height: 12),
+                      ...quarter.invoices.map((inv) => InkWell(
+                        onTap: () => context.push('/invoice/${inv.invoiceId}'),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                flex: 3,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '#${inv.numero} · ${inv.clientName}',
+                                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    Text(
+                                      DateFormat('dd/MM/yy').format(inv.fecha),
+                                      style: const TextStyle(fontSize: 10, color: AppColors.textSecondary),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: Text(
+                                  CurrencyFormatter.format(inv.base),
+                                  style: const TextStyle(fontSize: 12),
+                                  textAlign: TextAlign.right,
+                                ),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: Text(
+                                  CurrencyFormatter.format(inv.iva),
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                  textAlign: TextAlign.right,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )),
+                      const Divider(height: 12),
+                      Row(
+                        children: [
+                          const Expanded(flex: 3, child: Text('Total IVA', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
+                          Expanded(flex: 4, child: Text(
+                            CurrencyFormatter.format(quarter.ivaTotal),
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                            textAlign: TextAlign.right,
+                          )),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+      ),
+    );
+  }
+}
+
+// ==================== SUB-PERIOD BREAKDOWN ====================
+
+class _SubPeriodBreakdown extends StatelessWidget {
+  final List<SubPeriodStats> subPeriods;
+  final int year;
+  final DashboardPeriodMode mode;
+  const _SubPeriodBreakdown({
+    required this.subPeriods,
+    required this.year,
+    required this.mode,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          mode == DashboardPeriodMode.anio ? 'Desglose por Meses' : 'Desglose por Meses',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 8),
+        ...subPeriods.map((sp) => _SubPeriodCard(stats: sp, year: year)),
+      ],
+    );
+  }
+}
+
+class _SubPeriodCard extends StatelessWidget {
+  final SubPeriodStats stats;
+  final int year;
+  const _SubPeriodCard({required this.stats, required this.year});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!stats.hasData) {
+      return Card(
+        margin: const EdgeInsets.only(bottom: 8),
+        child: ListTile(
+          leading: Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: Colors.grey[200],
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Center(
+              child: Text(
+                stats.label,
+                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey[500]),
+              ),
+            ),
+          ),
+          title: Text('Sin actividad', style: TextStyle(color: Colors.grey[500])),
+        ),
+      );
+    }
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ExpansionTile(
+        leading: Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: AppColors.primaryLight,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Center(
+            child: Text(
+              stats.label,
+              style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary),
+            ),
+          ),
+        ),
+        title: Text(
+          'Estimado: ${CurrencyFormatter.format(stats.estimado)}',
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        subtitle: Text(
+          'Cobrado: ${CurrencyFormatter.format(stats.total)}',
+          style: const TextStyle(color: AppColors.success, fontSize: 13),
+        ),
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _detailRow('Cobrado (facturas)', stats.cobrado, AppColors.success),
+                _detailRow('Pendiente', stats.pendiente, AppColors.warning),
+                _detailRow('Cobrado en B', stats.cobradoEnB, AppColors.purple),
+                const Divider(),
+                _detailRow('Estimado total', stats.estimado, AppColors.primary, bold: true),
+                const SizedBox(height: 8),
+
+                // Gigs
+                if (stats.gigs.isNotEmpty) ...[
+                  Row(
+                    children: [
+                      const Icon(Icons.music_note, size: 14, color: AppColors.textSecondary),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${stats.numBolos} bolos',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  ...stats.gigs.map((gig) => InkWell(
+                    onTap: () => context.push('/gig/${gig.gigId}'),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  gig.clientName,
+                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                Text(
+                                  DateFormat('dd MMM', 'es').format(gig.fecha),
+                                  style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Text(
+                            CurrencyFormatter.format(gig.importe),
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                          ),
+                          const SizedBox(width: 8),
+                          _statusPill(gig.status),
+                        ],
+                      ),
+                    ),
+                  )),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _detailRow(String label, double value, Color color, {bool bold = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: TextStyle(fontWeight: bold ? FontWeight.bold : FontWeight.normal)),
+          Text(
+            CurrencyFormatter.format(value),
+            style: TextStyle(color: color, fontWeight: bold ? FontWeight.bold : FontWeight.w500),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statusPill(GigStatus status) {
+    Color bg;
+    Color text;
+    switch (status) {
+      case GigStatus.pagado:
+        bg = AppColors.successBg;
+        text = AppColors.success;
+        break;
+      case GigStatus.cobradoEnB:
+        bg = AppColors.purpleBg;
+        text = AppColors.purple;
+        break;
+      case GigStatus.facturaEnviada:
+      case GigStatus.facturaGenerada:
+        bg = AppColors.warningBg;
+        text = AppColors.warning;
+        break;
+      case GigStatus.cancelado:
+        bg = AppColors.errorBg;
+        text = AppColors.error;
+        break;
+      default:
+        bg = AppColors.primaryLight;
+        text = AppColors.primary;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(status.label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: text)),
+    );
+  }
+}
+
+// ==================== GIGS LIST (month mode) ====================
+
+class _GigsList extends StatelessWidget {
+  final List<MonthlyGigDetail> gigs;
+  const _GigsList({required this.gigs});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.music_note, size: 16, color: AppColors.primary),
+            const SizedBox(width: 6),
+            Text(
+              '${gigs.length} bolos',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ...gigs.map((gig) => Card(
+          margin: const EdgeInsets.only(bottom: 6),
+          child: ListTile(
+            onTap: () => context.push('/gig/${gig.gigId}'),
+            leading: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: gig.status == GigStatus.cobradoEnB
+                    ? AppColors.purpleBg
+                    : AppColors.primaryLight,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                Icons.music_note_outlined,
+                size: 20,
+                color: gig.status == GigStatus.cobradoEnB
+                    ? AppColors.purple
+                    : AppColors.primary,
+              ),
+            ),
+            title: Text(
+              gig.clientName,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: Text(
+              DateFormat('dd MMM yyyy', 'es').format(gig.fecha),
+              style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  CurrencyFormatter.format(gig.importe),
+                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                ),
+                const SizedBox(width: 8),
+                _statusPill(gig.status),
+              ],
+            ),
+          ),
+        )),
+      ],
+    );
+  }
+
+  Widget _statusPill(GigStatus status) {
+    Color bg;
+    Color text;
+    switch (status) {
+      case GigStatus.pagado:
+        bg = AppColors.successBg;
+        text = AppColors.success;
+        break;
+      case GigStatus.cobradoEnB:
+        bg = AppColors.purpleBg;
+        text = AppColors.purple;
+        break;
+      case GigStatus.facturaEnviada:
+      case GigStatus.facturaGenerada:
+        bg = AppColors.warningBg;
+        text = AppColors.warning;
+        break;
+      case GigStatus.cancelado:
+        bg = AppColors.errorBg;
+        text = AppColors.error;
+        break;
+      default:
+        bg = AppColors.primaryLight;
+        text = AppColors.primary;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(status.label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: text)),
+    );
+  }
+}
