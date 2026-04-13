@@ -17,9 +17,9 @@ extension GigStatusExtension on GigStatus {
       case GigStatus.facturaGenerada:
         return 'Factura generada';
       case GigStatus.facturaEnviada:
-        return 'Factura enviada';
+        return 'Pdte cobro';
       case GigStatus.pagado:
-        return 'Pagado';
+        return 'Cobrado';
       case GigStatus.cancelado:
         return 'Cancelado';
       case GigStatus.cobradoEnB:

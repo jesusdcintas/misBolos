@@ -15,6 +15,8 @@ import '../../services/notification_service.dart';
 import '../../services/google_auth_service.dart';
 import '../../services/google_calendar_service.dart';
 import '../../widgets/common/empty_state.dart';
+import '../../widgets/common/skeleton_loading.dart';
+import '../../core/utils/app_haptics.dart';
 import '../../models/client.dart';
 
 final _filterProvider = StateProvider<InvoiceStatus?>((ref) => null);
@@ -200,10 +202,18 @@ class InvoicesListScreen extends ConsumerWidget {
                     },
                   );
                 },
-                loading: () => const Center(child: CircularProgressIndicator()),
+                loading: () => Expanded(
+                  child: Column(
+                    children: List.generate(5, (_) => const InvoiceCardSkeleton()),
+                  ),
+                ),
                 error: (e, _) => Center(child: Text('Error: $e')),
               ),
-              loading: () => const Center(child: CircularProgressIndicator()),
+              loading: () => Expanded(
+                child: Column(
+                  children: List.generate(5, (_) => const InvoiceCardSkeleton()),
+                ),
+              ),
               error: (e, _) => Center(child: Text('Error: $e')),
             ),
           ),
@@ -223,18 +233,18 @@ class InvoicesListScreen extends ConsumerWidget {
       ),
       title: Text('${selectedInvoices.length} seleccionadas'),
       actions: [
-        // Marcar como enviada
+        // Marcar como pendiente de cobro
         IconButton(
           icon: const Icon(Icons.send),
-          tooltip: 'Marcar como enviada',
+          tooltip: 'Marcar como pendiente',
           onPressed: selectedInvoices.isEmpty
               ? null
               : () => _bulkMarkAs(context, ref, selectedInvoices, InvoiceStatus.enviada),
         ),
-        // Marcar como pagada
+        // Marcar como cobrada
         IconButton(
           icon: const Icon(Icons.check_circle),
-          tooltip: 'Marcar como pagada',
+          tooltip: 'Marcar como cobrada',
           onPressed: selectedInvoices.isEmpty
               ? null
               : () => _bulkMarkAs(context, ref, selectedInvoices, InvoiceStatus.pagada),
@@ -287,7 +297,7 @@ class InvoicesListScreen extends ConsumerWidget {
   }
 
   Future<void> _bulkMarkAs(BuildContext context, WidgetRef ref, Set<String> ids, InvoiceStatus status) async {
-    final statusLabel = status == InvoiceStatus.enviada ? 'enviadas' : 'pagadas';
+    final statusLabel = status == InvoiceStatus.enviada ? 'pendientes' : 'cobradas';
     
     final confirm = await showDialog<bool>(
       context: context,
@@ -361,7 +371,7 @@ class InvoicesListScreen extends ConsumerWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('¿Revertir estado de ${ids.length} facturas?'),
-        content: const Text('Pagada → Enviada\nEnviada → Borrador'),
+        content: const Text('Cobrada → Pendiente\nPendiente → Borrador'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -534,7 +544,10 @@ class _InvoiceTile extends ConsumerWidget {
       child: ListTile(
         onTap: selectionMode
             ? () => onSelect?.call(!isSelected)
-            : () => context.push('/invoice/${invoice.id}'),
+            : () {
+                AppHaptics.light();
+                context.push('/invoice/${invoice.id}');
+              },
         onLongPress: onLongPress,
         leading: selectionMode
             ? Checkbox(

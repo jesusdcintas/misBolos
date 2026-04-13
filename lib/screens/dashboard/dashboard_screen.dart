@@ -10,8 +10,13 @@ import '../../providers/client_provider.dart';
 import '../../providers/stats_provider.dart';
 import '../../widgets/common/status_badge.dart';
 import '../../widgets/common/facturable_badge.dart';
+import '../../widgets/common/skeleton_loading.dart';
+import '../../widgets/common/dismissible_alert_banner.dart';
 import '../../widgets/common/empty_state.dart';
 import '../../widgets/dashboard/summary_card.dart';
+import '../../widgets/common/expandable_fab.dart';
+import '../../widgets/common/animated_counter.dart';
+import '../../widgets/common/dj_refresh_indicator.dart';
 import 'package:go_router/go_router.dart';
 
 class DashboardScreen extends ConsumerWidget {
@@ -42,7 +47,7 @@ class DashboardScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: RefreshIndicator(
+      body: DJRefreshIndicator(
         onRefresh: () async {
           ref.invalidate(periodDashboardStatsProvider(period));
           ref.invalidate(upcomingGigsProvider);
@@ -61,9 +66,11 @@ class DashboardScreen extends ConsumerWidget {
             overdueAsync.when(
               data: (alert) {
                 if (alert.invoices.isEmpty) return const SizedBox.shrink();
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: _OverdueBanner(alert: alert),
+                return DismissibleAlertBanner(
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: _OverdueBanner(alert: alert),
+                  ),
                 );
               },
               loading: () => const SizedBox.shrink(),
@@ -73,12 +80,7 @@ class DashboardScreen extends ConsumerWidget {
             // Main stats
             statsAsync.when(
               data: (stats) => _buildStats(context, ref, stats, period),
-              loading: () => const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(32),
-                  child: CircularProgressIndicator(),
-                ),
-              ),
+              loading: () => const DashboardSkeleton(),
               error: (e, _) => Text('Error: $e'),
             ),
 
@@ -128,10 +130,21 @@ class DashboardScreen extends ConsumerWidget {
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push('/gig/new'),
-        icon: const Icon(Icons.add),
-        label: const Text(AppStrings.nuevoBolo),
+      floatingActionButton: ExpandableFAB(
+        actions: [
+          FABAction(
+            icon: Icons.music_note,
+            label: 'Nuevo bolo',
+            color: AppColors.primary,
+            onTap: (ctx) => ctx.push('/gig/new'),
+          ),
+          FABAction(
+            icon: Icons.person_add,
+            label: 'Nuevo cliente',
+            color: AppColors.purple,
+            onTap: (ctx) => ctx.push('/client/new'),
+          ),
+        ],
       ),
     );
   }
@@ -160,27 +173,127 @@ class DashboardScreen extends ConsumerWidget {
             Expanded(
               child: SummaryCard(
                 title: 'Cobrado',
-                value: CurrencyFormatter.format(stats.cobradoOficial),
+                value: CurrencyFormatter.format(stats.cobrado),
+                numericValue: stats.cobrado,
                 color: AppColors.success,
                 icon: Icons.check_circle_outline,
                 showChevron: true,
                 onTap: () => context.push('/financial'),
-                subtitle: _buildComparison(
-                  stats.cobradoOficial,
-                  stats.prevCobradoOficial,
-                  stats.prevLabel,
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (stats.cobradoHistorico > 0) ...[
+                      Text(
+                        '(facturas: ${CurrencyFormatter.format(stats.cobradoFacturas)}',
+                        style: const TextStyle(fontSize: 11, color: Color(0xFF8C95A6)),
+                      ),
+                      Text(
+                        ' + histórico: ${CurrencyFormatter.format(stats.cobradoHistorico)}',
+                        style: const TextStyle(fontSize: 11, color: Color(0xFF8C95A6)),
+                      ),
+                      Text(
+                        ' + en B: ${CurrencyFormatter.format(stats.cobradoEnB)})',
+                        style: const TextStyle(fontSize: 11, color: Color(0xFF8C95A6)),
+                      ),
+                    ] else ...[
+                      Text(
+                        '(facturas: ${CurrencyFormatter.format(stats.cobradoFacturas)}',
+                        style: const TextStyle(fontSize: 11, color: Color(0xFF8C95A6)),
+                      ),
+                      Text(
+                        ' + en B: ${CurrencyFormatter.format(stats.cobradoEnB)})',
+                        style: const TextStyle(fontSize: 11, color: Color(0xFF8C95A6)),
+                      ),
+                    ],
+                    _buildComparison(stats.cobrado, stats.prevCobrado, stats.prevLabel),
+                  ],
                 ),
+                onInfoTap: () => _showMetricInfo(context, 'Cobrado',
+                  'Dinero ya recibido.\n· Facturas marcadas como pagadas\n· Bolos históricos importados sin factura\n· Cobros en B confirmados'),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: SummaryCard(
                 title: 'Pendiente',
-                value: CurrencyFormatter.format(stats.pendienteOficial),
+                value: CurrencyFormatter.format(stats.pendiente),
+                numericValue: stats.pendiente,
                 color: AppColors.warning,
                 icon: Icons.schedule,
                 showChevron: true,
                 onTap: () => context.go('/invoices'),
+                subtitle: Text(
+                  '(${stats.pendienteCount} factura${stats.pendienteCount == 1 ? '' : 's'} emitida${stats.pendienteCount == 1 ? '' : 's'} sin cobrar)',
+                  style: const TextStyle(fontSize: 11, color: Color(0xFF8C95A6)),
+                ),
+                onInfoTap: () => _showMetricInfo(context, 'Pendiente',
+                  'Trabajo realizado con factura enviada\nal cliente, a la espera de que paguen.\nNo incluye bolos sin factura emitida.'),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+
+        // PREVISTO (solo si > 0)
+        if (stats.previsto > 0) ...[
+          SummaryCard(
+            title: 'Previsto',
+            value: CurrencyFormatter.format(stats.previsto),
+            numericValue: stats.previsto,
+            color: AppColors.primary,
+            icon: Icons.event_available,
+            backgroundColor: const Color(0xFFEEF1F7),
+            subtitle: Text(
+              '(${stats.previstoCount} bolo${stats.previstoCount == 1 ? '' : 's'} confirmado${stats.previstoCount == 1 ? '' : 's'} en agenda\n aún no realizado${stats.previstoCount == 1 ? '' : 's'} ni facturado${stats.previstoCount == 1 ? '' : 's'})',
+              style: const TextStyle(fontSize: 11, color: Color(0xFF8C95A6)),
+            ),
+            onInfoTap: () => _showMetricInfo(context, 'Previsto',
+              'Bolos que tienes en agenda confirmados\npero que aún no has realizado ni facturado.\nEs dinero esperado, puede cambiar.'),
+          ),
+          const SizedBox(height: 8),
+        ],
+
+        // ACUMULADO + TOTAL PREVISTO
+        Row(
+          children: [
+            Expanded(
+              child: SummaryCard(
+                title: 'Acumulado',
+                value: CurrencyFormatter.format(stats.acumulado),
+                numericValue: stats.acumulado,
+                color: const Color(0xFF0F5C3A),
+                icon: Icons.account_balance,
+                subtitle: Text(
+                  '(cobrado oficial ${CurrencyFormatter.format(stats.cobradoOficial)}\n + pendiente ${CurrencyFormatter.format(stats.pendiente)})',
+                  style: const TextStyle(fontSize: 11, color: Color(0xFF8C95A6)),
+                ),
+                onInfoTap: () => _showMetricInfo(context, 'Acumulado',
+                  'Todo el trabajo ya ejecutado:\n· Cobrado: dinero recibido\n· Pendiente: facturas emitidas sin cobrar\nEs lo que has ganado hasta hoy.'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: SummaryCard(
+                title: 'Total previsto',
+                value: CurrencyFormatter.format(stats.totalPrevisto),
+                numericValue: stats.totalPrevisto,
+                color: const Color(0xFF5F5E5A),
+                icon: Icons.trending_up,
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '(acumulado ${CurrencyFormatter.format(stats.acumulado)} + previsto\n ${CurrencyFormatter.format(stats.previsto)})',
+                      style: const TextStyle(fontSize: 11, color: Color(0xFF8C95A6)),
+                    ),
+                    const Text(
+                      '· proyección',
+                      style: TextStyle(fontSize: 10, fontStyle: FontStyle.italic, color: Color(0xFF8C95A6)),
+                    ),
+                  ],
+                ),
+                onInfoTap: () => _showMetricInfo(context, 'Total previsto',
+                  'Proyección máxima del período:\n· Acumulado: trabajo ya hecho\n· Previsto: bolos futuros en agenda\nSolo se cumple si cobras todo y\nrealizas todos los bolos confirmados.'),
               ),
             ),
           ],
@@ -188,28 +301,26 @@ class DashboardScreen extends ConsumerWidget {
         const SizedBox(height: 8),
 
         // IVA
-        if (stats.ivaAcumulado > 0 || period.mode != DashboardPeriodMode.mes)
+        if (stats.ivaTotalEstimado > 0 || period.mode != DashboardPeriodMode.mes)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: SummaryCard(
-              title: 'IVA acumulado',
-              value: CurrencyFormatter.format(stats.ivaAcumulado),
+              title: stats.ivaHistoricoEstimado > 0 ? 'IVA acumulado (estimado)' : 'IVA acumulado',
+              value: CurrencyFormatter.format(stats.ivaTotalEstimado),
+              numericValue: stats.ivaTotalEstimado,
               color: AppColors.primary,
               icon: Icons.description_outlined,
               showChevron: true,
               onTap: () => context.push('/stats'),
+              subtitle: stats.ivaHistoricoEstimado > 0
+                  ? Text(
+                      '(facturas: ${CurrencyFormatter.format(stats.ivaAcumulado)} + est. histórico: ${CurrencyFormatter.format(stats.ivaHistoricoEstimado)})',
+                      style: const TextStyle(fontSize: 11, color: Color(0xFF8C95A6)),
+                    )
+                  : null,
             ),
           ),
 
-        // Facturas enviadas
-        SummaryCard(
-          title: AppStrings.facturasEnviadas,
-          value: '${stats.facturasEnviadasSinCobrar}',
-          color: AppColors.warning,
-          icon: Icons.send_outlined,
-          showChevron: true,
-          onTap: () => context.go('/invoices'),
-        ),
         const SizedBox(height: 20),
 
         // Ingresos en B
@@ -225,6 +336,7 @@ class DashboardScreen extends ConsumerWidget {
               child: SummaryCard(
                 title: 'Cobrado en B',
                 value: CurrencyFormatter.format(stats.cobradoEnB),
+                numericValue: stats.cobradoEnB,
                 color: AppColors.purple,
                 icon: Icons.money_off_outlined,
                 showChevron: true,
@@ -236,6 +348,7 @@ class DashboardScreen extends ConsumerWidget {
               child: SummaryCard(
                 title: 'Pendiente en B',
                 value: CurrencyFormatter.format(stats.pendienteEnB),
+                numericValue: stats.pendienteEnB,
                 color: AppColors.purple,
                 icon: Icons.hourglass_empty_outlined,
                 showChevron: true,
@@ -256,6 +369,33 @@ class DashboardScreen extends ConsumerWidget {
           onTap: () => context.go('/calendar'),
         ),
       ],
+    );
+  }
+
+  void _showMetricInfo(BuildContext context, String title, String explanation) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              explanation,
+              style: const TextStyle(fontSize: 14, color: Color(0xFF5A6070), height: 1.5),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -506,7 +646,8 @@ class _FinancialBanner extends StatelessWidget {
                   Expanded(
                     child: _BannerMini(
                       label: 'Cobrado',
-                      value: stats.totalCobrado,
+                      subtitle: '(oficial + B)',
+                      value: stats.cobrado,
                       color: Colors.white,
                     ),
                   ),
@@ -514,22 +655,24 @@ class _FinancialBanner extends StatelessWidget {
                   Expanded(
                     child: _BannerMini(
                       label: 'Pendiente',
-                      value: stats.pendienteOficial + stats.pendienteEnB,
+                      subtitle: '(facturas emitidas)',
+                      value: stats.pendiente,
                       color: Colors.amber[200]!,
                     ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: _BannerMini(
-                      label: 'Estimado',
-                      value: stats.estimado,
+                      label: 'Total previsto',
+                      subtitle: '(si todo se cobra)',
+                      value: stats.totalPrevisto,
                       color: Colors.greenAccent[100]!,
                     ),
                   ),
                 ],
               ),
-              // Comparison
-              if (stats.prevTotalCobrado != null && stats.prevLabel != null) ...[
+              // Comparison under Cobrado only
+              if (stats.prevCobrado != null && stats.prevLabel != null) ...[
                 const SizedBox(height: 10),
                 _buildBannerComparison(stats),
               ],
@@ -541,8 +684,8 @@ class _FinancialBanner extends StatelessWidget {
   }
 
   Widget _buildBannerComparison(PeriodDashboardStats stats) {
-    final prev = stats.prevTotalCobrado!;
-    final current = stats.totalCobrado;
+    final prev = stats.prevCobrado!;
+    final current = stats.cobrado;
     if (prev == 0 && current == 0) return const SizedBox.shrink();
 
     final pct = prev > 0 ? ((current - prev) / prev * 100).round() : 100;
@@ -560,9 +703,10 @@ class _FinancialBanner extends StatelessWidget {
 
 class _BannerMini extends StatelessWidget {
   final String label;
+  final String? subtitle;
   final double value;
   final Color color;
-  const _BannerMini({required this.label, required this.value, required this.color});
+  const _BannerMini({required this.label, this.subtitle, required this.value, required this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -571,10 +715,14 @@ class _BannerMini extends StatelessWidget {
       children: [
         Text(label, style: TextStyle(color: color.withValues(alpha: 0.8), fontSize: 11)),
         const SizedBox(height: 2),
-        Text(
-          CurrencyFormatter.format(value),
+        AnimatedCounter(
+          value: value,
           style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13),
         ),
+        if (subtitle != null) ...[
+          const SizedBox(height: 1),
+          Text(subtitle!, style: TextStyle(color: color.withValues(alpha: 0.5), fontSize: 9)),
+        ],
       ],
     );
   }
@@ -745,7 +893,7 @@ class _OverdueBanner extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Tienes $n factura${n == 1 ? '' : 's'} sin cobrar desde hace más de 7 días',
+                    'Tienes $n factura${n == 1 ? '' : 's'} pendiente${n == 1 ? '' : 's'} desde hace más de 7 días',
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,

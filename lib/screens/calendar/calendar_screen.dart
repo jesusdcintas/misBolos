@@ -16,28 +16,31 @@ import '../../services/google_calendar_service.dart';
 import '../../widgets/common/status_badge.dart';
 import '../../widgets/common/facturable_badge.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 final _selectedDayProvider = StateProvider<DateTime?>((ref) => null);
 final _focusedDayProvider = StateProvider<DateTime>((ref) => DateTime.now());
 final _syncingProvider = StateProvider<bool>((ref) => false);
 final _viewModeProvider = StateProvider<bool>((ref) => true); // true = calendario, false = lista
 
-// Filtro para la vista lista
-enum GigListFilter { todos, pagados, noPagados }
-final _gigListFilterProvider = StateProvider<GigListFilter>((ref) => GigListFilter.todos);
+// ─── Filtros vista lista ───
+final _statusFilterProvider = StateProvider<GigStatus?>((ref) => null);
+final _yearFilterProvider = StateProvider<int?>((ref) => null);
+final _monthFilterProvider = StateProvider<int?>((ref) => null);
+final _clientFilterProvider = StateProvider<String?>((ref) => null);
+final _facturableFilterProvider = StateProvider<bool?>((ref) => null);
 
-// Ordenación para la vista lista
+// Ordenación
 enum GigSortOption { fechaDesc, fechaAsc, clienteAsc, clienteDesc, precioDesc, precioAsc }
 final _gigSortProvider = StateProvider<GigSortOption>((ref) => GigSortOption.fechaDesc);
 
-// Cache de clientes para ordenar por nombre
-final _clientsCacheProvider = FutureProvider<Map<String, Client>>((ref) async {
-  final clientsAsync = ref.watch(clientsProvider);
-  return clientsAsync.maybeWhen(
-    data: (clients) => {for (var c in clients) c.id: c},
-    orElse: () => <String, Client>{},
-  );
-});
+void _clearAllListFilters(WidgetRef ref) {
+  ref.read(_statusFilterProvider.notifier).state = null;
+  ref.read(_yearFilterProvider.notifier).state = null;
+  ref.read(_monthFilterProvider.notifier).state = null;
+  ref.read(_clientFilterProvider.notifier).state = null;
+  ref.read(_facturableFilterProvider.notifier).state = null;
+}
 
 class CalendarScreen extends ConsumerWidget {
   const CalendarScreen({super.key});
@@ -156,110 +159,36 @@ class CalendarScreen extends ConsumerWidget {
                     },
                   ),
           if (!isCalendarView)
-            PopupMenuButton<GigListFilter>(
-              icon: const Icon(Icons.filter_list),
-              tooltip: 'Filtrar',
-              onSelected: (value) {
-                ref.read(_gigListFilterProvider.notifier).state = value;
-              },
-              itemBuilder: (context) {
-                final filter = ref.read(_gigListFilterProvider);
-                return [
-                  PopupMenuItem(
-                    value: GigListFilter.todos,
-                    child: Row(
-                      children: [
-                        Icon(Icons.all_inclusive,
-                            color: filter == GigListFilter.todos
-                                ? AppColors.primary
-                                : AppColors.textSecondary),
-                        const SizedBox(width: 12),
-                        Text('Todos',
-                            style: TextStyle(
-                                fontWeight: filter == GigListFilter.todos
-                                    ? FontWeight.bold
-                                    : FontWeight.normal)),
-                      ],
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: GigListFilter.pagados,
-                    child: Row(
-                      children: [
-                        Icon(Icons.check_circle,
-                            color: filter == GigListFilter.pagados
-                                ? AppColors.success
-                                : AppColors.textSecondary),
-                        const SizedBox(width: 12),
-                        Text('Pagados',
-                            style: TextStyle(
-                                fontWeight: filter == GigListFilter.pagados
-                                    ? FontWeight.bold
-                                    : FontWeight.normal)),
-                      ],
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: GigListFilter.noPagados,
-                    child: Row(
-                      children: [
-                        Icon(Icons.pending,
-                            color: filter == GigListFilter.noPagados
-                                ? AppColors.warning
-                                : AppColors.textSecondary),
-                        const SizedBox(width: 12),
-                        Text('No pagados',
-                            style: TextStyle(
-                                fontWeight: filter == GigListFilter.noPagados
-                                    ? FontWeight.bold
-                                    : FontWeight.normal)),
-                      ],
-                    ),
-                  ),
-                ];
-              },
-            ),
-          if (!isCalendarView)
-            PopupMenuButton<GigSortOption>(
-              icon: const Icon(Icons.sort),
-              tooltip: 'Ordenar',
-              onSelected: (value) {
-                ref.read(_gigSortProvider.notifier).state = value;
-              },
-              itemBuilder: (context) {
-                final sortOption = ref.read(_gigSortProvider);
-                return [
-                  _buildSortMenuItem(context, sortOption, GigSortOption.fechaDesc, 'Fecha (reciente)', Icons.arrow_downward),
-                  _buildSortMenuItem(context, sortOption, GigSortOption.fechaAsc, 'Fecha (antigua)', Icons.arrow_upward),
-                  const PopupMenuDivider(),
-                  _buildSortMenuItem(context, sortOption, GigSortOption.clienteAsc, 'Cliente (A-Z)', Icons.sort_by_alpha),
-                  _buildSortMenuItem(context, sortOption, GigSortOption.clienteDesc, 'Cliente (Z-A)', Icons.sort_by_alpha),
-                  const PopupMenuDivider(),
-                  _buildSortMenuItem(context, sortOption, GigSortOption.precioDesc, 'Precio (mayor)', Icons.arrow_downward),
-                  _buildSortMenuItem(context, sortOption, GigSortOption.precioAsc, 'Precio (menor)', Icons.arrow_upward),
-                ];
-              },
-            ),
-          if (!isCalendarView)
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert),
               onSelected: (value) async {
                 if (value == 'repair') {
                   await _repairGigStatuses(context, ref);
+                } else {
+                  // Sort option
+                  final option = GigSortOption.values.where((o) => o.name == value);
+                  if (option.isNotEmpty) {
+                    ref.read(_gigSortProvider.notifier).state = option.first;
+                  }
                 }
               },
-              itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: 'repair',
-                  child: Row(
-                    children: [
-                      Icon(Icons.build, size: 20),
-                      SizedBox(width: 12),
-                      Text('Reparar estados'),
-                    ],
+              itemBuilder: (context) {
+                final sortOption = ref.read(_gigSortProvider);
+                return [
+                  ..._sortMenuItems(sortOption),
+                  const PopupMenuDivider(),
+                  const PopupMenuItem(
+                    value: 'repair',
+                    child: Row(
+                      children: [
+                        Icon(Icons.build, size: 20),
+                        SizedBox(width: 12),
+                        Text('Reparar estados'),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ];
+              },
             ),
         ],
       ),
@@ -368,8 +297,8 @@ class CalendarScreen extends ConsumerWidget {
                   children: [
                     _LegendItem(color: AppColors.primary, label: 'Pendiente facturable'),
                     _LegendItem(color: AppColors.accentPurple, label: 'Pendiente no facturable'),
-                    _LegendItem(color: AppColors.accentOrange, label: 'Factura enviada'),
-                    _LegendItem(color: AppColors.accentGreen, label: 'Pagado / Cobrado'),
+                    _LegendItem(color: AppColors.accentOrange, label: 'Pdte cobro'),
+                    _LegendItem(color: AppColors.accentGreen, label: 'Cobrado'),
                     _LegendItem(color: AppColors.accentRed, label: 'Cancelado'),
                   ],
                 ),
@@ -408,215 +337,762 @@ class CalendarScreen extends ConsumerWidget {
     WidgetRef ref,
     AsyncValue<List<Gig>> gigsAsync,
   ) {
-    final filter = ref.watch(_gigListFilterProvider);
+    final statusFilter = ref.watch(_statusFilterProvider);
+    final selectedYear = ref.watch(_yearFilterProvider);
+    final selectedMonth = ref.watch(_monthFilterProvider);
+    final clientFilter = ref.watch(_clientFilterProvider);
+    final facturableFilter = ref.watch(_facturableFilterProvider);
     final sortOption = ref.watch(_gigSortProvider);
-    final clientsCacheAsync = ref.watch(_clientsCacheProvider);
-    
-    return clientsCacheAsync.when(
-      data: (clientsMap) => gigsAsync.when(
-        data: (gigs) {
-          // Aplicar filtro
-          final filteredGigs = gigs.where((gig) {
-            switch (filter) {
-              case GigListFilter.todos:
-                return true;
-              case GigListFilter.pagados:
-                return gig.status == GigStatus.pagado ||
-                    gig.status == GigStatus.cobradoEnB;
-              case GigListFilter.noPagados:
-                return gig.status != GigStatus.pagado &&
-                    gig.status != GigStatus.cobradoEnB &&
-                    gig.status != GigStatus.cancelado;
-            }
-          }).toList();
+    final clientsAsync = ref.watch(clientsProvider);
 
-          // Aplicar ordenación
-          filteredGigs.sort((a, b) {
-            switch (sortOption) {
-              case GigSortOption.fechaDesc:
-                return b.fecha.compareTo(a.fecha);
-              case GigSortOption.fechaAsc:
-                return a.fecha.compareTo(b.fecha);
-              case GigSortOption.clienteAsc:
-                final clientA = clientsMap[a.clientId]?.alias ?? '';
-                final clientB = clientsMap[b.clientId]?.alias ?? '';
-                return clientA.toLowerCase().compareTo(clientB.toLowerCase());
-              case GigSortOption.clienteDesc:
-                final clientA = clientsMap[a.clientId]?.alias ?? '';
-                final clientB = clientsMap[b.clientId]?.alias ?? '';
-                return clientB.toLowerCase().compareTo(clientA.toLowerCase());
-              case GigSortOption.precioDesc:
-                return (b.cachet ?? 0).compareTo(a.cachet ?? 0);
-              case GigSortOption.precioAsc:
-                return (a.cachet ?? 0).compareTo(b.cachet ?? 0);
-            }
-          });
+    final hasActiveFilters = statusFilter != null ||
+        selectedYear != null ||
+        selectedMonth != null ||
+        clientFilter != null ||
+        facturableFilter != null;
 
-          if (filteredGigs.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.music_off,
-                    size: 64,
-                    color: AppColors.textSecondary.withOpacity(0.5),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    filter == GigListFilter.todos
-                        ? 'No hay bolos'
-                        : filter == GigListFilter.pagados
-                            ? 'No hay bolos pagados'
-                            : 'No hay bolos pendientes de pago',
-                    style: const TextStyle(
-                    fontSize: 16,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          );
+    return gigsAsync.when(
+      data: (allGigs) {
+        final clients = clientsAsync.valueOrNull ?? [];
+        final clientMap = {for (final c in clients) c.id: c};
+
+        final totalCount = allGigs.length;
+
+        // Aplicar filtros
+        final filteredGigs = allGigs.where((gig) {
+          if (statusFilter != null && gig.status != statusFilter) return false;
+          if (selectedYear != null && gig.fecha.year != selectedYear) return false;
+          if (selectedMonth != null && gig.fecha.month != selectedMonth) return false;
+          if (clientFilter != null && gig.clientId != clientFilter) return false;
+          if (facturableFilter != null && gig.facturable != facturableFilter) return false;
+          return true;
+        }).toList();
+
+        // Aplicar ordenación
+        filteredGigs.sort((a, b) {
+          switch (sortOption) {
+            case GigSortOption.fechaDesc:
+              return b.fecha.compareTo(a.fecha);
+            case GigSortOption.fechaAsc:
+              return a.fecha.compareTo(b.fecha);
+            case GigSortOption.clienteAsc:
+              final clientA = clientMap[a.clientId]?.alias ?? '';
+              final clientB = clientMap[b.clientId]?.alias ?? '';
+              return clientA.toLowerCase().compareTo(clientB.toLowerCase());
+            case GigSortOption.clienteDesc:
+              final clientA = clientMap[a.clientId]?.alias ?? '';
+              final clientB = clientMap[b.clientId]?.alias ?? '';
+              return clientB.toLowerCase().compareTo(clientA.toLowerCase());
+            case GigSortOption.precioDesc:
+              return (b.cachet ?? 0).compareTo(a.cachet ?? 0);
+            case GigSortOption.precioAsc:
+              return (a.cachet ?? 0).compareTo(b.cachet ?? 0);
+          }
+        });
+
+        final filteredCount = filteredGigs.length;
+        final filteredCachet = filteredGigs.fold<double>(0, (sum, g) => sum + (g.cachet ?? 0));
+
+        // Conteos por año
+        final yearCounts = <int, int>{};
+        for (final gig in allGigs) {
+          yearCounts[gig.fecha.year] = (yearCounts[gig.fecha.year] ?? 0) + 1;
         }
 
-        // Calcular totales
-        double totalCachet = 0;
-        for (final gig in filteredGigs) {
-          totalCachet += gig.cachet ?? 0;
+        // Meses con datos
+        final monthsWithData = <int, int>{};
+        if (selectedYear != null) {
+          for (final gig in allGigs) {
+            if (gig.fecha.year == selectedYear) {
+              monthsWithData[gig.fecha.month] = (monthsWithData[gig.fecha.month] ?? 0) + 1;
+            }
+          }
+        }
+
+        // Conteo de bolos por cliente
+        final clientGigCounts = <String, int>{};
+        for (final gig in allGigs) {
+          clientGigCounts[gig.clientId] = (clientGigCounts[gig.clientId] ?? 0) + 1;
+        }
+
+        // Nombre del cliente filtrado
+        String? clientFilterName;
+        if (clientFilter != null && clientMap.containsKey(clientFilter)) {
+          clientFilterName = clientMap[clientFilter]!.nombre;
+        }
+
+        // Label de mes filtrado
+        String? monthLabel;
+        if (selectedMonth != null) {
+          final m = DateFormat.MMM('es').format(DateTime(2024, selectedMonth));
+          monthLabel = m[0].toUpperCase() + m.substring(1);
         }
 
         return Column(
           children: [
-            // Resumen
+            // ── Resumen dinámico ──
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               color: AppColors.primaryLight,
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  _SummaryItem(
-                    label: 'Bolos',
-                    value: filteredGigs.length.toString(),
-                    icon: Icons.music_note,
+                  const Icon(Icons.music_note, color: AppColors.primary, size: 20),
+                  const SizedBox(width: 6),
+                  Text(
+                    '$filteredCount bolos',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primary,
+                    ),
                   ),
-                  _SummaryItem(
-                    label: 'Total',
-                    value: CurrencyFormatter.format(totalCachet),
-                    icon: Icons.euro,
+                  const SizedBox(width: 8),
+                  const Text('·', style: TextStyle(fontSize: 16, color: AppColors.primary)),
+                  const SizedBox(width: 8),
+                  Text(
+                    CurrencyFormatter.format(filteredCachet),
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primary,
+                    ),
                   ),
+                  if (hasActiveFilters) ...[
+                    const SizedBox(width: 8),
+                    Text(
+                      '[de $totalCount]',
+                      style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                    ),
+                  ],
                 ],
               ),
             ),
-            // Chip de filtro activo
-            if (filter != GigListFilter.todos)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Row(
+
+            // ── Fila 1: Chips de estado ──
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+              child: SizedBox(
+                height: 36,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
                   children: [
-                    Chip(
-                      label: Text(
-                        filter == GigListFilter.pagados ? 'Pagados' : 'No pagados',
-                      ),
-                      deleteIcon: const Icon(Icons.close, size: 18),
-                      onDeleted: () {
-                        ref.read(_gigListFilterProvider.notifier).state =
-                            GigListFilter.todos;
-                      },
-                      backgroundColor: filter == GigListFilter.pagados
-                          ? AppColors.successBg
-                          : AppColors.warningBg,
-                      labelStyle: TextStyle(
-                        color: filter == GigListFilter.pagados
-                            ? AppColors.success
-                            : AppColors.warning,
-                      ),
+                    _StatusChip(
+                      label: 'Todos',
+                      selected: statusFilter == null,
+                      onTap: () => ref.read(_statusFilterProvider.notifier).state = null,
+                    ),
+                    _StatusChip(
+                      label: GigStatus.pendiente.label,
+                      selected: statusFilter == GigStatus.pendiente,
+                      onTap: () => ref.read(_statusFilterProvider.notifier).state = GigStatus.pendiente,
+                    ),
+                    _StatusChip(
+                      label: GigStatus.facturaEnviada.label,
+                      selected: statusFilter == GigStatus.facturaEnviada,
+                      onTap: () => ref.read(_statusFilterProvider.notifier).state = GigStatus.facturaEnviada,
+                    ),
+                    _StatusChip(
+                      label: GigStatus.pagado.label,
+                      selected: statusFilter == GigStatus.pagado,
+                      onTap: () => ref.read(_statusFilterProvider.notifier).state = GigStatus.pagado,
+                    ),
+                    _StatusChip(
+                      label: GigStatus.cobradoEnB.label,
+                      selected: statusFilter == GigStatus.cobradoEnB,
+                      onTap: () => ref.read(_statusFilterProvider.notifier).state = GigStatus.cobradoEnB,
+                    ),
+                    _StatusChip(
+                      label: GigStatus.cancelado.label,
+                      selected: statusFilter == GigStatus.cancelado,
+                      onTap: () => ref.read(_statusFilterProvider.notifier).state = GigStatus.cancelado,
                     ),
                   ],
                 ),
               ),
-            // Lista
-            Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.only(bottom: 80),
-                itemCount: filteredGigs.length,
-                itemBuilder: (context, index) {
-                  final gig = filteredGigs[index];
-                  return _GigListTile(gig: gig);
-                },
+            ),
+
+            // ── Fila 2: Botones de filtro secundarios ──
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+              child: SizedBox(
+                height: 36,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: [
+                    _FilterButton(
+                      icon: Icons.calendar_today,
+                      label: selectedYear?.toString() ?? 'Año',
+                      active: selectedYear != null,
+                      onTap: () => _showYearSheet(context, ref, yearCounts),
+                    ),
+                    const SizedBox(width: 8),
+                    _FilterButton(
+                      icon: Icons.date_range,
+                      label: monthLabel ?? 'Mes',
+                      active: selectedMonth != null,
+                      onTap: selectedYear != null
+                          ? () => _showMonthSheet(context, ref, monthsWithData)
+                          : null,
+                    ),
+                    const SizedBox(width: 8),
+                    _FilterButton(
+                      icon: Icons.person,
+                      label: clientFilterName ?? 'Cliente',
+                      active: clientFilter != null,
+                      onTap: () => _showClientSheet(context, ref, clients, clientGigCounts),
+                    ),
+                    const SizedBox(width: 8),
+                    _FilterButton(
+                      icon: Icons.bolt,
+                      label: facturableFilter == null
+                          ? 'Facturable'
+                          : facturableFilter == true
+                              ? 'Facturable'
+                              : 'En B',
+                      active: facturableFilter != null,
+                      onTap: () => _showFacturableSheet(context, ref),
+                    ),
+                    if (hasActiveFilters) ...[
+                      const SizedBox(width: 8),
+                      _ClearFiltersButton(onTap: () => _clearAllListFilters(ref)),
+                    ],
+                  ],
+                ),
               ),
             ),
+
+            // ── Lista o empty state ──
+            if (filteredGigs.isEmpty)
+              Expanded(
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.music_off,
+                        size: 64,
+                        color: AppColors.textSecondary.withValues(alpha: 0.5),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'No hay bolos con estos filtros',
+                        style: TextStyle(fontSize: 16, color: AppColors.textSecondary),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              Expanded(
+                child: ListView.builder(
+                  padding: const EdgeInsets.only(bottom: 80),
+                  itemCount: filteredGigs.length,
+                  itemBuilder: (context, index) {
+                    final gig = filteredGigs[index];
+                    return _GigListTile(gig: gig);
+                  },
+                ),
+              ),
           ],
         );
       },
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Center(child: Text('Error: $e')),
-    ),
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Error: $e')),
     );
   }
 
-  PopupMenuItem<GigSortOption> _buildSortMenuItem(
+  // ─── Bottom sheets ───
+
+  void _showYearSheet(BuildContext context, WidgetRef ref, Map<int, int> yearCounts) {
+    final sortedYears = yearCounts.keys.toList()..sort((a, b) => b.compareTo(a));
+    final selectedYear = ref.read(_yearFilterProvider);
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: Text('Filtrar por año', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            ),
+            const SizedBox(height: 8),
+            RadioGroup<int?>(
+              groupValue: selectedYear,
+              onChanged: (value) {
+                ref.read(_yearFilterProvider.notifier).state = value;
+                ref.read(_monthFilterProvider.notifier).state = null;
+                Navigator.pop(ctx);
+              },
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const RadioListTile<int?>(
+                    title: Text('Todos los años'),
+                    value: null,
+                  ),
+                  ...sortedYears.map((year) => RadioListTile<int?>(
+                    title: Text(year.toString()),
+                    subtitle: Text('${yearCounts[year]} bolos'),
+                    value: year,
+                  )),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showMonthSheet(BuildContext context, WidgetRef ref, Map<int, int> monthsWithData) {
+    final selectedMonth = ref.read(_monthFilterProvider);
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Filtrar por mes', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            ListTile(
+              leading: Icon(
+                selectedMonth == null ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                color: selectedMonth == null ? AppColors.primary : AppColors.textSecondary,
+              ),
+              title: const Text('Todos los meses'),
+              contentPadding: EdgeInsets.zero,
+              onTap: () {
+                ref.read(_monthFilterProvider.notifier).state = null;
+                Navigator.pop(ctx);
+              },
+            ),
+            const SizedBox(height: 8),
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 6,
+                childAspectRatio: 1.6,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
+              ),
+              itemCount: 12,
+              itemBuilder: (context, index) {
+                final month = index + 1;
+                final hasData = monthsWithData.containsKey(month);
+                final isSelected = selectedMonth == month;
+                final raw = DateFormat.MMM('es').format(DateTime(2024, month));
+                final name = raw[0].toUpperCase() + raw.substring(1);
+
+                return GestureDetector(
+                  onTap: hasData
+                      ? () {
+                          ref.read(_monthFilterProvider.notifier).state = month;
+                          Navigator.pop(ctx);
+                        }
+                      : null,
+                  child: Container(
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? AppColors.primary
+                          : hasData
+                              ? AppColors.primaryLight
+                              : AppColors.surface,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: isSelected
+                            ? AppColors.primary
+                            : hasData
+                                ? AppColors.cardBorder
+                                : AppColors.divider,
+                      ),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          name,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                            color: isSelected
+                                ? Colors.white
+                                : hasData
+                                    ? AppColors.textPrimary
+                                    : AppColors.textSecondary.withValues(alpha: 0.4),
+                          ),
+                        ),
+                        if (hasData)
+                          Text(
+                            '${monthsWithData[month]}',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: isSelected ? Colors.white70 : AppColors.textSecondary,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showClientSheet(
     BuildContext context,
-    GigSortOption current,
-    GigSortOption option,
-    String label,
-    IconData icon,
+    WidgetRef ref,
+    List<Client> clients,
+    Map<String, int> gigCounts,
   ) {
-    final isSelected = current == option;
-    return PopupMenuItem(
-      value: option,
-      child: Row(
-        children: [
-          Icon(icon, size: 20, color: isSelected ? AppColors.primary : null),
-          const SizedBox(width: 12),
-          Text(
-            label,
-            style: TextStyle(
+    final clientsWithGigs = clients
+        .where((c) => (gigCounts[c.id] ?? 0) > 0)
+        .toList()
+      ..sort((a, b) => (gigCounts[b.id] ?? 0).compareTo(gigCounts[a.id] ?? 0));
+
+    final selectedClientId = ref.read(_clientFilterProvider);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        minChildSize: 0.3,
+        maxChildSize: 0.85,
+        expand: false,
+        builder: (context, scrollController) => _ClientSheetContent(
+          clients: clientsWithGigs,
+          gigCounts: gigCounts,
+          selectedClientId: selectedClientId,
+          scrollController: scrollController,
+          onSelect: (clientId) {
+            ref.read(_clientFilterProvider.notifier).state = clientId;
+            Navigator.pop(ctx);
+          },
+        ),
+      ),
+    );
+  }
+
+  void _showFacturableSheet(BuildContext context, WidgetRef ref) {
+    final facturableFilter = ref.read(_facturableFilterProvider);
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: Text('Filtrar por facturabilidad', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            ),
+            const SizedBox(height: 8),
+            RadioGroup<bool?>(
+              groupValue: facturableFilter,
+              onChanged: (value) {
+                ref.read(_facturableFilterProvider.notifier).state = value;
+                Navigator.pop(ctx);
+              },
+              child: const Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  RadioListTile<bool?>(
+                    title: Text('Todos'),
+                    value: null,
+                  ),
+                  RadioListTile<bool?>(
+                    title: Text('Solo facturables'),
+                    value: true,
+                  ),
+                  RadioListTile<bool?>(
+                    title: Text('Solo en B'),
+                    value: false,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<PopupMenuEntry<String>> _sortMenuItems(GigSortOption current) {
+    Widget buildItem(GigSortOption option, String label, IconData icon) {
+      final isSelected = current == option;
+      return PopupMenuItem<String>(
+        value: option.name,
+        onTap: () => {},
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: isSelected ? AppColors.primary : null),
+            const SizedBox(width: 12),
+            Text(label, style: TextStyle(
               fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
               color: isSelected ? AppColors.primary : null,
-            ),
-          ),
-          if (isSelected) ...[
-            const Spacer(),
-            Icon(Icons.check, size: 18, color: AppColors.primary),
+            )),
+            if (isSelected) ...[
+              const Spacer(),
+              const Icon(Icons.check, size: 18, color: AppColors.primary),
+            ],
           ],
-        ],
+        ),
+      );
+    }
+    return [
+      buildItem(GigSortOption.fechaDesc, 'Fecha (reciente)', Icons.arrow_downward) as PopupMenuEntry<String>,
+      buildItem(GigSortOption.fechaAsc, 'Fecha (antigua)', Icons.arrow_upward) as PopupMenuEntry<String>,
+      const PopupMenuDivider(),
+      buildItem(GigSortOption.clienteAsc, 'Cliente (A-Z)', Icons.sort_by_alpha) as PopupMenuEntry<String>,
+      buildItem(GigSortOption.clienteDesc, 'Cliente (Z-A)', Icons.sort_by_alpha) as PopupMenuEntry<String>,
+      const PopupMenuDivider(),
+      buildItem(GigSortOption.precioDesc, 'Precio (mayor)', Icons.arrow_downward) as PopupMenuEntry<String>,
+      buildItem(GigSortOption.precioAsc, 'Precio (menor)', Icons.arrow_upward) as PopupMenuEntry<String>,
+    ];
+  }
+}
+
+// ─── Widgets auxiliares para filtros ───
+
+class _StatusChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _StatusChip({required this.label, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: ChoiceChip(
+        label: Text(label),
+        selected: selected,
+        onSelected: (_) => onTap(),
+        labelStyle: TextStyle(
+          fontSize: 12,
+          fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+          color: selected ? Colors.white : AppColors.textPrimary,
+        ),
+        selectedColor: AppColors.primary,
+        backgroundColor: AppColors.surface,
+        visualDensity: VisualDensity.compact,
       ),
     );
   }
 }
 
-class _SummaryItem extends StatelessWidget {
-  final String label;
-  final String value;
+class _FilterButton extends StatelessWidget {
   final IconData icon;
+  final String label;
+  final bool active;
+  final VoidCallback? onTap;
 
-  const _SummaryItem({
-    required this.label,
-    required this.value,
+  const _FilterButton({
     required this.icon,
+    required this.label,
+    required this.active,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Icon(icon, color: AppColors.primary, size: 24),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: AppColors.primary,
+    final disabled = onTap == null;
+    final bgColor = active ? AppColors.warningBg : AppColors.surface;
+    final fgColor = active
+        ? AppColors.warning
+        : disabled
+            ? AppColors.textSecondary.withValues(alpha: 0.5)
+            : AppColors.textSecondary;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: active ? AppColors.warning.withValues(alpha: 0.3) : AppColors.cardBorder,
           ),
         ),
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 12,
-            color: AppColors.textSecondary,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: fgColor),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                color: fgColor,
+                fontWeight: active ? FontWeight.w600 : FontWeight.normal,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(width: 2),
+            Icon(Icons.arrow_drop_down, size: 16, color: fgColor),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ClearFiltersButton extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _ClearFiltersButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: AppColors.errorBg,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.close, size: 14, color: AppColors.error),
+            SizedBox(width: 4),
+            Text(
+              'Limpiar',
+              style: TextStyle(fontSize: 12, color: AppColors.error, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ClientSheetContent extends StatefulWidget {
+  final List<Client> clients;
+  final Map<String, int> gigCounts;
+  final String? selectedClientId;
+  final ScrollController scrollController;
+  final ValueChanged<String?> onSelect;
+
+  const _ClientSheetContent({
+    required this.clients,
+    required this.gigCounts,
+    required this.selectedClientId,
+    required this.scrollController,
+    required this.onSelect,
+  });
+
+  @override
+  State<_ClientSheetContent> createState() => _ClientSheetContentState();
+}
+
+class _ClientSheetContentState extends State<_ClientSheetContent> {
+  final _searchController = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final lower = _query.toLowerCase();
+    final filtered = _query.isEmpty
+        ? widget.clients
+        : widget.clients.where((c) {
+            if (c.nombre.toLowerCase().contains(lower)) return true;
+            if (c.alias.toLowerCase().contains(lower)) return true;
+            if (c.aliases.any((a) => a.toLowerCase().contains(lower))) return true;
+            return false;
+          }).toList();
+
+    return Column(
+      children: [
+        const SizedBox(height: 12),
+        Container(
+          width: 40,
+          height: 4,
+          decoration: BoxDecoration(
+            color: AppColors.textSecondary.withValues(alpha: 0.3),
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Filtrar por cliente', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _searchController,
+                onChanged: (v) => setState(() => _query = v),
+                decoration: InputDecoration(
+                  hintText: 'Buscar cliente...',
+                  prefixIcon: const Icon(Icons.search, size: 20),
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: RadioGroup<String?>(
+            groupValue: widget.selectedClientId,
+            onChanged: (value) => widget.onSelect(value),
+            child: ListView.builder(
+              controller: widget.scrollController,
+              itemCount: filtered.length + 1,
+              itemBuilder: (context, index) {
+                if (index == 0) {
+                  return const RadioListTile<String?>(
+                    title: Text('Todos los clientes'),
+                    value: null,
+                  );
+                }
+                final client = filtered[index - 1];
+                final count = widget.gigCounts[client.id] ?? 0;
+                return RadioListTile<String?>(
+                  title: Text(client.nombre),
+                  subtitle: Text('$count bolos'),
+                  value: client.id,
+                );
+              },
+            ),
           ),
         ),
       ],

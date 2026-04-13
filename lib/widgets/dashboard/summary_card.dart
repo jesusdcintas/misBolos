@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
+import '../common/animated_counter.dart';
 
 class SummaryCard extends StatelessWidget {
   final String title;
@@ -8,7 +9,10 @@ class SummaryCard extends StatelessWidget {
   final IconData icon;
   final Widget? subtitle;
   final VoidCallback? onTap;
+  final VoidCallback? onInfoTap;
   final bool showChevron;
+  final Color? backgroundColor;
+  final double? numericValue;
 
   const SummaryCard({
     super.key,
@@ -18,7 +22,10 @@ class SummaryCard extends StatelessWidget {
     required this.icon,
     this.subtitle,
     this.onTap,
+    this.onInfoTap,
     this.showChevron = false,
+    this.backgroundColor,
+    this.numericValue,
   });
 
   @override
@@ -26,7 +33,7 @@ class SummaryCard extends StatelessWidget {
     final card = Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: backgroundColor ?? AppColors.surface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.cardBorder, width: 0.5),
       ),
@@ -57,7 +64,12 @@ class SummaryCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              if (showChevron)
+              if (onInfoTap != null)
+                GestureDetector(
+                  onTap: onInfoTap,
+                  child: const Icon(Icons.info_outline, size: 16, color: Color(0xFF8C95A6)),
+                )
+              else if (showChevron)
                 const Text(
                   '›',
                   style: TextStyle(
@@ -69,14 +81,24 @@ class SummaryCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
+          if (numericValue != null)
+            AnimatedCounter(
+              value: numericValue!,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
+            )
+          else
+            Text(
+              value,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
             ),
-          ),
           if (subtitle != null) ...[
             const SizedBox(height: 4),
             subtitle!,

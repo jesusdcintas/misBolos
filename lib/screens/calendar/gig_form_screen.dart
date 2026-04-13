@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/utils/date_formatter.dart';
+import '../../widgets/common/animated_facturable_toggle.dart';
 import '../../models/gig.dart';
 import '../../providers/gig_provider.dart';
 import '../../providers/client_provider.dart';
@@ -143,7 +144,9 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
             const SizedBox(height: 24),
 
             // Toggle facturable - MUY PROMINENTE
-            Container(
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 400),
+              curve: Curves.easeOutCubic,
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: _facturable
@@ -159,88 +162,40 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
               ),
               child: Column(
                 children: [
-                  Text(
-                    AppStrings.facturable,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: _facturable
-                              ? AppColors.accentGreen
-                              : AppColors.accentPurple,
-                        ),
-                  ),
-                  const SizedBox(height: 12),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // NO
-                      GestureDetector(
-                        onTap: () => setState(() => _facturable = false),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 32, vertical: 14),
-                          decoration: BoxDecoration(
-                            color: !_facturable
-                                ? AppColors.accentPurple
-                                : Colors.transparent,
-                            borderRadius: BorderRadius.circular(30),
-                            border: Border.all(
-                              color: AppColors.accentPurple,
-                              width: 2,
-                            ),
-                          ),
-                          child: Text(
-                            AppStrings.no,
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: !_facturable
-                                  ? Colors.white
-                                  : AppColors.accentPurple,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 20),
-                      // SÍ
-                      GestureDetector(
-                        onTap: () => setState(() => _facturable = true),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 32, vertical: 14),
-                          decoration: BoxDecoration(
-                            color: _facturable
-                                ? AppColors.accentGreen
-                                : Colors.transparent,
-                            borderRadius: BorderRadius.circular(30),
-                            border: Border.all(
-                              color: AppColors.accentGreen,
-                              width: 2,
-                            ),
-                          ),
-                          child: Text(
-                            AppStrings.si,
-                            style: TextStyle(
-                              fontSize: 18,
+                      AnimatedDefaultTextStyle(
+                        duration: const Duration(milliseconds: 400),
+                        style: Theme.of(context).textTheme.titleLarge!.copyWith(
                               fontWeight: FontWeight.bold,
                               color: _facturable
-                                  ? Colors.white
-                                  : AppColors.accentGreen,
+                                  ? AppColors.accentGreen
+                                  : AppColors.accentPurple,
                             ),
-                          ),
-                        ),
+                        child: Text(AppStrings.facturable),
+                      ),
+                      const SizedBox(width: 16),
+                      AnimatedFacturableToggle(
+                        value: _facturable,
+                        onChanged: (v) => setState(() => _facturable = v),
                       ),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    _facturable
-                        ? 'Se generará factura con IVA'
-                        : 'Se cobrará sin factura (solo en local)',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: _facturable
-                          ? AppColors.accentGreen
-                          : AppColors.accentPurple,
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 300),
+                    child: Text(
+                      _facturable
+                          ? 'Se generará factura con IVA'
+                          : 'Se cobrará sin factura (solo en local)',
+                      key: ValueKey(_facturable),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: _facturable
+                            ? AppColors.accentGreen
+                            : AppColors.accentPurple,
+                      ),
                     ),
                   ),
                 ],

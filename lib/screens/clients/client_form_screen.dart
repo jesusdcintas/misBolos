@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_strings.dart';
 import '../../models/client.dart';
 import '../../providers/client_provider.dart';
@@ -17,6 +18,8 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nombreController = TextEditingController();
   final _aliasController = TextEditingController();
+  final _newAliasController = TextEditingController();
+  List<String> _aliases = [];
   final _cifNifController = TextEditingController();
   final _direccionController = TextEditingController();
   final _ciudadController = TextEditingController();
@@ -42,6 +45,7 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
         _existingClient = client;
         _nombreController.text = client.nombre;
         _aliasController.text = client.alias;
+        _aliases = List<String>.from(client.aliases);
         _cifNifController.text = client.cifNif;
         _direccionController.text = client.direccion;
         _ciudadController.text = client.ciudad;
@@ -57,6 +61,7 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
   void dispose() {
     _nombreController.dispose();
     _aliasController.dispose();
+    _newAliasController.dispose();
     _cifNifController.dispose();
     _direccionController.dispose();
     _ciudadController.dispose();
@@ -93,9 +98,62 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
             TextFormField(
               controller: _aliasController,
               decoration: const InputDecoration(
-                labelText: 'Alias',
+                labelText: 'Alias principal',
                 hintText: 'Nombre corto para encontrarlo rápido',
                 prefixIcon: Icon(Icons.label_outline),
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Aliases adicionales (nombres alternativos)
+            InputDecorator(
+              decoration: InputDecoration(
+                labelText: 'Nombres alternativos',
+                helperText: 'Otros nombres con los que se conoce al cliente',
+                prefixIcon: const Icon(Icons.people_outline),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (_aliases.isNotEmpty) ...[
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: _aliases.map((a) => Chip(
+                        label: Text(a),
+                        deleteIcon: const Icon(Icons.close, size: 16),
+                        onDeleted: () {
+                          setState(() => _aliases.remove(a));
+                        },
+                        backgroundColor: AppColors.primaryLight,
+                        labelStyle: const TextStyle(color: AppColors.primary),
+                      )).toList(),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _newAliasController,
+                          decoration: const InputDecoration(
+                            hintText: 'Añadir nombre alternativo...',
+                            isDense: true,
+                            border: InputBorder.none,
+                          ),
+                          onSubmitted: (_) => _addAlias(),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.add_circle_outline, color: AppColors.primary),
+                        onPressed: _addAlias,
+                        tooltip: 'Añadir',
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 12),
@@ -195,6 +253,16 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
     );
   }
 
+  void _addAlias() {
+    final text = _newAliasController.text.trim();
+    if (text.isNotEmpty && !_aliases.contains(text)) {
+      setState(() {
+        _aliases.add(text);
+        _newAliasController.clear();
+      });
+    }
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -208,6 +276,7 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
         final updated = _existingClient!.copyWith(
           nombre: _nombreController.text.trim(),
           alias: _aliasController.text.trim(),
+          aliases: _aliases,
           cifNif: _cifNifController.text.trim(),
           direccion: _direccionController.text.trim(),
           ciudad: _ciudadController.text.trim(),
@@ -221,6 +290,7 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
         final client = Client(
           nombre: _nombreController.text.trim(),
           alias: _aliasController.text.trim(),
+          aliases: _aliases,
           cifNif: _cifNifController.text.trim(),
           direccion: _direccionController.text.trim(),
           ciudad: _ciudadController.text.trim(),

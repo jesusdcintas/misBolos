@@ -306,7 +306,7 @@ class _InvoiceDetailContent extends ConsumerWidget {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.warning,
                 ),
-                label: const Text('Marcar como enviada'),
+                label: const Text('Marcar como pendiente'),
               ),
             ),
           if (invoice.status == InvoiceStatus.enviada)
@@ -318,7 +318,7 @@ class _InvoiceDetailContent extends ConsumerWidget {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.success,
                 ),
-                label: const Text('Marcar como pagada'),
+                label: const Text('Marcar como cobrada'),
               ),
             ),
           if (invoice.status != InvoiceStatus.borrador) ...[
@@ -329,7 +329,7 @@ class _InvoiceDetailContent extends ConsumerWidget {
                 onPressed: () => _revertStatus(context, ref),
                 icon: const Icon(Icons.undo),
                 label: Text(invoice.status == InvoiceStatus.pagada 
-                    ? 'Revertir a enviada' 
+                    ? 'Revertir a pendiente' 
                     : 'Revertir a borrador'),
               ),
             ),

@@ -13,6 +13,8 @@ import '../../providers/invoice_provider.dart';
 import '../../services/supabase_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'import_screen.dart';
+import 'duplicate_clients_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -23,7 +25,7 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   double _ivaDefault = 0.21;
-  double _logoSize = 80;
+  double _logoSize = 180;
   String _pdfTheme = 'clasico';
   bool _notificaciones = true;
   int _diasRecordatorio = 7;
@@ -235,6 +237,42 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 24),
+
+              // Importar historial
+              Text('Importar historial',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      )),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const ImportScreen()),
+                  ),
+                  icon: const Icon(Icons.upload_file),
+                  label: const Text('Importar desde Excel o CSV'),
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Herramientas
+              Text('Herramientas',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      )),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const DuplicateClientsScreen()),
+                  ),
+                  icon: const Icon(Icons.people_outline),
+                  label: const Text('Buscar clientes duplicados'),
+                ),
               ),
               const SizedBox(height: 32),
 

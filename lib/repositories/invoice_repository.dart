@@ -17,7 +17,7 @@ class InvoiceRepository {
 
   Future<List<Invoice>> getAll() async {
     final db = await DatabaseHelper.instance.database;
-    final maps = await db.query('invoices', orderBy: 'numero DESC');
+    final maps = await db.query('invoices', orderBy: 'numero ASC');
     return maps.map((m) => Invoice.fromMap(m)).toList();
   }
 
@@ -41,7 +41,7 @@ class InvoiceRepository {
       'invoices',
       where: 'status = ?',
       whereArgs: [status.dbValue],
-      orderBy: 'numero DESC',
+      orderBy: 'numero ASC',
     );
     return maps.map((m) => Invoice.fromMap(m)).toList();
   }
@@ -52,7 +52,7 @@ class InvoiceRepository {
       'invoices',
       where: 'client_id = ?',
       whereArgs: [clientId],
-      orderBy: 'numero DESC',
+      orderBy: 'numero ASC',
     );
     return maps.map((m) => Invoice.fromMap(m)).toList();
   }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -21,6 +22,30 @@ import 'screens/settings/settings_screen.dart';
 import 'screens/dashboard/financial_summary_screen.dart';
 import 'screens/profile/profile_screen.dart';
 
+Page<void> _slideUpPage(Widget child, GoRouterState state) {
+  return CustomTransitionPage(
+    key: state.pageKey,
+    child: child,
+    transitionDuration: const Duration(milliseconds: 350),
+    reverseTransitionDuration: const Duration(milliseconds: 250),
+    transitionsBuilder: (context, animation, secondary, child) {
+      return SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0, 0.08),
+          end: Offset.zero,
+        ).animate(CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+        )),
+        child: FadeTransition(
+          opacity: animation,
+          child: child,
+        ),
+      );
+    },
+  );
+}
+
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -35,32 +60,52 @@ final routerProvider = Provider<GoRouter>((ref) {
         routes: [
           GoRoute(
             path: '/',
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: DashboardScreen(),
+            pageBuilder: (context, state) => CustomTransitionPage(
+              key: state.pageKey,
+              child: const DashboardScreen(),
+              transitionDuration: const Duration(milliseconds: 200),
+              transitionsBuilder: (context, animation, secondary, child) =>
+                  FadeTransition(opacity: animation, child: child),
             ),
           ),
           GoRoute(
             path: '/calendar',
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: CalendarScreen(),
+            pageBuilder: (context, state) => CustomTransitionPage(
+              key: state.pageKey,
+              child: const CalendarScreen(),
+              transitionDuration: const Duration(milliseconds: 200),
+              transitionsBuilder: (context, animation, secondary, child) =>
+                  FadeTransition(opacity: animation, child: child),
             ),
           ),
           GoRoute(
             path: '/clients',
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: ClientsListScreen(),
+            pageBuilder: (context, state) => CustomTransitionPage(
+              key: state.pageKey,
+              child: const ClientsListScreen(),
+              transitionDuration: const Duration(milliseconds: 200),
+              transitionsBuilder: (context, animation, secondary, child) =>
+                  FadeTransition(opacity: animation, child: child),
             ),
           ),
           GoRoute(
             path: '/invoices',
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: InvoicesListScreen(),
+            pageBuilder: (context, state) => CustomTransitionPage(
+              key: state.pageKey,
+              child: const InvoicesListScreen(),
+              transitionDuration: const Duration(milliseconds: 200),
+              transitionsBuilder: (context, animation, secondary, child) =>
+                  FadeTransition(opacity: animation, child: child),
             ),
           ),
           GoRoute(
             path: '/profile',
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: ProfileScreen(),
+            pageBuilder: (context, state) => CustomTransitionPage(
+              key: state.pageKey,
+              child: const ProfileScreen(),
+              transitionDuration: const Duration(milliseconds: 200),
+              transitionsBuilder: (context, animation, secondary, child) =>
+                  FadeTransition(opacity: animation, child: child),
             ),
           ),
         ],
@@ -68,82 +113,90 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/settings',
-        builder: (context, state) => const SettingsScreen(),
+        pageBuilder: (context, state) => _slideUpPage(const SettingsScreen(), state),
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/stats',
-        builder: (context, state) => const StatsScreen(),
+        pageBuilder: (context, state) => _slideUpPage(const StatsScreen(), state),
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/financial',
-        builder: (context, state) => const FinancialSummaryScreen(),
+        pageBuilder: (context, state) => _slideUpPage(const FinancialSummaryScreen(), state),
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/gig/new',
-        builder: (context, state) => const GigFormScreen(),
+        pageBuilder: (context, state) => _slideUpPage(const GigFormScreen(), state),
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/gig/edit/:id',
-        builder: (context, state) => GigFormScreen(
-          gigId: state.pathParameters['id'],
+        pageBuilder: (context, state) => _slideUpPage(
+          GigFormScreen(gigId: state.pathParameters['id']),
+          state,
         ),
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/gig/:id',
-        builder: (context, state) => GigDetailScreen(
-          gigId: state.pathParameters['id']!,
+        pageBuilder: (context, state) => _slideUpPage(
+          GigDetailScreen(gigId: state.pathParameters['id']!),
+          state,
         ),
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/client/new',
-        builder: (context, state) => const ClientFormScreen(),
+        pageBuilder: (context, state) => _slideUpPage(const ClientFormScreen(), state),
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/client/edit/:id',
-        builder: (context, state) => ClientFormScreen(
-          clientId: state.pathParameters['id'],
+        pageBuilder: (context, state) => _slideUpPage(
+          ClientFormScreen(clientId: state.pathParameters['id']),
+          state,
         ),
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/client/:id',
-        builder: (context, state) => ClientDetailScreen(
-          clientId: state.pathParameters['id']!,
+        pageBuilder: (context, state) => _slideUpPage(
+          ClientDetailScreen(clientId: state.pathParameters['id']!),
+          state,
         ),
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/invoice/:id',
-        builder: (context, state) => InvoiceDetailScreen(
-          invoiceId: state.pathParameters['id']!,
+        pageBuilder: (context, state) => _slideUpPage(
+          InvoiceDetailScreen(invoiceId: state.pathParameters['id']!),
+          state,
         ),
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/invoice/preview/:id',
-        builder: (context, state) => InvoicePreviewScreen(
-          invoiceId: state.pathParameters['id']!,
+        pageBuilder: (context, state) => _slideUpPage(
+          InvoicePreviewScreen(invoiceId: state.pathParameters['id']!),
+          state,
         ),
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/invoice/edit/:id',
-        builder: (context, state) => InvoiceFormScreen(
-          invoiceId: state.pathParameters['id']!,
+        pageBuilder: (context, state) => _slideUpPage(
+          InvoiceFormScreen(invoiceId: state.pathParameters['id']!),
+          state,
         ),
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/invoice/new/:gigId',
-        builder: (context, state) => InvoiceFormScreen(
-          gigId: state.pathParameters['gigId']!,
+        pageBuilder: (context, state) => _slideUpPage(
+          InvoiceFormScreen(gigId: state.pathParameters['gigId']!),
+          state,
         ),
       ),
     ],
@@ -223,6 +276,7 @@ class _ScaffoldWithNavBar extends StatelessWidget {
       bottomNavigationBar: NavigationBar(
         selectedIndex: selectedIndex,
         onDestinationSelected: (index) {
+          HapticFeedback.selectionClick();
           switch (index) {
             case 0:
               context.go('/');

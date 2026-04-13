@@ -1,10 +1,47 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../database/database_helper.dart';
 import '../models/gig.dart';
 import '../models/invoice.dart';
 import 'client_provider.dart';
 import 'gig_provider.dart';
 import 'invoice_provider.dart';
+
+// ==================== DECLARED QUARTERS ====================
+
+/// Returns a Set of "year-quarter" strings for quarters marked as declared.
+final declaredQuartersProvider = AsyncNotifierProvider<DeclaredQuartersNotifier, Set<String>>(
+  DeclaredQuartersNotifier.new,
+);
+
+class DeclaredQuartersNotifier extends AsyncNotifier<Set<String>> {
+  @override
+  Future<Set<String>> build() async {
+    final db = await DatabaseHelper.instance.database;
+    final rows = await db.query('declared_quarters');
+    return rows.map((r) => '${r['year']}-${r['quarter']}').toSet();
+  }
+
+  Future<void> toggle(int year, int quarter, {double? ivaAmount}) async {
+    final db = await DatabaseHelper.instance.database;
+    final key = '$year-$quarter';
+    final current = state.valueOrNull ?? {};
+
+    if (current.contains(key)) {
+      await db.delete('declared_quarters',
+          where: 'year = ? AND quarter = ?', whereArgs: [year, quarter]);
+    } else {
+      await db.insert('declared_quarters', {
+        'id': key,
+        'year': year,
+        'quarter': quarter,
+        'declared_at': DateTime.now().toIso8601String(),
+        'iva_amount': ivaAmount,
+      });
+    }
+    ref.invalidateSelf();
+  }
+}
 
 // ==================== DASHBOARD PERIOD ====================
 
@@ -119,36 +156,50 @@ final dashboardPeriodProvider = StateProvider<DashboardPeriod>((ref) {
 // ==================== PERIOD-BASED DASHBOARD STATS ====================
 
 class PeriodDashboardStats {
-  final double cobradoOficial;
-  final double pendienteOficial;
-  final double cobradoEnB;
+  // COBRADO = facturas pagadas + histórico sin factura + cobrado en B
+  final double cobradoFacturas;     // facturas pagadas (subtotal)
+  final double cobradoHistorico;    // gigs facturables cobrados sin factura (import Excel)
+  final int cobradoHistoricoCount;  // nº bolos históricos
+  final double cobradoEnB;          // gigs !facturable + cobradoEnB
+  // PENDIENTE = solo facturas enviadas
+  final double pendiente;           // facturas status=enviada (total)
+  final int pendienteCount;         // nº facturas enviadas
+  // PREVISTO = bolos futuros facturables sin factura emitida
+  final double previsto;            // cachet de gigs futuros
+  final int previstoCount;          // nº bolos futuros
+  // En B
   final double pendienteEnB;
-  final int facturasEnviadasSinCobrar;
   final int totalBolos;
   final int numBolosB;
   final double ivaAcumulado;
-  final double estimado;
+  final double ivaHistoricoEstimado; // IVA estimado de bolos históricos
   // Previous period (for comparison)
-  final double? prevCobradoOficial;
-  final double? prevTotalCobrado;
+  final double? prevCobrado;
   final String? prevLabel;
 
   PeriodDashboardStats({
-    this.cobradoOficial = 0,
-    this.pendienteOficial = 0,
+    this.cobradoFacturas = 0,
+    this.cobradoHistorico = 0,
+    this.cobradoHistoricoCount = 0,
     this.cobradoEnB = 0,
+    this.pendiente = 0,
+    this.pendienteCount = 0,
+    this.previsto = 0,
+    this.previstoCount = 0,
     this.pendienteEnB = 0,
-    this.facturasEnviadasSinCobrar = 0,
     this.totalBolos = 0,
     this.numBolosB = 0,
     this.ivaAcumulado = 0,
-    this.estimado = 0,
-    this.prevCobradoOficial,
-    this.prevTotalCobrado,
+    this.ivaHistoricoEstimado = 0,
+    this.prevCobrado,
     this.prevLabel,
   });
 
-  double get totalCobrado => cobradoOficial + cobradoEnB;
+  double get cobradoOficial => cobradoFacturas + cobradoHistorico;
+  double get cobrado => cobradoOficial + cobradoEnB;
+  double get acumulado => cobradoOficial + pendiente;
+  double get totalPrevisto => acumulado + previsto;
+  double get ivaTotalEstimado => ivaAcumulado + ivaHistoricoEstimado;
 }
 
 /// Returns (startDate, endDate) for the given period
@@ -174,6 +225,8 @@ PeriodDashboardStats _calcPeriodStats(
   List<Invoice> allInvoices,
 ) {
   final (start, end) = _periodRange(period);
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
 
   final gigsInPeriod = allGigs.where((g) =>
     !g.fecha.isBefore(start) && !g.fecha.isAfter(end) &&
@@ -184,28 +237,48 @@ PeriodDashboardStats _calcPeriodStats(
     !i.fecha.isBefore(start) && !i.fecha.isAfter(end)
   ).toList();
 
-  double cobradoOficial = 0;
-  double pendienteOficial = 0;
-  int facturasEnviadas = 0;
+  // COBRADO (facturas pagadas)
+  double cobradoFacturas = 0;
+  // PENDIENTE (solo facturas enviadas)
+  double pendiente = 0;
+  int pendienteCount = 0;
 
   for (final inv in invoicesInPeriod) {
     if (inv.status == InvoiceStatus.pagada) {
-      cobradoOficial += inv.total;
+      cobradoFacturas += inv.total;
     } else if (inv.status == InvoiceStatus.enviada) {
-      pendienteOficial += inv.total;
-      facturasEnviadas++;
+      pendiente += inv.total;
+      pendienteCount++;
     }
   }
 
-  // Bolos facturables sin factura pagada/enviada
+  // COBRADO HISTÓRICO: bolos facturables cobrados SIN factura (importados Excel)
+  double cobradoHistorico = 0;
+  int cobradoHistoricoCount = 0;
+  for (final gig in gigsInPeriod) {
+    if (gig.facturable &&
+        gig.status == GigStatus.pagado &&
+        (gig.invoiceId == null || gig.invoiceId!.isEmpty)) {
+      cobradoHistorico += gig.cachet ?? 0;
+      cobradoHistoricoCount++;
+    }
+  }
+
+  // PREVISTO = bolos facturables futuros sin factura emitida
+  double previsto = 0;
+  int previstoCount = 0;
   for (final gig in gigsInPeriod) {
     final cachet = gig.cachet ?? 0;
+    final gigDate = DateTime(gig.fecha.year, gig.fecha.month, gig.fecha.day);
     if (gig.facturable &&
+        !gigDate.isBefore(today) &&
         (gig.status == GigStatus.pendiente || gig.status == GigStatus.facturaGenerada)) {
-      pendienteOficial += cachet;
+      previsto += cachet;
+      previstoCount++;
     }
   }
 
+  // Cobrado en B + Pendiente en B
   double cobradoEnB = 0;
   double pendienteEnB = 0;
   int numBolosB = 0;
@@ -230,16 +303,23 @@ PeriodDashboardStats _calcPeriodStats(
     }
   }
 
+  // IVA estimado de bolos históricos (cachet ÷ 1.21 × 0.21)
+  double ivaHistorico = cobradoHistorico > 0 ? cobradoHistorico / 1.21 * 0.21 : 0;
+
   return PeriodDashboardStats(
-    cobradoOficial: cobradoOficial,
-    pendienteOficial: pendienteOficial,
+    cobradoFacturas: cobradoFacturas,
+    cobradoHistorico: cobradoHistorico,
+    cobradoHistoricoCount: cobradoHistoricoCount,
     cobradoEnB: cobradoEnB,
+    pendiente: pendiente,
+    pendienteCount: pendienteCount,
+    previsto: previsto,
+    previstoCount: previstoCount,
     pendienteEnB: pendienteEnB,
-    facturasEnviadasSinCobrar: facturasEnviadas,
     totalBolos: gigsInPeriod.length,
     numBolosB: numBolosB,
     ivaAcumulado: iva,
-    estimado: cobradoOficial + pendienteOficial + cobradoEnB + pendienteEnB,
+    ivaHistoricoEstimado: ivaHistorico,
   );
 }
 
@@ -253,20 +333,23 @@ final periodDashboardStatsProvider =
   // Previous period comparison
   final prev = period.previous;
   final prevStats = _calcPeriodStats(prev, allGigs, allInvoices);
-  final hasPrev = prevStats.totalCobrado > 0 || prevStats.cobradoOficial > 0;
+  final hasPrev = prevStats.cobrado > 0 || prevStats.cobradoFacturas > 0;
 
   return PeriodDashboardStats(
-    cobradoOficial: stats.cobradoOficial,
-    pendienteOficial: stats.pendienteOficial,
+    cobradoFacturas: stats.cobradoFacturas,
+    cobradoHistorico: stats.cobradoHistorico,
+    cobradoHistoricoCount: stats.cobradoHistoricoCount,
     cobradoEnB: stats.cobradoEnB,
+    pendiente: stats.pendiente,
+    pendienteCount: stats.pendienteCount,
+    previsto: stats.previsto,
+    previstoCount: stats.previstoCount,
     pendienteEnB: stats.pendienteEnB,
-    facturasEnviadasSinCobrar: stats.facturasEnviadasSinCobrar,
     totalBolos: stats.totalBolos,
     numBolosB: stats.numBolosB,
     ivaAcumulado: stats.ivaAcumulado,
-    estimado: stats.estimado,
-    prevCobradoOficial: hasPrev ? prevStats.cobradoOficial : null,
-    prevTotalCobrado: hasPrev ? prevStats.totalCobrado : null,
+    ivaHistoricoEstimado: stats.ivaHistoricoEstimado,
+    prevCobrado: hasPrev ? prevStats.cobrado : null,
     prevLabel: hasPrev ? prev.label : null,
   );
 });
@@ -499,15 +582,23 @@ class QuarterVatDetail {
   final int quarter;
   final int year;
   final double ivaTotal;
+  final double ivaFacturas;          // IVA real de facturas
+  final double ivaHistoricoEstimado; // IVA estimado de bolos históricos
+  final bool isEstimated;            // true si incluye IVA estimado
+  final bool isDeclared;             // marcado manualmente como declarado
   final DateTime declarationDate;
   final int daysRemaining;
-  final String status; // 'pendiente_declarar', 'en_curso', 'proximo', 'vencido'
+  final String status; // 'pendiente_declarar', 'en_curso', 'proximo', 'pasado', 'declarado'
   final List<QuarterVatInvoice> invoices;
 
   QuarterVatDetail({
     required this.quarter,
     required this.year,
     required this.ivaTotal,
+    this.ivaFacturas = 0,
+    this.ivaHistoricoEstimado = 0,
+    this.isEstimated = false,
+    this.isDeclared = false,
     required this.declarationDate,
     required this.daysRemaining,
     required this.status,
@@ -528,9 +619,11 @@ DateTime _declarationDate(int quarter, int year) {
 final yearlyVatDetailProvider =
     FutureProvider.family<List<QuarterVatDetail>, int>((ref, year) async {
   final allInvoices = await ref.watch(invoicesProvider.future);
+  final allGigs = await ref.watch(gigsProvider.future);
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
   final currentQuarter = ((now.month - 1) ~/ 3) + 1;
+  final declaredSet = await ref.watch(declaredQuartersProvider.future);
 
   final result = <QuarterVatDetail>[];
 
@@ -545,10 +638,10 @@ final yearlyVatDetailProvider =
       inv.status == InvoiceStatus.pagada
     ).toList();
 
-    double ivaTotal = 0;
+    double ivaFacturas = 0;
     final invoiceDetails = <QuarterVatInvoice>[];
     for (final inv in qInvoices) {
-      ivaTotal += inv.ivaAmount;
+      ivaFacturas += inv.ivaAmount;
       final client = await ref.read(clientByIdProvider(inv.clientId).future);
       invoiceDetails.add(QuarterVatInvoice(
         invoiceId: inv.id,
@@ -560,11 +653,31 @@ final yearlyVatDetailProvider =
       ));
     }
 
+    // Historical gigs
+    final qHistoricGigs = allGigs.where((g) =>
+      g.fecha.year == year &&
+      g.fecha.month >= startM && g.fecha.month <= endM &&
+      g.facturable &&
+      g.status == GigStatus.pagado &&
+      (g.invoiceId == null || g.invoiceId!.isEmpty)
+    ).toList();
+    double baseHistorico = 0;
+    for (final gig in qHistoricGigs) {
+      baseHistorico += (gig.cachet ?? 0);
+    }
+    final ivaHistorico = baseHistorico > 0 ? baseHistorico / 1.21 * 0.21 : 0.0;
+    final isEstimated = ivaHistorico > 0;
+    final ivaTotal = ivaFacturas + ivaHistorico;
+
     final declDate = _declarationDate(q, year);
     final daysLeft = declDate.difference(today).inDays;
 
+    final isDeclared = declaredSet.contains('$year-$q');
+
     String status;
-    if (year < now.year || (year == now.year && q < currentQuarter)) {
+    if (isDeclared) {
+      status = 'declarado';
+    } else if (year < now.year || (year == now.year && q < currentQuarter)) {
       status = daysLeft < 0 && ivaTotal > 0 ? 'pendiente_declarar' : 'pasado';
     } else if (year == now.year && q == currentQuarter) {
       status = 'en_curso';
@@ -576,6 +689,10 @@ final yearlyVatDetailProvider =
       quarter: q,
       year: year,
       ivaTotal: ivaTotal,
+      ivaFacturas: ivaFacturas,
+      ivaHistoricoEstimado: ivaHistorico,
+      isEstimated: isEstimated,
+      isDeclared: isDeclared,
       declarationDate: declDate,
       daysRemaining: daysLeft,
       status: status,
@@ -1016,15 +1133,19 @@ final financialPeriodProvider = StateProvider<DashboardPeriod>((ref) {
 /// Detailed financial summary for any period, used by the financial summary screen.
 class FinancialPeriodSummary {
   final DashboardPeriod period;
-  final double cobradoOficial;
-  final double pendienteCobrar;
+  final double cobradoFacturas;
+  final double cobradoHistorico;    // bolos facturables cobrados sin factura
+  final int cobradoHistoricoCount;
   final double cobradoEnB;
+  final double pendiente;         // solo facturas enviadas
+  final int pendienteCount;
+  final double previsto;          // bolos futuros facturables
+  final int previstoCount;
   final double pendienteEnB;
-  final double estimado;
   final double ivaTotal;
+  final double ivaHistoricoEstimado;
   final int numBolos;
   final int numFacturasPagadas;
-  final int numFacturasEnviadas;
   // Sub-period breakdown
   final List<SubPeriodStats> subPeriods;
   // IVA breakdown per quarter (for trimestre/anio modes)
@@ -1035,31 +1156,39 @@ class FinancialPeriodSummary {
 
   FinancialPeriodSummary({
     required this.period,
-    this.cobradoOficial = 0,
-    this.pendienteCobrar = 0,
+    this.cobradoFacturas = 0,
+    this.cobradoHistorico = 0,
+    this.cobradoHistoricoCount = 0,
     this.cobradoEnB = 0,
+    this.pendiente = 0,
+    this.pendienteCount = 0,
+    this.previsto = 0,
+    this.previstoCount = 0,
     this.pendienteEnB = 0,
-    this.estimado = 0,
     this.ivaTotal = 0,
+    this.ivaHistoricoEstimado = 0,
     this.numBolos = 0,
     this.numFacturasPagadas = 0,
-    this.numFacturasEnviadas = 0,
     this.subPeriods = const [],
     this.ivaQuarters = const [],
     this.prevCobradoTotal,
     this.prevLabel,
   });
 
-  double get totalCobrado => cobradoOficial + cobradoEnB;
+  double get cobradoOficial => cobradoFacturas + cobradoHistorico;
+  double get cobrado => cobradoOficial + cobradoEnB;
+  double get acumulado => cobradoOficial + pendiente;
+  double get totalPrevisto => acumulado + previsto;
 }
 
 class SubPeriodStats {
   final String label;     // "Ene", "T1", etc.
   final int index;        // month 1-12 or quarter 1-4
   final double cobrado;
+  final double cobradoHistorico; // bolos facturables cobrados sin factura
   final double pendiente;
   final double cobradoEnB;
-  final double estimado;
+  final double previsto;
   final int numBolos;
   final List<MonthlyGigDetail> gigs;
 
@@ -1067,15 +1196,19 @@ class SubPeriodStats {
     required this.label,
     required this.index,
     this.cobrado = 0,
+    this.cobradoHistorico = 0,
     this.pendiente = 0,
     this.cobradoEnB = 0,
-    this.estimado = 0,
+    this.previsto = 0,
     this.numBolos = 0,
     this.gigs = const [],
   });
 
-  double get total => cobrado + cobradoEnB;
-  bool get hasData => cobrado > 0 || pendiente > 0 || cobradoEnB > 0 || estimado > 0;
+  double get cobradoOficial => cobrado + cobradoHistorico;
+  double get total => cobradoOficial + cobradoEnB;
+  double get acumulado => cobradoOficial + pendiente + cobradoEnB;
+  double get totalPrevisto => acumulado + previsto;
+  bool get hasData => cobrado > 0 || pendiente > 0 || cobradoEnB > 0 || previsto > 0;
 }
 
 const _shortMonths = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
@@ -1093,7 +1226,6 @@ final financialPeriodSummaryProvider =
     !i.fecha.isBefore(start) && !i.fecha.isAfter(end)
   ).toList();
   int numPagadas = invoicesInPeriod.where((i) => i.status == InvoiceStatus.pagada).length;
-  int numEnviadas = invoicesInPeriod.where((i) => i.status == InvoiceStatus.enviada).length;
 
   // IVA quarters (only for trimestre and anio modes)
   List<QuarterVatDetail> ivaQuarters = [];
@@ -1101,6 +1233,9 @@ final financialPeriodSummaryProvider =
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final currentQuarter = ((now.month - 1) ~/ 3) + 1;
+
+    // Load declared quarters
+    final declaredSet = await ref.watch(declaredQuartersProvider.future);
 
     int qStart, qEnd;
     if (period.mode == DashboardPeriodMode.trimestre) {
@@ -1115,16 +1250,17 @@ final financialPeriodSummaryProvider =
       final sM = (q - 1) * 3 + 1;
       final eM = q * 3;
 
+      // Facturas pagadas del trimestre
       final qInvoices = allInvoices.where((inv) =>
         inv.fecha.year == period.year &&
         inv.fecha.month >= sM && inv.fecha.month <= eM &&
         inv.status == InvoiceStatus.pagada
       ).toList();
 
-      double ivaTotal = 0;
+      double ivaFacturas = 0;
       final invoiceDetails = <QuarterVatInvoice>[];
       for (final inv in qInvoices) {
-        ivaTotal += inv.ivaAmount;
+        ivaFacturas += inv.ivaAmount;
         final client = await ref.read(clientByIdProvider(inv.clientId).future);
         invoiceDetails.add(QuarterVatInvoice(
           invoiceId: inv.id,
@@ -1136,11 +1272,34 @@ final financialPeriodSummaryProvider =
         ));
       }
 
+      // Bolos históricos facturables cobrados sin factura en este trimestre
+      final qHistoricGigs = allGigs.where((g) =>
+        g.fecha.year == period.year &&
+        g.fecha.month >= sM && g.fecha.month <= eM &&
+        g.facturable &&
+        g.status == GigStatus.pagado &&
+        (g.invoiceId == null || g.invoiceId!.isEmpty)
+      ).toList();
+
+      double baseHistorico = 0;
+      for (final gig in qHistoricGigs) {
+        baseHistorico += (gig.cachet ?? 0);
+      }
+      final ivaHistorico = baseHistorico > 0 ? baseHistorico / 1.21 * 0.21 : 0.0;
+      final isEstimated = ivaHistorico > 0;
+
+      final ivaTotal = ivaFacturas + ivaHistorico;
+
       final declDate = _declarationDate(q, period.year);
       final daysLeft = declDate.difference(today).inDays;
 
+      // Check if manually declared
+      final isDeclared = declaredSet.contains('${period.year}-$q');
+
       String status;
-      if (period.year < now.year || (period.year == now.year && q < currentQuarter)) {
+      if (isDeclared) {
+        status = 'declarado';
+      } else if (period.year < now.year || (period.year == now.year && q < currentQuarter)) {
         status = daysLeft < 0 && ivaTotal > 0 ? 'pendiente_declarar' : 'pasado';
       } else if (period.year == now.year && q == currentQuarter) {
         status = 'en_curso';
@@ -1152,6 +1311,10 @@ final financialPeriodSummaryProvider =
         quarter: q,
         year: period.year,
         ivaTotal: ivaTotal,
+        ivaFacturas: ivaFacturas,
+        ivaHistoricoEstimado: ivaHistorico,
+        isEstimated: isEstimated,
+        isDeclared: isDeclared,
         declarationDate: declDate,
         daysRemaining: daysLeft,
         status: status,
@@ -1162,117 +1325,79 @@ final financialPeriodSummaryProvider =
 
   // Sub-periods
   List<SubPeriodStats> subPeriods = [];
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+
+  Future<List<SubPeriodStats>> buildMonthlySubPeriods(List<int> months) async {
+    final result = <SubPeriodStats>[];
+    for (final m in months) {
+      final mGigs = allGigs.where((g) =>
+        g.fecha.year == period.year && g.fecha.month == m &&
+        g.status != GigStatus.cancelado
+      ).toList();
+      final mInvoices = allInvoices.where((i) =>
+        i.fecha.year == period.year && i.fecha.month == m
+      ).toList();
+
+      double cobrado = 0, pendiente = 0, enB = 0, previsto = 0, cobradoHist = 0;
+      for (final inv in mInvoices) {
+        if (inv.status == InvoiceStatus.pagada) {
+          cobrado += inv.total;
+        } else if (inv.status == InvoiceStatus.enviada) {
+          pendiente += inv.total;
+        }
+      }
+      for (final gig in mGigs) {
+        final cachet = gig.cachet ?? 0;
+        final gigDate = DateTime(gig.fecha.year, gig.fecha.month, gig.fecha.day);
+        // Bolos históricos facturables cobrados sin factura
+        if (gig.facturable &&
+            gig.status == GigStatus.pagado &&
+            (gig.invoiceId == null || gig.invoiceId!.isEmpty)) {
+          cobradoHist += cachet;
+        }
+        if (gig.facturable &&
+            !gigDate.isBefore(today) &&
+            (gig.status == GigStatus.pendiente || gig.status == GigStatus.facturaGenerada)) {
+          previsto += cachet;
+        }
+        if (!gig.facturable && gig.status == GigStatus.cobradoEnB) {
+          enB += cachet;
+        }
+      }
+
+      final gigDetails = <MonthlyGigDetail>[];
+      for (final gig in mGigs) {
+        final client = await ref.read(clientByIdProvider(gig.clientId).future);
+        gigDetails.add(MonthlyGigDetail(
+          gigId: gig.id,
+          clientName: client?.nombre ?? 'Desconocido',
+          fecha: gig.fecha,
+          importe: gig.cachet ?? 0,
+          status: gig.status,
+        ));
+      }
+
+      result.add(SubPeriodStats(
+        label: _shortMonths[m - 1],
+        index: m,
+        cobrado: cobrado,
+        cobradoHistorico: cobradoHist,
+        pendiente: pendiente,
+        cobradoEnB: enB,
+        previsto: previsto,
+        numBolos: mGigs.length,
+        gigs: gigDetails,
+      ));
+    }
+    return result;
+  }
+
   if (period.mode == DashboardPeriodMode.anio) {
-    // Monthly breakdown
-    for (int m = 1; m <= 12; m++) {
-      final mGigs = allGigs.where((g) =>
-        g.fecha.year == period.year && g.fecha.month == m &&
-        g.status != GigStatus.cancelado
-      ).toList();
-      final mInvoices = allInvoices.where((i) =>
-        i.fecha.year == period.year && i.fecha.month == m
-      ).toList();
-
-      double cobrado = 0, pendiente = 0, enB = 0;
-      for (final inv in mInvoices) {
-        if (inv.status == InvoiceStatus.pagada) {
-          cobrado += inv.total;
-        } else if (inv.status == InvoiceStatus.enviada) {
-          pendiente += inv.total;
-        }
-      }
-      for (final gig in mGigs) {
-        final cachet = gig.cachet ?? 0;
-        if (gig.facturable && (gig.status == GigStatus.pendiente || gig.status == GigStatus.facturaGenerada)) {
-          pendiente += cachet;
-        }
-        if (!gig.facturable && gig.status == GigStatus.cobradoEnB) {
-          enB += cachet;
-        }
-        if (!gig.facturable && gig.status == GigStatus.pendiente) {
-          pendiente += cachet;
-        }
-      }
-
-      final gigDetails = <MonthlyGigDetail>[];
-      for (final gig in mGigs) {
-        final client = await ref.read(clientByIdProvider(gig.clientId).future);
-        gigDetails.add(MonthlyGigDetail(
-          gigId: gig.id,
-          clientName: client?.nombre ?? 'Desconocido',
-          fecha: gig.fecha,
-          importe: gig.cachet ?? 0,
-          status: gig.status,
-        ));
-      }
-
-      subPeriods.add(SubPeriodStats(
-        label: _shortMonths[m - 1],
-        index: m,
-        cobrado: cobrado,
-        pendiente: pendiente,
-        cobradoEnB: enB,
-        estimado: cobrado + pendiente + enB,
-        numBolos: mGigs.length,
-        gigs: gigDetails,
-      ));
-    }
+    subPeriods = await buildMonthlySubPeriods(List.generate(12, (i) => i + 1));
   } else if (period.mode == DashboardPeriodMode.trimestre) {
-    // Monthly breakdown for the quarter
     final startM = (period.quarter - 1) * 3 + 1;
-    for (int m = startM; m < startM + 3; m++) {
-      final mGigs = allGigs.where((g) =>
-        g.fecha.year == period.year && g.fecha.month == m &&
-        g.status != GigStatus.cancelado
-      ).toList();
-      final mInvoices = allInvoices.where((i) =>
-        i.fecha.year == period.year && i.fecha.month == m
-      ).toList();
-
-      double cobrado = 0, pendiente = 0, enB = 0;
-      for (final inv in mInvoices) {
-        if (inv.status == InvoiceStatus.pagada) {
-          cobrado += inv.total;
-        } else if (inv.status == InvoiceStatus.enviada) {
-          pendiente += inv.total;
-        }
-      }
-      for (final gig in mGigs) {
-        final cachet = gig.cachet ?? 0;
-        if (gig.facturable && (gig.status == GigStatus.pendiente || gig.status == GigStatus.facturaGenerada)) {
-          pendiente += cachet;
-        }
-        if (!gig.facturable && gig.status == GigStatus.cobradoEnB) {
-          enB += cachet;
-        }
-        if (!gig.facturable && gig.status == GigStatus.pendiente) {
-          pendiente += cachet;
-        }
-      }
-
-      final gigDetails = <MonthlyGigDetail>[];
-      for (final gig in mGigs) {
-        final client = await ref.read(clientByIdProvider(gig.clientId).future);
-        gigDetails.add(MonthlyGigDetail(
-          gigId: gig.id,
-          clientName: client?.nombre ?? 'Desconocido',
-          fecha: gig.fecha,
-          importe: gig.cachet ?? 0,
-          status: gig.status,
-        ));
-      }
-
-      subPeriods.add(SubPeriodStats(
-        label: _shortMonths[m - 1],
-        index: m,
-        cobrado: cobrado,
-        pendiente: pendiente,
-        cobradoEnB: enB,
-        estimado: cobrado + pendiente + enB,
-        numBolos: mGigs.length,
-        gigs: gigDetails,
-      ));
-    }
+    subPeriods = await buildMonthlySubPeriods([startM, startM + 1, startM + 2]);
   }
   // Month mode: no sub-periods, but include gigs
   if (period.mode == DashboardPeriodMode.mes) {
@@ -1296,10 +1421,11 @@ final financialPeriodSummaryProvider =
     subPeriods.add(SubPeriodStats(
       label: _shortMonths[period.month - 1],
       index: period.month,
-      cobrado: stats.cobradoOficial,
-      pendiente: stats.pendienteOficial,
+      cobrado: stats.cobradoFacturas,
+      cobradoHistorico: stats.cobradoHistorico,
+      pendiente: stats.pendiente,
       cobradoEnB: stats.cobradoEnB,
-      estimado: stats.estimado,
+      previsto: stats.previsto,
       numBolos: stats.totalBolos,
       gigs: gigDetails,
     ));
@@ -1308,22 +1434,26 @@ final financialPeriodSummaryProvider =
   // Previous period comparison
   final prev = period.previous;
   final prevStats = _calcPeriodStats(prev, allGigs, allInvoices);
-  final hasPrev = prevStats.totalCobrado > 0;
+  final hasPrev = prevStats.cobrado > 0;
 
   return FinancialPeriodSummary(
     period: period,
-    cobradoOficial: stats.cobradoOficial,
-    pendienteCobrar: stats.pendienteOficial,
+    cobradoFacturas: stats.cobradoFacturas,
+    cobradoHistorico: stats.cobradoHistorico,
+    cobradoHistoricoCount: stats.cobradoHistoricoCount,
     cobradoEnB: stats.cobradoEnB,
+    pendiente: stats.pendiente,
+    pendienteCount: stats.pendienteCount,
+    previsto: stats.previsto,
+    previstoCount: stats.previstoCount,
     pendienteEnB: stats.pendienteEnB,
-    estimado: stats.estimado,
     ivaTotal: stats.ivaAcumulado,
+    ivaHistoricoEstimado: stats.ivaHistoricoEstimado,
     numBolos: stats.totalBolos,
     numFacturasPagadas: numPagadas,
-    numFacturasEnviadas: numEnviadas,
     subPeriods: subPeriods,
     ivaQuarters: ivaQuarters,
-    prevCobradoTotal: hasPrev ? prevStats.totalCobrado : null,
+    prevCobradoTotal: hasPrev ? prevStats.cobrado : null,
     prevLabel: hasPrev ? prev.label : null,
   );
 });

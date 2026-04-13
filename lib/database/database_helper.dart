@@ -7,6 +7,8 @@ import 'migrations/v4_add_irpf.dart';
 import 'migrations/v5_add_logo_size.dart';
 import 'migrations/v6_add_pdf_theme.dart';
 import 'migrations/v7_pending_deletions.dart';
+import 'migrations/v8_add_client_aliases.dart';
+import 'migrations/v9_declared_quarters.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._internal();
@@ -26,7 +28,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 7,
+      version: 9,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       onConfigure: (db) async {
@@ -62,6 +64,12 @@ class DatabaseHelper {
     if (version >= 7) {
       await _applyMigration(db, v7PendingDeletions);
     }
+    if (version >= 8) {
+      await _applyMigration(db, v8AddClientAliases);
+    }
+    if (version >= 9) {
+      await _applyMigration(db, v9DeclaredQuarters);
+    }
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -82,6 +90,12 @@ class DatabaseHelper {
     }
     if (oldVersion < 7) {
       await _applyMigration(db, v7PendingDeletions);
+    }
+    if (oldVersion < 8) {
+      await _applyMigration(db, v8AddClientAliases);
+    }
+    if (oldVersion < 9) {
+      await _applyMigration(db, v9DeclaredQuarters);
     }
   }
 

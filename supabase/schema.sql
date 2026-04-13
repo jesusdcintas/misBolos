@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS clients (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   nombre TEXT NOT NULL,
+  alias TEXT DEFAULT '',
+  aliases JSONB DEFAULT '[]'::jsonb,
   email TEXT,
   telefono TEXT,
   direccion TEXT,

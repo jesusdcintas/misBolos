@@ -464,7 +464,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
             const SizedBox(width: 16),
             Expanded(
               child: DropdownButtonFormField<double>(
-                value: _ivaRate,
+                initialValue: _ivaRate,
                 decoration: const InputDecoration(
                   border: OutlineInputBorder(),
                   contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),

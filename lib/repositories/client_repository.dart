@@ -32,11 +32,49 @@ class ClientRepository {
     final db = await DatabaseHelper.instance.database;
     final maps = await db.query(
       'clients',
-      where: 'nombre LIKE ? OR alias LIKE ? OR cif_nif LIKE ?',
-      whereArgs: ['%$query%', '%$query%', '%$query%'],
+      where: 'nombre LIKE ? OR alias LIKE ? OR aliases LIKE ? OR cif_nif LIKE ?',
+      whereArgs: ['%$query%', '%$query%', '%$query%', '%$query%'],
       orderBy: 'nombre ASC',
     );
     return maps.map((m) => Client.fromMap(m)).toList();
+  }
+
+  Future<Client?> findByNameOrAlias(String name) async {
+    final db = await DatabaseHelper.instance.database;
+    final normalized = name.toLowerCase().trim();
+
+    // Search by nombre exact match (case-insensitive)
+    var maps = await db.query(
+      'clients',
+      where: 'LOWER(nombre) = ?',
+      whereArgs: [normalized],
+    );
+    if (maps.isNotEmpty) return Client.fromMap(maps.first);
+
+    // Search by alias exact match
+    maps = await db.query(
+      'clients',
+      where: 'LOWER(alias) = ?',
+      whereArgs: [normalized],
+    );
+    if (maps.isNotEmpty) return Client.fromMap(maps.first);
+
+    // Search in aliases JSON array
+    maps = await db.query(
+      'clients',
+      where: 'LOWER(aliases) LIKE ?',
+      whereArgs: ['%"$normalized"%'],
+    );
+    if (maps.isNotEmpty) {
+      // Verify: check actual parsed aliases for exact match
+      for (final m in maps) {
+        final client = Client.fromMap(m);
+        if (client.aliases.any((a) => a.toLowerCase() == normalized)) {
+          return client;
+        }
+      }
+    }
+    return null;
   }
 
   Future<void> insert(Client client) async {

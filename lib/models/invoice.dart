@@ -9,9 +9,9 @@ extension InvoiceStatusExtension on InvoiceStatus {
       case InvoiceStatus.borrador:
         return 'Borrador';
       case InvoiceStatus.enviada:
-        return 'Enviada';
+        return 'Pendiente';
       case InvoiceStatus.pagada:
-        return 'Pagada';
+        return 'Cobrada';
     }
   }
 

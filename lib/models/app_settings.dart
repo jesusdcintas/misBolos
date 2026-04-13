@@ -17,8 +17,8 @@ class AppSettings {
 
   AppSettings({
     this.logoPath = '',
-    this.logoSize = 80,
-    this.pdfTheme = 'clasico',
+    this.logoSize = 180,
+    this.pdfTheme = 'moderno',
     this.emisorNombre = '',
     this.emisorNIF = '',
     this.emisorDireccion = '',

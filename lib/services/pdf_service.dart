@@ -64,13 +64,16 @@ class PdfService {
             children: [
               // Header: Logo + FACTURA
               pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 crossAxisAlignment: pw.CrossAxisAlignment.center,
                 children: [
-                  if (logoImage != null)
-                    pw.Image(logoImage, height: settings.logoSize, fit: pw.BoxFit.contain)
-                  else
-                    pw.SizedBox(height: settings.logoSize),
+                  pw.Expanded(
+                    child: pw.Align(
+                      alignment: pw.Alignment.centerLeft,
+                      child: logoImage != null
+                          ? pw.Image(logoImage, height: settings.logoSize, fit: pw.BoxFit.contain)
+                          : pw.SizedBox(height: settings.logoSize),
+                    ),
+                  ),
                   pw.Text(
                     'FACTURA',
                     style: pw.TextStyle(
@@ -81,9 +84,9 @@ class PdfService {
                   ),
                 ],
               ),
-              pw.SizedBox(height: 8),
+              pw.SizedBox(height: 4),
               pw.Divider(color: PdfColors.grey400, thickness: 1),
-              pw.SizedBox(height: 16),
+              pw.SizedBox(height: 8),
 
               // Emisor / Facturar a
               pw.Row(
@@ -167,12 +170,14 @@ class PdfService {
                   ),
                 ],
               ),
-              pw.SizedBox(height: 16),
+              pw.SizedBox(height: 8),
 
               // Fecha, nº factura, IBAN
               pw.Row(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
                   pw.Expanded(
+                    flex: 2,
                     child: pw.Row(
                       children: [
                         pw.Text('Fecha:       ',
@@ -185,7 +190,9 @@ class PdfService {
                       ],
                     ),
                   ),
+                  pw.SizedBox(width: 40),
                   pw.Expanded(
+                    flex: 2,
                     child: pw.Row(
                       children: [
                         pw.Text('N.º de factura',
@@ -489,17 +496,21 @@ class PdfService {
             child: pw.Column(
               children: [
                 _summaryRow('Bolos', '${summary.numBolos}'),
-                _summaryRow('Facturas pagadas', '${summary.numFacturasPagadas}'),
-                _summaryRow('Facturas enviadas', '${summary.numFacturasEnviadas}'),
+                _summaryRow('Facturas cobradas', '${summary.numFacturasPagadas}'),
+                _summaryRow('Facturas pendientes', '${summary.pendienteCount}'),
                 pw.Divider(color: PdfColors.grey300),
-                _summaryRow('Cobrado (facturas)', _formatCurrency(summary.cobradoOficial), color: success),
-                _summaryRow('Pendiente de cobro', _formatCurrency(summary.pendienteCobrar), color: warning),
+                _summaryRow('Cobrado (facturas)', _formatCurrency(summary.cobradoFacturas), color: success),
+                if (summary.cobradoHistorico > 0)
+                  _summaryRow('Cobrado (histórico)', _formatCurrency(summary.cobradoHistorico), color: success),
+                _summaryRow('Pendiente', _formatCurrency(summary.pendiente), color: warning),
                 _summaryRow('Cobrado en B', _formatCurrency(summary.cobradoEnB), color: purple),
                 if (summary.pendienteEnB > 0)
                   _summaryRow('Pendiente en B', _formatCurrency(summary.pendienteEnB), color: purple),
+                if (summary.previsto > 0)
+                  _summaryRow('Previsto', _formatCurrency(summary.previsto), color: primary),
                 pw.Divider(color: PdfColors.grey300),
-                _summaryRow('Estimado total', _formatCurrency(summary.estimado), color: primary, bold: true),
-                _summaryRow('Total cobrado', _formatCurrency(summary.totalCobrado), color: success, bold: true),
+                _summaryRow('Acumulado', _formatCurrency(summary.acumulado), color: success, bold: true),
+                _summaryRow('Total previsto', _formatCurrency(summary.totalPrevisto), color: primary, bold: true),
               ],
             ),
           ));
@@ -608,7 +619,7 @@ class PdfService {
                     _headerCell('Cobrado'),
                     _headerCell('Pendiente'),
                     _headerCell('En B'),
-                    _headerCell('Estimado'),
+                    _headerCell('T. Previsto'),
                   ],
                 ),
                 for (int i = 0; i < summary.subPeriods.length; i++)
@@ -617,10 +628,10 @@ class PdfService {
                     children: [
                       _dataCell(summary.subPeriods[i].label, pw.TextAlign.center),
                       _dataCell('${summary.subPeriods[i].numBolos}', pw.TextAlign.center),
-                      _dataCell(_formatCurrency(summary.subPeriods[i].cobrado), pw.TextAlign.right),
+                      _dataCell(_formatCurrency(summary.subPeriods[i].cobradoOficial), pw.TextAlign.right),
                       _dataCell(_formatCurrency(summary.subPeriods[i].pendiente), pw.TextAlign.right),
                       _dataCell(_formatCurrency(summary.subPeriods[i].cobradoEnB), pw.TextAlign.right),
-                      _dataCell(_formatCurrency(summary.subPeriods[i].estimado), pw.TextAlign.right),
+                      _dataCell(_formatCurrency(summary.subPeriods[i].totalPrevisto), pw.TextAlign.right),
                     ],
                   ),
               ],

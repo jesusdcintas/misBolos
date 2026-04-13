@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
@@ -18,6 +19,7 @@ import '../../services/google_calendar_service.dart';
 import '../../services/google_drive_service.dart';
 import '../../widgets/common/status_badge.dart';
 import '../../widgets/common/facturable_badge.dart';
+import '../../widgets/common/cobrado_confetti_button.dart';
 import 'package:share_plus/share_plus.dart';
 
 class GigDetailScreen extends ConsumerWidget {
@@ -75,11 +77,14 @@ class _GigDetailContent extends ConsumerWidget {
         padding: const EdgeInsets.all(16),
         children: [
           // Fecha
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.calendar_today, color: AppColors.primary),
-              title: const Text(AppStrings.fecha),
-              subtitle: Text(DateFormatter.dayOfWeek(gig.fecha)),
+          Hero(
+            tag: 'gig-${gig.id}',
+            child: Card(
+              child: ListTile(
+                leading: const Icon(Icons.calendar_today, color: AppColors.primary),
+                title: const Text(AppStrings.fecha),
+                subtitle: Text(DateFormatter.dayOfWeek(gig.fecha)),
+              ),
             ),
           ),
 
@@ -200,7 +205,7 @@ class _GigDetailContent extends ConsumerWidget {
               ),
             if (ref.read(googleAuthProvider).isSignedIn)
               const SizedBox(height: 8),
-            _ActionButton(
+            CobradoConfettiButton(
               label: AppStrings.marcarPagado,
               icon: Icons.check_circle,
               color: AppColors.accentGreen,
@@ -222,7 +227,7 @@ class _GigDetailContent extends ConsumerWidget {
     } else {
       // No facturable
       if (gig.status == GigStatus.pendiente) {
-        actions.add(_ActionButton(
+        actions.add(CobradoConfettiButton(
           label: AppStrings.marcarCobradoEnB,
           icon: Icons.money_off,
           color: AppColors.accentPurple,
@@ -340,12 +345,13 @@ class _GigDetailContent extends ConsumerWidget {
     ref.invalidate(gigByIdProvider(gig.id));
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Factura marcada como enviada')),
+        const SnackBar(content: Text('Factura marcada como pendiente')),
       );
     }
   }
 
   Future<void> _markAsPaid(BuildContext context, WidgetRef ref, Gig gig) async {
+    HapticFeedback.heavyImpact();
     await ref
         .read(gigsProvider.notifier)
         .updateStatus(gig.id, GigStatus.pagado);
@@ -373,6 +379,7 @@ class _GigDetailContent extends ConsumerWidget {
 
   Future<void> _markAsCobradoEnB(
       BuildContext context, WidgetRef ref, Gig gig) async {
+    HapticFeedback.heavyImpact();
     await ref
         .read(gigsProvider.notifier)
         .updateStatus(gig.id, GigStatus.cobradoEnB);
@@ -454,6 +461,7 @@ class _GigDetailContent extends ConsumerWidget {
     );
 
     if (confirm == true) {
+      HapticFeedback.heavyImpact();
       await ref
           .read(gigsProvider.notifier)
           .updateStatus(gig.id, GigStatus.cancelado);

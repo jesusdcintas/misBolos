@@ -1,9 +1,11 @@
+import 'dart:convert';
 import 'package:uuid/uuid.dart';
 
 class Client {
   final String id;
   final String nombre;
   final String alias;
+  final List<String> aliases;
   final String cifNif;
   final String direccion;
   final String ciudad;
@@ -18,6 +20,7 @@ class Client {
     String? id,
     required this.nombre,
     this.alias = '',
+    this.aliases = const [],
     this.cifNif = '',
     this.direccion = '',
     this.ciudad = '',
@@ -34,6 +37,7 @@ class Client {
   Client copyWith({
     String? nombre,
     String? alias,
+    List<String>? aliases,
     String? cifNif,
     String? direccion,
     String? ciudad,
@@ -47,6 +51,7 @@ class Client {
       id: id,
       nombre: nombre ?? this.nombre,
       alias: alias ?? this.alias,
+      aliases: aliases ?? this.aliases,
       cifNif: cifNif ?? this.cifNif,
       direccion: direccion ?? this.direccion,
       ciudad: ciudad ?? this.ciudad,
@@ -64,6 +69,7 @@ class Client {
       'id': id,
       'nombre': nombre,
       'alias': alias,
+      'aliases': jsonEncode(aliases),
       'cif_nif': cifNif,
       'direccion': direccion,
       'ciudad': ciudad,
@@ -81,6 +87,9 @@ class Client {
       id: map['id'] as String,
       nombre: map['nombre'] as String,
       alias: map['alias'] as String? ?? '',
+      aliases: map['aliases'] != null
+          ? List<String>.from(jsonDecode(map['aliases'] as String))
+          : [],
       cifNif: map['cif_nif'] as String? ?? '',
       direccion: map['direccion'] as String? ?? '',
       ciudad: map['ciudad'] as String? ?? '',

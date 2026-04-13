@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../models/gig.dart';
+import 'pulsing_badge.dart';
 
 class StatusBadge extends StatelessWidget {
   final GigStatus status;
@@ -44,7 +45,8 @@ class StatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final shouldPulse = status == GigStatus.pendiente || status == GigStatus.facturaEnviada;
+    final badge = Container(
       padding: EdgeInsets.symmetric(
         horizontal: large ? 14 : 10,
         vertical: large ? 6 : 4,
@@ -62,5 +64,6 @@ class StatusBadge extends StatelessWidget {
         ),
       ),
     );
+    return PulsingBadge(active: shouldPulse, child: badge);
   }
 }

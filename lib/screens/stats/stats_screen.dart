@@ -250,7 +250,12 @@ class _GlobalTab extends ConsumerWidget {
                 const SizedBox(height: 16),
 
                 if (mode == ChartMode.mensual)
-                  SizedBox(
+                  TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0, end: 1),
+                    duration: const Duration(milliseconds: 1200),
+                    curve: Curves.easeOutCubic,
+                    builder: (context, animValue, child) {
+                      return SizedBox(
                     height: 250,
                     child: BarChart(
                       BarChartData(
@@ -272,11 +277,11 @@ class _GlobalTab extends ConsumerWidget {
                         barGroups: months.map((m) {
                           return BarChartGroupData(x: m.month, barRods: [
                             BarChartRodData(
-                              toY: m.total,
+                              toY: m.total * animValue,
                               rodStackItems: [
                                 BarChartRodStackItem(
-                                    0, m.oficial, AppColors.accentGreen),
-                                BarChartRodStackItem(m.oficial, m.total,
+                                    0, m.oficial * animValue, AppColors.accentGreen),
+                                BarChartRodStackItem(m.oficial * animValue, m.total * animValue,
                                     AppColors.accentPurple),
                               ],
                               width: 16,
@@ -316,6 +321,8 @@ class _GlobalTab extends ConsumerWidget {
                         borderData: FlBorderData(show: false),
                       ),
                     ),
+                  );
+                    },
                   )
                 else
                   quarterlyAsync.when(
@@ -475,7 +482,7 @@ class _TooltipCard extends ConsumerWidget {
             const SizedBox(height: 8),
             _tooltipRow('Cobrado', CurrencyFormatter.format(data.totalCobrado), AppColors.success),
             _tooltipRow('IVA', CurrencyFormatter.format(data.totalIva), AppColors.warning),
-            _tooltipRow('Facturas pagadas', '${data.numFacturas}', AppColors.primary),
+            _tooltipRow('Facturas cobradas', '${data.numFacturas}', AppColors.primary),
           ],
         ),
       ),
@@ -505,7 +512,11 @@ Widget _buildMonthlyChart(
   Color barColor,
   double Function(MonthlyIncome) getValue,
 ) {
-  return SizedBox(
+  return TweenAnimationBuilder<double>(
+    tween: Tween(begin: 0, end: 1),
+    duration: const Duration(milliseconds: 1200),
+    curve: Curves.easeOutCubic,
+    builder: (context, animValue, _) => SizedBox(
     height: 250,
     child: BarChart(
       BarChartData(
@@ -524,7 +535,7 @@ Widget _buildMonthlyChart(
         barGroups: months.map((m) {
           return BarChartGroupData(x: m.month, barRods: [
             BarChartRodData(
-              toY: getValue(m),
+              toY: getValue(m) * animValue,
               color: barColor,
               width: 16,
               borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
@@ -559,6 +570,7 @@ Widget _buildMonthlyChart(
         borderData: FlBorderData(show: false),
       ),
     ),
+  ),
   );
 }
 
@@ -573,7 +585,11 @@ Widget _buildQuarterlyChart(
   final now = DateTime.now();
   final currentQuarter = now.year == year ? ((now.month - 1) ~/ 3) + 1 : 0;
 
-  return SizedBox(
+  return TweenAnimationBuilder<double>(
+    tween: Tween(begin: 0, end: 1),
+    duration: const Duration(milliseconds: 1200),
+    curve: Curves.easeOutCubic,
+    builder: (context, animValue, _) => SizedBox(
     height: 250,
     child: BarChart(
       BarChartData(
@@ -601,7 +617,7 @@ Widget _buildQuarterlyChart(
 
           return BarChartGroupData(x: q.quarter, barRods: [
             BarChartRodData(
-              toY: getValue(q),
+              toY: getValue(q) * animValue,
               color: color,
               width: 40,
               borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
@@ -637,6 +653,7 @@ Widget _buildQuarterlyChart(
         borderData: FlBorderData(show: false),
       ),
     ),
+  ),
   );
 }
 
@@ -644,7 +661,11 @@ Widget _buildQuarterlyStackedChart(
   WidgetRef ref,
   List<QuarterlyIncome> quarters,
 ) {
-  return SizedBox(
+  return TweenAnimationBuilder<double>(
+    tween: Tween(begin: 0, end: 1),
+    duration: const Duration(milliseconds: 1200),
+    curve: Curves.easeOutCubic,
+    builder: (context, animValue, _) => SizedBox(
     height: 250,
     child: BarChart(
       BarChartData(
@@ -665,10 +686,10 @@ Widget _buildQuarterlyStackedChart(
         barGroups: quarters.map((q) {
           return BarChartGroupData(x: q.quarter, barRods: [
             BarChartRodData(
-              toY: q.total,
+              toY: q.total * animValue,
               rodStackItems: [
-                BarChartRodStackItem(0, q.oficial, AppColors.accentGreen),
-                BarChartRodStackItem(q.oficial, q.total, AppColors.accentPurple),
+                BarChartRodStackItem(0, q.oficial * animValue, AppColors.accentGreen),
+                BarChartRodStackItem(q.oficial * animValue, q.total * animValue, AppColors.accentPurple),
               ],
               width: 40,
               borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
@@ -705,6 +726,7 @@ Widget _buildQuarterlyStackedChart(
         borderData: FlBorderData(show: false),
       ),
     ),
+  ),
   );
 }
 

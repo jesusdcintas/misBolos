@@ -26,15 +26,15 @@ class AppStrings {
   // Estados de bolo
   static const String pendiente = 'Pendiente';
   static const String facturaGenerada = 'Factura generada';
-  static const String facturaEnviada = 'Factura enviada';
-  static const String pagado = 'Pagado';
+  static const String facturaEnviada = 'Pdte cobro';
+  static const String pagado = 'Cobrado';
   static const String cancelado = 'Cancelado';
   static const String cobradoEnB = 'Cobrado en B';
 
   // Acciones
   static const String generarFactura = 'Generar factura';
-  static const String marcarEnviada = 'Marcar como enviada';
-  static const String marcarPagado = 'Marcar como pagado';
+  static const String marcarEnviada = 'Marcar como pendiente';
+  static const String marcarPagado = 'Marcar como cobrado';
   static const String marcarCobradoEnB = 'Marcar como cobrado en B';
   static const String cancelarBolo = 'Cancelar bolo';
   static const String verPDF = 'Ver PDF';
@@ -48,8 +48,8 @@ class AppStrings {
   static const String factura = 'Factura';
   static const String todas = 'Todas';
   static const String borrador = 'Borrador';
-  static const String enviada = 'Enviada';
-  static const String pagada = 'Pagada';
+  static const String enviada = 'Pendiente';
+  static const String pagada = 'Cobrada';
   static const String subtotal = 'Subtotal';
   static const String iva = 'IVA';
   static const String total = 'TOTAL';
@@ -69,8 +69,8 @@ class AppStrings {
   static const String ingresosOficiales = 'Ingresos oficiales';
   static const String ingresosEnB = 'Ingresos en B';
   static const String cobradoEsteMes = 'Cobrado este mes';
-  static const String pendienteCobro = 'Pendiente de cobro';
-  static const String facturasEnviadas = 'Facturas enviadas sin cobrar';
+  static const String pendienteCobro = 'Pendiente';
+  static const String facturasEnviadas = 'Facturas pendientes';
   static const String cobradoEnBEsteMes = 'Cobrado en B este mes';
   static const String pendienteCobroB = 'Pendiente cobrar en B';
   static const String totalBolosMes = 'Bolos este mes';
@@ -91,7 +91,7 @@ class AppStrings {
   static const String sincronizar = 'Sincronizar';
   static const String backup = 'Backup';
   static const String exportarCSV = 'Exportar CSV';
-  static const String avisoLegal = 'Los datos de ingresos no facturados se sincronizan en la nube de forma segura';
+  static const String avisoLegal = 'Todos tus datos, incluidos los ingresos no facturados, se sincronizan de forma segura. Solo tú puedes acceder a ellos.';
 
   // Mensajes
   static const String boloCreado = 'Bolo creado correctamente';

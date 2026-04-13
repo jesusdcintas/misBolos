@@ -17,7 +17,7 @@ class GigRepository {
 
   Future<List<Gig>> getAll() async {
     final db = await DatabaseHelper.instance.database;
-    final maps = await db.query('gigs', orderBy: 'fecha DESC');
+    final maps = await db.query('gigs', orderBy: 'fecha ASC');
     return maps.map((m) => Gig.fromMap(m)).toList();
   }
 
@@ -34,7 +34,7 @@ class GigRepository {
       'gigs',
       where: 'client_id = ?',
       whereArgs: [clientId],
-      orderBy: 'fecha DESC',
+      orderBy: 'fecha ASC',
     );
     return maps.map((m) => Gig.fromMap(m)).toList();
   }

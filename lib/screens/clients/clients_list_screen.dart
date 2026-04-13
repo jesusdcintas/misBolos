@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import '../../core/constants/app_strings.dart';
 import '../../providers/client_provider.dart';
 import '../../widgets/common/empty_state.dart';
+import '../../widgets/common/skeleton_loading.dart';
+import '../../core/utils/app_haptics.dart';
 
 class ClientsListScreen extends ConsumerStatefulWidget {
   const ClientsListScreen({super.key});
@@ -60,13 +62,18 @@ class _ClientsListScreenState extends ConsumerState<ClientsListScreen> {
                         title: Text(displayName),
                         subtitle: subtitle != null ? Text(subtitle) : null,
                         trailing: const Icon(Icons.chevron_right),
-                        onTap: () => context.push('/client/${client.id}'),
+                        onTap: () {
+                          AppHaptics.light();
+                          context.push('/client/${client.id}');
+                        },
                       ),
                     );
                   },
                 );
               },
-              loading: () => const Center(child: CircularProgressIndicator()),
+              loading: () => Column(
+                children: List.generate(6, (_) => const ClientCardSkeleton()),
+              ),
               error: (e, _) => Center(child: Text('Error: $e')),
             ),
           ),

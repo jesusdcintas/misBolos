@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../models/app_settings.dart';
 import '../models/client.dart';
 import '../models/gig.dart';
@@ -371,6 +370,7 @@ class SupabaseService {
     'user_id': userId,
     'nombre': c.nombre,
     'alias': c.alias,
+    // aliases se mantiene solo local hasta añadir columna en Supabase
     'cif_nif': c.cifNif,
     'direccion': c.direccion,
     'ciudad': c.ciudad,
@@ -386,6 +386,7 @@ class SupabaseService {
     id: m['id'],
     nombre: m['nombre'] ?? '',
     alias: m['alias'] ?? '',
+    // aliases se mantiene solo local hasta añadir columna en Supabase
     cifNif: m['cif_nif'] ?? '',
     direccion: m['direccion'] ?? '',
     ciudad: m['ciudad'] ?? '',
