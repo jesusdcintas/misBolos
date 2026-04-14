@@ -253,12 +253,20 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp> {
   }
 }
 
-class _ScaffoldWithNavBar extends StatelessWidget {
+class _ScaffoldWithNavBar extends StatefulWidget {
   final Widget child;
   const _ScaffoldWithNavBar({required this.child});
 
-  static int _calculateSelectedIndex(BuildContext context) {
-    final location = GoRouterState.of(context).uri.path;
+  @override
+  State<_ScaffoldWithNavBar> createState() => _ScaffoldWithNavBarState();
+}
+
+class _ScaffoldWithNavBarState extends State<_ScaffoldWithNavBar> {
+  late final PageController _pageController;
+
+  static const _paths = ['/', '/calendar', '/clients', '/invoices', '/profile'];
+
+  static int _indexFromLocation(String location) {
     if (location == '/') return 0;
     if (location.startsWith('/calendar')) return 1;
     if (location.startsWith('/clients')) return 2;
@@ -267,29 +275,72 @@ class _ScaffoldWithNavBar extends StatelessWidget {
     return 0;
   }
 
+  int _currentIndex = 0;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final newIndex = _indexFromLocation(GoRouterState.of(context).uri.path);
+    if (newIndex != _currentIndex) {
+      _currentIndex = newIndex;
+      if (_pageController.hasClients) {
+        _pageController.jumpToPage(newIndex);
+      }
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController();
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  void _onPageChanged(int index) {
+    if (index != _currentIndex) {
+      HapticFeedback.selectionClick();
+      _currentIndex = index;
+      context.go(_paths[index]);
+    }
+  }
+
+  void _onNavTapped(int index) {
+    HapticFeedback.selectionClick();
+    if (index == _currentIndex) return;
+    _currentIndex = index;
+    _pageController.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
+    context.go(_paths[index]);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final selectedIndex = _calculateSelectedIndex(context);
+    final selectedIndex = _indexFromLocation(GoRouterState.of(context).uri.path);
 
     return Scaffold(
-      body: child,
+      body: PageView(
+        controller: _pageController,
+        onPageChanged: _onPageChanged,
+        physics: const BouncingScrollPhysics(),
+        children: const [
+          DashboardScreen(),
+          CalendarScreen(),
+          ClientsListScreen(),
+          InvoicesListScreen(),
+          ProfileScreen(),
+        ],
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: selectedIndex,
-        onDestinationSelected: (index) {
-          HapticFeedback.selectionClick();
-          switch (index) {
-            case 0:
-              context.go('/');
-            case 1:
-              context.go('/calendar');
-            case 2:
-              context.go('/clients');
-            case 3:
-              context.go('/invoices');
-            case 4:
-              context.go('/profile');
-          }
-        },
+        onDestinationSelected: _onNavTapped,
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.dashboard_outlined),
