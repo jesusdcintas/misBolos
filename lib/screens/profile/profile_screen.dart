@@ -10,7 +10,6 @@ import '../../models/app_settings.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/sync_provider.dart';
 import '../../services/google_auth_service.dart';
-import '../../services/google_drive_service.dart';
 import '../../services/platform_auth_service.dart';
 import '../../services/supabase_service.dart';
 
@@ -273,7 +272,7 @@ class _GoogleSection extends ConsumerWidget {
               ),
               const SizedBox(height: 4),
               const Text(
-                'Sincroniza Google Calendar y sube facturas a Drive',
+                'Sincroniza Google Calendar con tus bolos',
                 style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
                 textAlign: TextAlign.center,
               ),
@@ -338,34 +337,27 @@ class _GoogleSection extends ConsumerWidget {
             ),
           ),
           const Divider(height: 1),
-          ListTile(
-            leading: const Icon(Icons.calendar_month, color: AppColors.primary),
-            title: const Text('Google Calendar'),
-            subtitle: const Text('Bolos sincronizados'),
-            trailing: const Icon(Icons.check_circle, color: AppColors.accentGreen, size: 20),
-          ),
-          ListTile(
-            leading: const Icon(Icons.cloud_upload, color: AppColors.primary),
-            title: const Text('Google Drive'),
-            subtitle: const Text('Backup y facturas'),
-            trailing: const Icon(Icons.check_circle, color: AppColors.accentGreen, size: 20),
-            onTap: () async {
-              try {
-                await GoogleDriveService().backupDatabase();
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Backup completado')),
-                  );
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error: $e')),
-                  );
-                }
-              }
-            },
-          ),
+          // ── Google Calendar ──
+          if (auth.calendarConnected)
+            const ListTile(
+              leading:
+                  Icon(Icons.calendar_month, color: AppColors.primary),
+              title: Text('Google Calendar'),
+              subtitle: Text('Bolos sincronizados'),
+              trailing: Icon(Icons.check_circle,
+                  color: AppColors.accentGreen, size: 20),
+            )
+          else
+            ListTile(
+              leading: const Icon(Icons.calendar_month,
+                  color: Colors.orange),
+              title: const Text('Google Calendar'),
+              subtitle: const Text('Sin sincronizar · Toca para conectar'),
+              trailing: const Icon(Icons.warning_amber_rounded,
+                  color: Colors.orange, size: 20),
+              onTap: () =>
+                  ref.read(googleAuthProvider.notifier).connectCalendarOnly(),
+            ),
           const Divider(height: 1),
           ListTile(
             leading: const Icon(Icons.logout, color: AppColors.accentRed),

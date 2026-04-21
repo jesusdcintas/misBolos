@@ -574,7 +574,7 @@ class _InvoiceDetailContent extends ConsumerWidget {
       await ref.read(gigsProvider.notifier).updateStatus(gig.id, newGigStatus);
       
       // Sincronizar con Google Calendar
-      await _syncGigToCalendar(ref, gig.copyWith(status: newGigStatus));
+      await _syncGigToCalendar(context, ref, gig.copyWith(status: newGigStatus));
     }
     
     if (context.mounted) {
@@ -606,7 +606,7 @@ class _InvoiceDetailContent extends ConsumerWidget {
     final gig = await ref.read(gigByIdProvider(invoice.gigId).future);
     if (gig != null) {
       await ref.read(gigsProvider.notifier).updateStatus(gig.id, newGigStatus);
-      await _syncGigToCalendar(ref, gig.copyWith(status: newGigStatus));
+      await _syncGigToCalendar(context, ref, gig.copyWith(status: newGigStatus));
     }
     
     if (context.mounted) {
@@ -616,10 +616,12 @@ class _InvoiceDetailContent extends ConsumerWidget {
     }
   }
 
-  Future<void> _syncGigToCalendar(WidgetRef ref, Gig gig) async {
+  Future<void> _syncGigToCalendar(BuildContext context, WidgetRef ref, Gig gig) async {
+    if (!context.mounted) return;
     final authState = ref.read(googleAuthProvider);
     if (!authState.isSignedIn) return;
     try {
+      if (!context.mounted) return;
       final client = await ref.read(clientByIdProvider(gig.clientId).future);
       await GoogleCalendarService().syncGig(
         gig: gig,

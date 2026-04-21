@@ -16,7 +16,6 @@ import '../../services/pdf_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/google_auth_service.dart';
 import '../../services/google_calendar_service.dart';
-import '../../services/google_drive_service.dart';
 import '../../widgets/common/status_badge.dart';
 import '../../widgets/common/facturable_badge.dart';
 import '../../widgets/common/cobrado_confetti_button.dart';
@@ -196,15 +195,6 @@ class _GigDetailContent extends ConsumerWidget {
               onPressed: () => _sharePdf(context, ref, gig),
             ),
             const SizedBox(height: 8),
-            if (ref.read(googleAuthProvider).isSignedIn)
-              _ActionButton(
-                label: 'Subir a Google Drive',
-                icon: Icons.cloud_upload,
-                color: AppColors.primary,
-                onPressed: () => _uploadPdfToDrive(context, ref, gig),
-              ),
-            if (ref.read(googleAuthProvider).isSignedIn)
-              const SizedBox(height: 8),
             CobradoConfettiButton(
               label: AppStrings.marcarPagado,
               icon: Icons.check_circle,
@@ -402,41 +392,6 @@ class _GigDetailContent extends ConsumerWidget {
         cachet: gig.cachet,
       );
     } catch (_) {}
-  }
-
-  Future<void> _uploadPdfToDrive(BuildContext context, WidgetRef ref, Gig gig) async {
-    final authState = ref.read(googleAuthProvider);
-    if (!authState.isSignedIn) return;
-    try {
-      if (gig.invoiceId == null) return;
-      final invoice = await ref.read(invoiceByIdProvider(gig.invoiceId!).future);
-      final client = await ref.read(clientByIdProvider(gig.clientId).future);
-      final settings = await ref.read(settingsProvider.future);
-      if (invoice == null || client == null) return;
-
-      final file = await PdfService().generateInvoicePdf(
-        invoice: invoice,
-        client: client,
-        settings: settings,
-      );
-
-      await GoogleDriveService().uploadInvoicePdf(
-        file,
-        'Factura_${invoice.numero}_${client.nombre}',
-      );
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Factura subida a Google Drive')),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error subiendo a Drive: $e')),
-        );
-      }
-    }
   }
 
   Future<void> _cancelGig(

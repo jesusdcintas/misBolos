@@ -11,7 +11,13 @@ class PlatformAuthService {
 
   // Para iOS/Android usamos google_sign_in
   final GoogleSignIn _googleSignIn = GoogleSignIn(
-    scopes: ['email', 'profile'],
+    scopes: [
+      'email',
+      'profile',
+      'https://www.googleapis.com/auth/calendar',
+      'https://www.googleapis.com/auth/calendar.events',
+      'https://www.googleapis.com/auth/drive.file',
+    ],
   );
 
   GoogleSignInAccount? _currentUser;

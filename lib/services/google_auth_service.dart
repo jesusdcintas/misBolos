@@ -1,25 +1,35 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:googleapis/calendar/v3.dart' as gcal;
-import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:googleapis_auth/auth_io.dart' as auth;
 import 'package:http/http.dart' as http;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'platform_auth_service.dart';
 
 /// Credenciales OAuth Desktop de Google Cloud.
 const String _googleClientId =
     '744196169382-knr1najrpc3muiim38k3epg6rdmdpuhj.apps.googleusercontent.com';
 const String _googleClientSecret = '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';
 
+const String _prefsKeyCredentials = 'google_auth_credentials';
+const String _prefsKeyEmail = 'google_auth_email';
+// Claves para persistir el estado de Calendar en móvil
+const String _prefsKeyMobileCalendarConnected = 'google_calendar_connected_mobile';
+const String _prefsKeyMobileEmail = 'google_calendar_email_mobile';
+
 final _scopes = [
   gcal.CalendarApi.calendarScope,
-  drive.DriveApi.driveFileScope,
+  gcal.CalendarApi.calendarEventsScope,
   'email',
   'profile',
 ];
 
 /// Servicio centralizado de autenticación con Google para Desktop.
 /// Usa googleapis_auth (clientViaUserConsent) que soporta client_secret.
+/// Los tokens OAuth se persisten en SharedPreferences para sobrevivir reinicios.
 class GoogleAuthService {
   static final GoogleAuthService instance = GoogleAuthService._();
   GoogleAuthService._();
@@ -46,30 +56,11 @@ class GoogleAuthService {
         },
       );
 
-      // Obtener email del perfil vía People API o Calendar settings
-      try {
-        final calApi = gcal.CalendarApi(_authClient!);
-        final setting = await calApi.settings.get('timezone');
-        // Si llegamos aquí, la API funciona. Obtenemos el email del token.
-        debugPrint('[GoogleAuth] Calendar API OK (tz: ${setting.value})');
-      } catch (_) {}
-
       // Obtener email real via userinfo
-      try {
-        final response = await _authClient!.get(
-          Uri.parse('https://www.googleapis.com/oauth2/v2/userinfo'),
-        );
-        if (response.statusCode == 200) {
-          final body = response.body;
-          // Parsear JSON manualmente para no añadir dependencias
-          final emailMatch = RegExp(r'"email"\s*:\s*"([^"]+)"').firstMatch(body);
-          if (emailMatch != null) {
-            _email = emailMatch.group(1);
-          }
-        }
-      } catch (e) {
-        debugPrint('[GoogleAuth] Could not fetch userinfo: $e');
-      }
+      await _fetchUserEmail();
+
+      // Persistir credenciales para sesiones futuras
+      await _persistCredentials();
 
       debugPrint('[GoogleAuth] signIn() success – $_email');
       return true;
@@ -81,16 +72,58 @@ class GoogleAuthService {
     }
   }
 
+  /// Intenta restaurar la sesión desde las credenciales persistidas.
+  /// Si el access token expiró, googleapis_auth lo renueva automáticamente
+  /// usando el refresh token.
   Future<bool> signInSilently() async {
-    // googleapis_auth no persiste tokens automáticamente en desktop.
-    // Solo tendremos sesión si ya se hizo signIn() en esta ejecución.
-    return isSignedIn;
+    if (isSignedIn) return true;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final credsJson = prefs.getString(_prefsKeyCredentials);
+      if (credsJson == null) return false;
+
+      final map = jsonDecode(credsJson) as Map<String, dynamic>;
+      final atMap = map['accessToken'] as Map<String, dynamic>;
+
+      final credentials = auth.AccessCredentials(
+        auth.AccessToken(
+          atMap['type'] as String,
+          atMap['data'] as String,
+          atMap['expiry'] != null
+              ? DateTime.parse(atMap['expiry'] as String).toUtc()
+              : DateTime.now().toUtc().add(const Duration(seconds: -1)),
+        ),
+        map['refreshToken'] as String?,
+        (map['scopes'] as List).cast<String>(),
+      );
+
+      final clientId = auth.ClientId(_googleClientId, _googleClientSecret);
+      final baseClient = http.Client();
+      _authClient =
+          auth.autoRefreshingClient(clientId, credentials, baseClient);
+      _email = prefs.getString(_prefsKeyEmail);
+
+      // Verificar que las credenciales funcionan y actualizar email
+      await _fetchUserEmail();
+
+      // Actualizar credenciales persistidas (pueden haber sido renovadas)
+      await _persistCredentials();
+
+      debugPrint('[GoogleAuth] signInSilently() restored session – $_email');
+      return true;
+    } catch (e) {
+      debugPrint('[GoogleAuth] signInSilently() failed: $e');
+      _authClient = null;
+      return false;
+    }
   }
 
   Future<void> signOut() async {
     _authClient?.close();
     _authClient = null;
     _email = null;
+    await _clearPersistedCredentials();
   }
 
   Future<http.Client> get httpClient async {
@@ -103,9 +136,66 @@ class GoogleAuthService {
     return gcal.CalendarApi(_authClient!);
   }
 
-  drive.DriveApi? get driveApi {
-    if (_authClient == null) return null;
-    return drive.DriveApi(_authClient!);
+  /// Verifica si el scope de Calendar está activo llamando a la API.
+  Future<bool> checkCalendarAccess() async {
+    try {
+      final api = calendarApi;
+      if (api == null) return false;
+      await api.calendarList.list(maxResults: 1);
+      return true;
+    } catch (e) {
+      debugPrint('[GoogleAuth] Calendar access check failed: $e');
+      return false;
+    }
+  }
+
+  // ── Helpers privados ──────────────────────────────────────────────────────
+
+  Future<void> _fetchUserEmail() async {
+    if (_authClient == null) return;
+    try {
+      final response = await _authClient!.get(
+        Uri.parse('https://www.googleapis.com/oauth2/v2/userinfo'),
+      );
+      if (response.statusCode == 200) {
+        final emailMatch =
+            RegExp(r'"email"\s*:\s*"([^"]+)"').firstMatch(response.body);
+        if (emailMatch != null) _email = emailMatch.group(1);
+      }
+    } catch (e) {
+      debugPrint('[GoogleAuth] Could not fetch userinfo: $e');
+    }
+  }
+
+  Future<void> _persistCredentials() async {
+    if (_authClient == null) return;
+    try {
+      final creds = _authClient!.credentials;
+      final json = jsonEncode({
+        'accessToken': {
+          'data': creds.accessToken.data,
+          'type': creds.accessToken.type,
+          'expiry': creds.accessToken.expiry.toIso8601String(),
+        },
+        'refreshToken': creds.refreshToken,
+        'scopes': creds.scopes,
+      });
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_prefsKeyCredentials, json);
+      if (_email != null) await prefs.setString(_prefsKeyEmail, _email!);
+    } catch (e) {
+      debugPrint('[GoogleAuth] Failed to persist credentials: $e');
+    }
+  }
+
+  Future<void> _clearPersistedCredentials() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_prefsKeyCredentials);
+      await prefs.remove(_prefsKeyEmail);
+    } catch (e) {
+      debugPrint('[GoogleAuth] Failed to clear credentials: $e');
+    }
   }
 }
 
@@ -117,12 +207,14 @@ final googleAuthProvider =
 
 class GoogleAuthState {
   final bool isSignedIn;
+  final bool calendarConnected;
   final String? email;
   final String? displayName;
   final String? photoUrl;
 
   const GoogleAuthState({
     this.isSignedIn = false,
+    this.calendarConnected = false,
     this.email,
     this.displayName,
     this.photoUrl,
@@ -130,12 +222,14 @@ class GoogleAuthState {
 
   GoogleAuthState copyWith({
     bool? isSignedIn,
+    bool? calendarConnected,
     String? email,
     String? displayName,
     String? photoUrl,
   }) {
     return GoogleAuthState(
       isSignedIn: isSignedIn ?? this.isSignedIn,
+      calendarConnected: calendarConnected ?? this.calendarConnected,
       email: email ?? this.email,
       displayName: displayName ?? this.displayName,
       photoUrl: photoUrl ?? this.photoUrl,
@@ -148,29 +242,125 @@ class GoogleAuthNotifier extends StateNotifier<GoogleAuthState> {
     _tryAutoSignIn();
   }
 
+  // En iOS/Android usamos PlatformAuthService; en macOS, GoogleAuthService.
+  bool get _isMobile => !kIsWeb && (Platform.isIOS || Platform.isAndroid);
+
   Future<void> _tryAutoSignIn() async {
-    final success = await GoogleAuthService.instance.signInSilently();
-    if (success) {
-      _updateState();
+    if (_isMobile) {
+      final prefs = await SharedPreferences.getInstance();
+      final wasConnected = prefs.getBool(_prefsKeyMobileCalendarConnected) ?? false;
+      final savedEmail = prefs.getString(_prefsKeyMobileEmail);
+
+      final success = await PlatformAuthService.instance.signInSilently();
+      if (success) {
+        _updateStateFromPlatform();
+        await _saveMobileCalendarState();
+      } else if (wasConnected) {
+        // google_sign_in perdió la sesión pero el usuario estaba conectado.
+        // Restauramos el estado desde disco para que la UI no muestre desconectado.
+        state = GoogleAuthState(
+          isSignedIn: true,
+          calendarConnected: true,
+          email: savedEmail,
+          displayName: savedEmail?.split('@').first,
+        );
+      }
+    } else {
+      final success = await GoogleAuthService.instance.signInSilently();
+      if (success) await _updateStateFromDesktop();
     }
   }
 
   Future<bool> signIn() async {
-    final success = await GoogleAuthService.instance.signIn();
-    if (success) {
-      _updateState();
+    if (_isMobile) {
+      final success = await PlatformAuthService.instance.signIn();
+      if (success) {
+        _updateStateFromPlatform();
+        await _saveMobileCalendarState();
+      }
+      return success;
+    } else {
+      final success = await GoogleAuthService.instance.signIn();
+      if (success) await _updateStateFromDesktop();
+      return success;
     }
-    return success;
   }
 
   Future<void> signOut() async {
-    await GoogleAuthService.instance.signOut();
+    if (_isMobile) {
+      await PlatformAuthService.instance.signOut();
+      await _clearMobileCalendarState();
+    } else {
+      await GoogleAuthService.instance.signOut();
+    }
     state = const GoogleAuthState();
   }
 
-  void _updateState() {
+  /// Solicita acceso a Calendar sin requerir login completo si ya hay sesión.
+  Future<bool> connectCalendarOnly() async {
+    if (_isMobile) {
+      // En móvil, google_sign_in gestiona scopes en el login inicial.
+      // Si ya hay sesión activa, se considera Calendar conectado.
+      if (PlatformAuthService.instance.isSignedIn) {
+        state = state.copyWith(calendarConnected: true);
+        return true;
+      }
+      return await signIn();
+    } else {
+      final currentUser = GoogleAuthService.instance.isSignedIn;
+      if (currentUser) {
+        final hasAccess =
+            await GoogleAuthService.instance.checkCalendarAccess();
+        if (hasAccess) {
+          state = state.copyWith(calendarConnected: true);
+          return true;
+        }
+      }
+      return await signIn();
+    }
+  }
+
+  void _updateStateFromPlatform() {
+    final svc = PlatformAuthService.instance;
+    // En móvil con google_sign_in, los scopes de Calendar se solicitan
+    // en el login, así que si está conectado asumimos Calendar activo.
     state = GoogleAuthState(
       isSignedIn: true,
+      calendarConnected: true,
+      email: svc.userEmail,
+      displayName: svc.displayName,
+      photoUrl: svc.photoUrl,
+    );
+  }
+
+  Future<void> _saveMobileCalendarState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_prefsKeyMobileCalendarConnected, state.calendarConnected);
+      if (state.email != null) {
+        await prefs.setString(_prefsKeyMobileEmail, state.email!);
+      }
+    } catch (e) {
+      debugPrint('[GoogleAuth] Failed to save mobile calendar state: $e');
+    }
+  }
+
+  Future<void> _clearMobileCalendarState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_prefsKeyMobileCalendarConnected);
+      await prefs.remove(_prefsKeyMobileEmail);
+    } catch (e) {
+      debugPrint('[GoogleAuth] Failed to clear mobile calendar state: $e');
+    }
+  }
+
+  Future<void> _updateStateFromDesktop() async {
+    final calendarOk =
+        await GoogleAuthService.instance.checkCalendarAccess();
+    state = GoogleAuthState(
+      isSignedIn: true,
+      calendarConnected: calendarOk,
       email: GoogleAuthService.instance.userEmail,
       displayName: GoogleAuthService.instance.displayName,
       photoUrl: GoogleAuthService.instance.photoUrl,
