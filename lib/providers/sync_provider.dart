@@ -1,13 +1,18 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 import '../database/database_helper.dart';
 import '../services/supabase_service.dart';
 import '../repositories/client_repository.dart';
+import '../repositories/expense_repository.dart';
+import '../repositories/asset_repository.dart';
 import '../repositories/gig_repository.dart';
 import '../repositories/invoice_repository.dart';
 import '../repositories/settings_repository.dart';
 import 'client_provider.dart';
+import 'expenses_provider.dart';
+import 'assets_provider.dart';
 import 'gig_provider.dart';
 import 'invoice_provider.dart';
 import 'settings_provider.dart';
@@ -98,12 +103,36 @@ class SyncNotifier extends StateNotifier<SyncState> {
       final invoices = await InvoiceRepository.instance.getAll();
       final settings = await SettingsRepository().get();
 
+      // Asignar cloud_id a expenses sin él
+      final _uuid = const Uuid();
+      var expenses = await ExpenseRepository.instance.getAll();
+      for (var i = 0; i < expenses.length; i++) {
+        if (expenses[i].cloudId == null) {
+          final cloudId = _uuid.v4();
+          await ExpenseRepository.instance.saveCloudId(expenses[i].id!, cloudId);
+          expenses[i] = expenses[i].copyWith(cloudId: cloudId);
+        }
+      }
+
+      // Asignar cloud_id a assets sin él
+      var assets = await AssetRepository.instance.getAll();
+      for (var i = 0; i < assets.length; i++) {
+        if (assets[i].cloudId == null) {
+          final cloudId = _uuid.v4();
+          await AssetRepository.instance.saveCloudId(assets[i].id!, cloudId);
+          assets[i] = assets[i].copyWith(cloudId: cloudId);
+        }
+      }
+
       await _supabase.uploadAll(
         clients: clients,
         gigs: gigs,
         invoices: invoices,
       );
-      
+
+      await _supabase.uploadExpenses(expenses);
+      await _supabase.uploadAssets(assets);
+
       // Subir settings (datos de facturación)
       await _supabase.uploadSettings(settings);
 
@@ -136,6 +165,8 @@ class SyncNotifier extends StateNotifier<SyncState> {
       final cloudGigs = await _supabase.downloadGigs();
       final cloudInvoices = await _supabase.downloadInvoices();
       final cloudSettings = await _supabase.downloadSettings();
+      final cloudExpenses = await _supabase.downloadExpenses();
+      final cloudAssets = await _supabase.downloadAssets();
 
       // Guardar en local (upsert)
       for (final client in cloudClients) {
@@ -146,6 +177,12 @@ class SyncNotifier extends StateNotifier<SyncState> {
       }
       for (final invoice in cloudInvoices) {
         await InvoiceRepository.instance.upsert(invoice);
+      }
+      for (final expense in cloudExpenses) {
+        await ExpenseRepository.instance.upsertByCloudId(expense);
+      }
+      for (final asset in cloudAssets) {
+        await AssetRepository.instance.upsertByCloudId(asset);
       }
 
       // Eliminar registros locales que ya no existen en la nube
@@ -175,7 +212,32 @@ class SyncNotifier extends StateNotifier<SyncState> {
           debugPrint('[Sync] Removed local orphan invoice: ${i.id}');
         }
       }
-      
+
+      // Eliminar expenses y assets locales que ya no existen en la nube
+      final cloudExpenseCloudIds = cloudExpenses
+          .where((e) => e.cloudId != null)
+          .map((e) => e.cloudId!)
+          .toSet();
+      final localExpenses = await ExpenseRepository.instance.getAll();
+      for (final e in localExpenses) {
+        if (e.cloudId != null && !cloudExpenseCloudIds.contains(e.cloudId)) {
+          await ExpenseRepository.instance.deleteByCloudId(e.cloudId!);
+          debugPrint('[Sync] Removed local orphan expense: ${e.cloudId}');
+        }
+      }
+
+      final cloudAssetCloudIds = cloudAssets
+          .where((a) => a.cloudId != null)
+          .map((a) => a.cloudId!)
+          .toSet();
+      final localAssets = await AssetRepository.instance.getAll();
+      for (final a in localAssets) {
+        if (a.cloudId != null && !cloudAssetCloudIds.contains(a.cloudId)) {
+          await AssetRepository.instance.deleteByCloudId(a.cloudId!);
+          debugPrint('[Sync] Removed local orphan asset: ${a.cloudId}');
+        }
+      }
+
       // Guardar settings si existen en la nube
       if (cloudSettings != null) {
         debugPrint('[Sync] Saving settings with logoPath: ${cloudSettings.logoPath}');
@@ -187,10 +249,13 @@ class SyncNotifier extends StateNotifier<SyncState> {
       _ref.invalidate(gigsProvider);
       _ref.invalidate(invoicesProvider);
       _ref.invalidate(settingsProvider);
+      _ref.invalidate(expensesProvider);
+      _ref.invalidate(assetsProvider);
 
       state = state.copyWith(
         status: SyncStatus.success,
-        message: 'Datos descargados: ${cloudClients.length} clientes, ${cloudGigs.length} bolos, ${cloudInvoices.length} facturas',
+        message: 'Descargados: ${cloudClients.length} clientes, ${cloudGigs.length} bolos, '
+            '${cloudInvoices.length} facturas, ${cloudExpenses.length} gastos, ${cloudAssets.length} inversiones',
         lastSync: DateTime.now(),
       );
     } catch (e) {

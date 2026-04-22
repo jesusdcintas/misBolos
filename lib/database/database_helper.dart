@@ -11,6 +11,7 @@ import 'migrations/v8_add_client_aliases.dart';
 import 'migrations/v9_declared_quarters.dart';
 import 'migrations/v10_expenses.dart';
 import 'migrations/v11_assets.dart';
+import 'migrations/v12_cloud_ids.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._internal();
@@ -30,7 +31,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 11,
+      version: 12,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       onConfigure: (db) async {
@@ -78,6 +79,9 @@ class DatabaseHelper {
     if (version >= 11) {
       await _applyMigration(db, v11Assets);
     }
+    if (version >= 12) {
+      await _applyMigration(db, v12CloudIds);
+    }
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -110,6 +114,9 @@ class DatabaseHelper {
     }
     if (oldVersion < 11) {
       await _applyMigration(db, v11Assets);
+    }
+    if (oldVersion < 12) {
+      await _applyMigration(db, v12CloudIds);
     }
   }
 

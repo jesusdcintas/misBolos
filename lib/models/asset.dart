@@ -71,6 +71,7 @@ enum AssetCategory {
 
 class Asset {
   final int? id;
+  final String? cloudId;
   final String? userId;
   final String descripcion;
   final DateTime fechaCompra;
@@ -87,6 +88,7 @@ class Asset {
 
   const Asset({
     this.id,
+    this.cloudId,
     this.userId,
     required this.descripcion,
     required this.fechaCompra,
@@ -163,6 +165,7 @@ class Asset {
   Map<String, dynamic> toMap() {
     return {
       if (id != null) 'id': id,
+      if (cloudId != null) 'cloud_id': cloudId,
       'user_id': userId,
       'descripcion': descripcion,
       'fecha_compra': fechaCompra.toIso8601String(),
@@ -182,6 +185,7 @@ class Asset {
   factory Asset.fromMap(Map<String, dynamic> map) {
     return Asset(
       id: map['id'] as int?,
+      cloudId: map['cloud_id'] as String?,
       userId: map['user_id'] as String?,
       descripcion: map['descripcion'] as String,
       fechaCompra: DateTime.parse(map['fecha_compra'] as String),
@@ -200,6 +204,7 @@ class Asset {
 
   Asset copyWith({
     int? id,
+    String? cloudId,
     String? userId,
     String? descripcion,
     DateTime? fechaCompra,
@@ -216,6 +221,7 @@ class Asset {
   }) {
     return Asset(
       id: id ?? this.id,
+      cloudId: cloudId ?? this.cloudId,
       userId: userId ?? this.userId,
       descripcion: descripcion ?? this.descripcion,
       fechaCompra: fechaCompra ?? this.fechaCompra,

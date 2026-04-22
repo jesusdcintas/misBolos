@@ -210,3 +210,95 @@ CREATE POLICY "Users can update their own settings"
 CREATE TRIGGER user_settings_updated_at
   BEFORE UPDATE ON user_settings
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+-- =============================================================
+-- Tabla de gastos (expenses) — módulo v10
+-- =============================================================
+CREATE TABLE IF NOT EXISTS expenses (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  fecha      DATE NOT NULL,
+  concepto   TEXT NOT NULL,
+  proveedor  TEXT,
+  importe_base        REAL NOT NULL,
+  iva_rate            REAL NOT NULL DEFAULT 21.0,
+  iva_amount          REAL NOT NULL,
+  total               REAL NOT NULL,
+  categoria           TEXT NOT NULL DEFAULT 'otros',
+  es_deducible        BOOLEAN NOT NULL DEFAULT TRUE,
+  porcentaje_deduccion REAL NOT NULL DEFAULT 100.0,
+  documento_path      TEXT,
+  notas               TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_expenses_user_id ON expenses(user_id);
+CREATE INDEX idx_expenses_fecha   ON expenses(fecha);
+
+ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view their own expenses"
+  ON expenses FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert their own expenses"
+  ON expenses FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update their own expenses"
+  ON expenses FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete their own expenses"
+  ON expenses FOR DELETE USING (auth.uid() = user_id);
+
+CREATE TRIGGER expenses_set_user_id
+  BEFORE INSERT ON expenses
+  FOR EACH ROW EXECUTE FUNCTION set_user_id();
+
+CREATE TRIGGER expenses_updated_at
+  BEFORE UPDATE ON expenses
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+-- =============================================================
+-- Tabla de inversiones/inmovilizado (assets) — módulo v11
+-- =============================================================
+CREATE TABLE IF NOT EXISTS assets (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id             UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  descripcion         TEXT NOT NULL,
+  fecha_compra        DATE NOT NULL,
+  importe_total       REAL NOT NULL,
+  valor_residual      REAL NOT NULL DEFAULT 0.0,
+  vida_util_anos      INTEGER NOT NULL,
+  metodo_amortizacion TEXT NOT NULL DEFAULT 'lineal',
+  categoria           TEXT NOT NULL DEFAULT 'otros',
+  documento_path      TEXT,
+  notas               TEXT,
+  activo              BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_assets_user_id ON assets(user_id);
+CREATE INDEX idx_assets_activo  ON assets(activo);
+
+ALTER TABLE assets ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view their own assets"
+  ON assets FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert their own assets"
+  ON assets FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update their own assets"
+  ON assets FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete their own assets"
+  ON assets FOR DELETE USING (auth.uid() = user_id);
+
+CREATE TRIGGER assets_set_user_id
+  BEFORE INSERT ON assets
+  FOR EACH ROW EXECUTE FUNCTION set_user_id();
+
+CREATE TRIGGER assets_updated_at
+  BEFORE UPDATE ON assets
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();

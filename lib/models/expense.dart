@@ -40,6 +40,7 @@ extension ExpenseCategoryExtension on ExpenseCategory {
 
 class Expense {
   final int? id;
+  final String? cloudId;
   final String? userId;
   final DateTime fecha;
   final String concepto;
@@ -58,6 +59,7 @@ class Expense {
 
   Expense({
     this.id,
+    this.cloudId,
     this.userId,
     required this.fecha,
     required this.concepto,
@@ -79,6 +81,7 @@ class Expense {
 
   Expense copyWith({
     int? id,
+    String? cloudId,
     String? userId,
     DateTime? fecha,
     String? concepto,
@@ -97,6 +100,7 @@ class Expense {
   }) {
     return Expense(
       id: id ?? this.id,
+      cloudId: cloudId ?? this.cloudId,
       userId: userId ?? this.userId,
       fecha: fecha ?? this.fecha,
       concepto: concepto ?? this.concepto,
@@ -118,6 +122,7 @@ class Expense {
   Map<String, dynamic> toMap() {
     return {
       if (id != null) 'id': id,
+      if (cloudId != null) 'cloud_id': cloudId,
       'user_id': userId,
       'fecha': fecha.toIso8601String(),
       'concepto': concepto,
@@ -139,6 +144,7 @@ class Expense {
   factory Expense.fromMap(Map<String, dynamic> map) {
     return Expense(
       id: map['id'] as int?,
+      cloudId: map['cloud_id'] as String?,
       userId: map['user_id'] as String?,
       fecha: DateTime.parse(map['fecha'] as String),
       concepto: map['concepto'] as String,

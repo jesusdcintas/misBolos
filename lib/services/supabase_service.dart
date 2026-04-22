@@ -7,6 +7,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/app_settings.dart';
 import '../models/client.dart';
+import '../models/expense.dart';
+import '../models/asset.dart';
 import '../models/gig.dart';
 import '../models/invoice.dart';
 
@@ -464,4 +466,138 @@ class SupabaseService {
       createdAt: DateTime.parse(m['created_at']),
     );
   }
+
+  // ================== EXPENSES ==================
+
+  Future<void> uploadExpenses(List<Expense> expenses) async {
+    if (!isAuthenticated) return;
+    for (final expense in expenses) {
+      final cloudId = expense.cloudId!;
+      await _client!.from('expenses').upsert(
+        _expenseToSupabase(expense, cloudId),
+        onConflict: 'id',
+      );
+    }
+    debugPrint('[Supabase] Uploaded ${expenses.length} expenses');
+  }
+
+  Future<List<Expense>> downloadExpenses() async {
+    if (!isAuthenticated) return [];
+    final data = await _client!.from('expenses').select();
+    final result = (data as List).map((e) => _expenseFromSupabase(e)).toList();
+    debugPrint('[Supabase] Downloaded ${result.length} expenses');
+    return result;
+  }
+
+  Future<void> deleteExpense(String cloudId) async {
+    if (!isAuthenticated) return;
+    try {
+      await _client!.from('expenses').delete().eq('id', cloudId);
+      debugPrint('[Supabase] Deleted expense $cloudId');
+    } catch (e) {
+      debugPrint('[Supabase] Delete expense error: $e');
+    }
+  }
+
+  Map<String, dynamic> _expenseToSupabase(Expense e, String cloudId) => {
+    'id': cloudId,
+    'user_id': userId,
+    'fecha': e.fecha.toIso8601String().split('T').first,
+    'concepto': e.concepto,
+    'proveedor': e.proveedor,
+    'importe_base': e.importeBase,
+    'iva_rate': e.ivaRate,
+    'iva_amount': e.ivaAmount,
+    'total': e.total,
+    'categoria': e.categoria.dbValue,
+    'es_deducible': e.esDeducible,
+    'porcentaje_deduccion': e.porcentajeDeduccion,
+    'documento_path': e.documentoPath,
+    'notas': e.notas,
+    'created_at': e.createdAt.toUtc().toIso8601String(),
+  };
+
+  Expense _expenseFromSupabase(Map<String, dynamic> m) => Expense(
+    cloudId: m['id'] as String?,
+    userId: m['user_id'] as String?,
+    fecha: DateTime.parse(m['fecha'] as String),
+    concepto: m['concepto'] as String,
+    proveedor: m['proveedor'] as String?,
+    importeBase: (m['importe_base'] as num).toDouble(),
+    ivaRate: (m['iva_rate'] as num).toDouble(),
+    ivaAmount: (m['iva_amount'] as num).toDouble(),
+    total: (m['total'] as num).toDouble(),
+    categoria: ExpenseCategoryExtension.fromDb(m['categoria'] as String? ?? 'otros'),
+    esDeducible: m['es_deducible'] as bool? ?? true,
+    porcentajeDeduccion: (m['porcentaje_deduccion'] as num?)?.toDouble() ?? 100.0,
+    documentoPath: m['documento_path'] as String?,
+    notas: m['notas'] as String?,
+    synced: true,
+    createdAt: DateTime.parse(m['created_at'] as String),
+  );
+
+  // ================== ASSETS ==================
+
+  Future<void> uploadAssets(List<Asset> assets) async {
+    if (!isAuthenticated) return;
+    for (final asset in assets) {
+      final cloudId = asset.cloudId!;
+      await _client!.from('assets').upsert(
+        _assetToSupabase(asset, cloudId),
+        onConflict: 'id',
+      );
+    }
+    debugPrint('[Supabase] Uploaded ${assets.length} assets');
+  }
+
+  Future<List<Asset>> downloadAssets() async {
+    if (!isAuthenticated) return [];
+    final data = await _client!.from('assets').select();
+    final result = (data as List).map((e) => _assetFromSupabase(e)).toList();
+    debugPrint('[Supabase] Downloaded ${result.length} assets');
+    return result;
+  }
+
+  Future<void> deleteAsset(String cloudId) async {
+    if (!isAuthenticated) return;
+    try {
+      await _client!.from('assets').delete().eq('id', cloudId);
+      debugPrint('[Supabase] Deleted asset $cloudId');
+    } catch (e) {
+      debugPrint('[Supabase] Delete asset error: $e');
+    }
+  }
+
+  Map<String, dynamic> _assetToSupabase(Asset a, String cloudId) => {
+    'id': cloudId,
+    'user_id': userId,
+    'descripcion': a.descripcion,
+    'fecha_compra': a.fechaCompra.toIso8601String().split('T').first,
+    'importe_total': a.importeTotal,
+    'valor_residual': a.valorResidual,
+    'vida_util_anos': a.vidaUtilAnos,
+    'metodo_amortizacion': a.metodoAmortizacion,
+    'categoria': a.categoria.dbValue,
+    'documento_path': a.documentoPath,
+    'notas': a.notas,
+    'activo': a.activo,
+    'created_at': a.createdAt.toUtc().toIso8601String(),
+  };
+
+  Asset _assetFromSupabase(Map<String, dynamic> m) => Asset(
+    cloudId: m['id'] as String?,
+    userId: m['user_id'] as String?,
+    descripcion: m['descripcion'] as String,
+    fechaCompra: DateTime.parse(m['fecha_compra'] as String),
+    importeTotal: (m['importe_total'] as num).toDouble(),
+    valorResidual: (m['valor_residual'] as num? ?? 0).toDouble(),
+    vidaUtilAnos: m['vida_util_anos'] as int,
+    metodoAmortizacion: m['metodo_amortizacion'] as String? ?? 'lineal',
+    categoria: AssetCategory.fromDb(m['categoria'] as String? ?? 'otros'),
+    documentoPath: m['documento_path'] as String?,
+    notas: m['notas'] as String?,
+    activo: m['activo'] as bool? ?? true,
+    synced: true,
+    createdAt: DateTime.parse(m['created_at'] as String),
+  );
 }

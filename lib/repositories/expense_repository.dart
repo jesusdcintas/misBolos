@@ -119,4 +119,43 @@ class ExpenseRepository {
     final to = DateTime(year, startMonth + 3, 0, 23, 59, 59);
     return (from, to);
   }
+
+  /// Guarda el cloud_id generado al subir por primera vez
+  Future<void> saveCloudId(int localId, String cloudId) async {
+    final db = await DatabaseHelper.instance.database;
+    await db.update(
+      'expenses',
+      {'cloud_id': cloudId},
+      where: 'id = ?',
+      whereArgs: [localId],
+    );
+  }
+
+  /// Upsert por cloud_id (para sincronización descendente)
+  Future<void> upsertByCloudId(Expense expense) async {
+    final db = await DatabaseHelper.instance.database;
+    final existing = await db.query(
+      'expenses',
+      where: 'cloud_id = ?',
+      whereArgs: [expense.cloudId],
+    );
+    if (existing.isEmpty) {
+      await db.insert('expenses', expense.toMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace);
+    } else {
+      final localId = existing.first['id'] as int;
+      await db.update(
+        'expenses',
+        expense.copyWith(id: localId).toMap(),
+        where: 'id = ?',
+        whereArgs: [localId],
+      );
+    }
+  }
+
+  /// Borra por cloud_id (para sincronización descendente)
+  Future<void> deleteByCloudId(String cloudId) async {
+    final db = await DatabaseHelper.instance.database;
+    await db.delete('expenses', where: 'cloud_id = ?', whereArgs: [cloudId]);
+  }
 }
