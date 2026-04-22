@@ -104,11 +104,11 @@ class SyncNotifier extends StateNotifier<SyncState> {
       final settings = await SettingsRepository().get();
 
       // Asignar cloud_id a expenses sin él
-      final _uuid = const Uuid();
+      final uuid = const Uuid();
       var expenses = await ExpenseRepository.instance.getAll();
       for (var i = 0; i < expenses.length; i++) {
         if (expenses[i].cloudId == null) {
-          final cloudId = _uuid.v4();
+          final cloudId = uuid.v4();
           await ExpenseRepository.instance.saveCloudId(expenses[i].id!, cloudId);
           expenses[i] = expenses[i].copyWith(cloudId: cloudId);
         }
@@ -118,7 +118,7 @@ class SyncNotifier extends StateNotifier<SyncState> {
       var assets = await AssetRepository.instance.getAll();
       for (var i = 0; i < assets.length; i++) {
         if (assets[i].cloudId == null) {
-          final cloudId = _uuid.v4();
+          final cloudId = uuid.v4();
           await AssetRepository.instance.saveCloudId(assets[i].id!, cloudId);
           assets[i] = assets[i].copyWith(cloudId: cloudId);
         }

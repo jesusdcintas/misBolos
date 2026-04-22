@@ -355,7 +355,7 @@ class _AssetCard extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    fmt.format(asset.cuotaAnual) + '/año',
+                    '${fmt.format(asset.cuotaAnual)}/año',
                     style: const TextStyle(
                         fontSize: 11,
                         color: AppColors.textSecondary),
