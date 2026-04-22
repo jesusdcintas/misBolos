@@ -5,7 +5,9 @@ import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/currency_formatter.dart';
+import '../../models/expense.dart';
 import '../../models/gig.dart';
+import '../../providers/expenses_provider.dart';
 import '../../providers/stats_provider.dart';
 import '../../services/pdf_service.dart';
 import '../../widgets/common/dj_refresh_indicator.dart';
@@ -58,6 +60,10 @@ class FinancialSummaryScreen extends ConsumerWidget {
                       _IvaSection(quarters: summary.ivaQuarters),
                       const SizedBox(height: 16),
                     ],
+
+                    // Gastos section
+                    _GastosSection(period: period),
+                    const SizedBox(height: 16),
 
                     // Sub-period breakdown
                     if (period.mode != DashboardPeriodMode.mes &&
@@ -1129,6 +1135,174 @@ class _GigsList extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(status.label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: text)),
+    );
+  }
+}
+
+// ==================== GASTOS SECTION ====================
+
+class _GastosSection extends ConsumerWidget {
+  final DashboardPeriod period;
+
+  const _GastosSection({required this.period});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final quarters = _quartersForPeriod(period);
+    if (quarters.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Gastos',
+          style: Theme.of(context)
+              .textTheme
+              .titleMedium
+              ?.copyWith(fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        ...quarters.map((q) => _GastosQuarterCard(year: q.$1, quarter: q.$2)),
+      ],
+    );
+  }
+
+  List<(int, int)> _quartersForPeriod(DashboardPeriod p) {
+    switch (p.mode) {
+      case DashboardPeriodMode.trimestre:
+        return [(p.year, p.quarter)];
+      case DashboardPeriodMode.anio:
+        return [(p.year, 1), (p.year, 2), (p.year, 3), (p.year, 4)];
+      case DashboardPeriodMode.mes:
+        final q = ((p.month - 1) ~/ 3) + 1;
+        return [(p.year, q)];
+    }
+  }
+}
+
+class _GastosQuarterCard extends ConsumerWidget {
+  final int year;
+  final int quarter;
+
+  const _GastosQuarterCard({required this.year, required this.quarter});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final params = (year: year, quarter: quarter);
+    final totalesAsync = ref.watch(gastosTrimestralProvider(params));
+    final ivaAsync = ref.watch(ivaDeducibleTrimestralProvider(params));
+    final fmt = NumberFormat.currency(locale: 'es_ES', symbol: '€');
+
+    final totalGastos =
+        totalesAsync.valueOrNull?.values.fold(0.0, (s, v) => s + v) ?? 0.0;
+    final ivaSoportado = ivaAsync.valueOrNull ?? 0.0;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ExpansionTile(
+        leading: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: AppColors.warningBg,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            'T$quarter',
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              color: AppColors.warning,
+            ),
+          ),
+        ),
+        title: totalesAsync.when(
+          loading: () => const SizedBox(
+            height: 16,
+            width: 16,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          error: (_, __) => const Text('Error'),
+          data: (_) => Text(
+            fmt.format(totalGastos),
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+          ),
+        ),
+        subtitle: ivaAsync.when(
+          loading: () => const SizedBox.shrink(),
+          error: (_, __) => const SizedBox.shrink(),
+          data: (_) => Text(
+            'IVA soportado: ${fmt.format(ivaSoportado)}',
+            style: const TextStyle(
+                fontSize: 11, color: AppColors.textSecondary),
+          ),
+        ),
+        children: [
+          totalesAsync.when(
+            loading: () => const Padding(
+              padding: EdgeInsets.all(16),
+              child: CircularProgressIndicator(),
+            ),
+            error: (e, _) => Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text('Error: $e'),
+            ),
+            data: (totales) {
+              if (totales.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
+                  child: Text(
+                    'Sin gastos en este trimestre',
+                    style: TextStyle(color: AppColors.textSecondary),
+                  ),
+                );
+              }
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Divider(height: 8),
+                    ...totales.entries.map((entry) {
+                      final cat =
+                          ExpenseCategoryExtension.fromDb(entry.key);
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Row(
+                          children: [
+                            Expanded(child: Text(cat.label)),
+                            Text(
+                              fmt.format(entry.value),
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w500),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                    const Divider(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'IVA soportado deducible',
+                          style: TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 12),
+                        ),
+                        Text(
+                          fmt.format(ivaSoportado),
+                          style: const TextStyle(
+                              color: AppColors.success,
+                              fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
+      ),
     );
   }
 }

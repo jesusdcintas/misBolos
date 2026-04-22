@@ -21,6 +21,9 @@ import 'screens/stats/stats_screen.dart';
 import 'screens/settings/settings_screen.dart';
 import 'screens/dashboard/financial_summary_screen.dart';
 import 'screens/profile/profile_screen.dart';
+import 'screens/expenses/expenses_screen.dart';
+import 'screens/expenses/expense_form_screen.dart';
+import 'screens/expenses/expense_detail_screen.dart';
 
 Page<void> _slideUpPage(Widget child, GoRouterState state) {
   return CustomTransitionPage(
@@ -196,6 +199,36 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/invoice/new/:gigId',
         pageBuilder: (context, state) => _slideUpPage(
           InvoiceFormScreen(gigId: state.pathParameters['gigId']!),
+          state,
+        ),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/expenses',
+        pageBuilder: (context, state) =>
+            _slideUpPage(const ExpensesScreen(), state),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/expense/new',
+        pageBuilder: (context, state) =>
+            _slideUpPage(const ExpenseFormScreen(), state),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/expense/edit/:id',
+        pageBuilder: (context, state) => _slideUpPage(
+          ExpenseFormScreen(
+              expenseId: int.parse(state.pathParameters['id']!)),
+          state,
+        ),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/expense/:id',
+        pageBuilder: (context, state) => _slideUpPage(
+          ExpenseDetailScreen(
+              expenseId: int.parse(state.pathParameters['id']!)),
           state,
         ),
       ),

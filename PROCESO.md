@@ -72,6 +72,9 @@ App de gestión de bolos (actuaciones de DJ), clientes y facturas. Desarrollada 
 ### v9
 - Nueva tabla `declared_quarters` (id, year, quarter, declared_at, iva_amount) — trimestres de IVA declarados
 
+### v10
+- Nueva tabla `expenses` (id, user_id, fecha, concepto, proveedor, importe_base, iva_rate, iva_amount, total, categoria, es_deducible, porcentaje_deduccion, documento_path, notas, synced, created_at)
+
 ## Integración Google / Auth
 
 ### Estrategia dual por plataforma
@@ -210,6 +213,25 @@ lib/
 ├── repositories/                      # Acceso a BD
 └── widgets/                           # Widgets compartidos
 ```
+
+## Pendientes prioritarios
+
+### 1) ✅ Modulo de gastos (implementado)
+- Migracion `v10` con tabla `expenses`
+- Pantallas: lista con filtros, formulario (nuevo/editar), detalle
+- Adjuntar justificante (PDF/foto) con `file_picker` + `image_picker`
+- Conectado al resumen financiero: desglose por categoria e IVA soportado
+- Rutas: `/expenses`, `/expense/new`, `/expense/edit/:id`, `/expense/:id`
+
+### 2) Asistente IA
+- Integrar asistente sobre la arquitectura actual de repositorios
+- Enviar contexto real de negocio a Claude API
+- Enfocar como diferencial academico del proyecto
+
+### 3) Envio de facturas por email
+- Reutilizar el PDF de factura ya generado
+- Implementar envio por correo con BRevo
+- Completar el flujo final post-generacion de factura
 
 ## Variables de entorno (.env)
 ```

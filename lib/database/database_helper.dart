@@ -9,6 +9,7 @@ import 'migrations/v6_add_pdf_theme.dart';
 import 'migrations/v7_pending_deletions.dart';
 import 'migrations/v8_add_client_aliases.dart';
 import 'migrations/v9_declared_quarters.dart';
+import 'migrations/v10_expenses.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._internal();
@@ -28,7 +29,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 9,
+      version: 10,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       onConfigure: (db) async {
@@ -70,6 +71,9 @@ class DatabaseHelper {
     if (version >= 9) {
       await _applyMigration(db, v9DeclaredQuarters);
     }
+    if (version >= 10) {
+      await _applyMigration(db, v10Expenses);
+    }
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -96,6 +100,9 @@ class DatabaseHelper {
     }
     if (oldVersion < 9) {
       await _applyMigration(db, v9DeclaredQuarters);
+    }
+    if (oldVersion < 10) {
+      await _applyMigration(db, v10Expenses);
     }
   }
 
