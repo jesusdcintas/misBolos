@@ -26,20 +26,24 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
 
   DateTime _fechaCompra = DateTime.now();
   AssetCategory _categoria = AssetCategory.otros;
+  double _ivaRate = 21.0;
   String? _documentoPath;
   bool _loading = false;
   bool _loaded = false;
 
   // Getters para el preview en tiempo real
-  double get _importeTotal =>
+  double get _importeConIva =>
       double.tryParse(_importeTotalController.text.replaceAll(',', '.')) ?? 0;
+  double get _baseImponible =>
+      _ivaRate > 0 ? _importeConIva / (1 + _ivaRate / 100) : _importeConIva;
+  double get _ivaAmount => _importeConIva - _baseImponible;
   double get _valorResidual =>
       double.tryParse(_valorResidualController.text.replaceAll(',', '.')) ?? 0;
   int get _vidaUtilAnos =>
       int.tryParse(_vidaUtilController.text) ?? 0;
 
   double get _cuotaAnual =>
-      _vidaUtilAnos > 0 ? (_importeTotal - _valorResidual) / _vidaUtilAnos : 0;
+      _vidaUtilAnos > 0 ? (_baseImponible - _valorResidual) / _vidaUtilAnos : 0;
   double get _cuotaTrimestral => _cuotaAnual / 4;
   double get _cuotaMensual => _cuotaAnual / 12;
 
@@ -67,7 +71,10 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
     if (asset == null || !mounted) return;
     setState(() {
       _descripcionController.text = asset.descripcion;
-      _importeTotalController.text = asset.importeTotal.toStringAsFixed(2);
+      _importeTotalController.text =
+          (asset.importeConIva > 0 ? asset.importeConIva : asset.importeTotal)
+              .toStringAsFixed(2);
+      _ivaRate = asset.ivaRate;
       _valorResidualController.text =
           asset.valorResidual.toStringAsFixed(2);
       _vidaUtilController.text = asset.vidaUtilAnos.toString();
@@ -119,7 +126,10 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
       id: widget.assetId,
       descripcion: _descripcionController.text.trim(),
       fechaCompra: _fechaCompra,
-      importeTotal: _importeTotal,
+      importeTotal: _baseImponible,
+      importeConIva: _importeConIva,
+      ivaRate: _ivaRate,
+      ivaAmount: _ivaAmount,
       valorResidual: _valorResidual,
       vidaUtilAnos: _vidaUtilAnos,
       categoria: _categoria,
@@ -220,7 +230,7 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
             const Divider(),
             const SizedBox(height: 8),
 
-            // Importe total
+            // Importe total (con IVA)
             TextFormField(
               controller: _importeTotalController,
               decoration: const InputDecoration(
@@ -238,6 +248,60 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
                 return null;
               },
             ),
+            const SizedBox(height: 12),
+
+            // IVA %
+            DropdownButtonFormField<double>(
+              value: _ivaRate,
+              decoration: const InputDecoration(labelText: 'IVA %'),
+              items: const [
+                DropdownMenuItem(value: 21.0, child: Text('21%  — General')),
+                DropdownMenuItem(value: 10.0, child: Text('10%  — Reducido')),
+                DropdownMenuItem(value: 4.0,  child: Text('4%   — Superreducido')),
+                DropdownMenuItem(value: 0.0,  child: Text('0%   — Exento')),
+              ],
+              onChanged: (v) {
+                if (v != null) setState(() => _ivaRate = v);
+              },
+            ),
+            const SizedBox(height: 12),
+
+            // Card: base imponible + IVA deducible (solo lectura)
+            if (_importeConIva > 0)
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryLight,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.cardBorder),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _PreviewRow(
+                      label: 'Base imponible (amortizable)',
+                      value: NumberFormat.currency(
+                              locale: 'es_ES', symbol: '€')
+                          .format(_baseImponible),
+                      bold: true,
+                    ),
+                    _PreviewRow(
+                      label: 'IVA deducible este trimestre',
+                      value: NumberFormat.currency(
+                              locale: 'es_ES', symbol: '€')
+                          .format(_ivaAmount),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'El IVA se deduce como gasto en el trimestre de compra',
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textSecondary,
+                          fontStyle: FontStyle.italic),
+                    ),
+                  ],
+                ),
+              ),
             const SizedBox(height: 12),
 
             // Valor residual
@@ -273,7 +337,7 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
             const SizedBox(height: 16),
 
             // Preview cuotas
-            if (_importeTotal > 0 && _vidaUtilAnos > 0)
+            if (_importeConIva > 0 && _vidaUtilAnos > 0) ...[
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -293,6 +357,9 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
                     ),
                     const SizedBox(height: 8),
                     _PreviewRow(
+                        label: 'Base amortizable',
+                        value: moneyFmt.format(_baseImponible)),
+                    _PreviewRow(
                         label: 'Cuota mensual',
                         value: moneyFmt.format(_cuotaMensual)),
                     _PreviewRow(
@@ -305,6 +372,47 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
                   ],
                 ),
               ),
+              const SizedBox(height: 10),
+              if (_ivaRate > 0)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.successBg,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.savings_outlined,
+                          size: 18, color: AppColors.success),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'IVA deducible este trimestre: ${moneyFmt.format(_ivaAmount)}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                                color: AppColors.success,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            const Text(
+                              'Se deduce como gasto en el trimestre de la compra, no se amortiza',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.success),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
             const SizedBox(height: 16),
 
             // Justificante

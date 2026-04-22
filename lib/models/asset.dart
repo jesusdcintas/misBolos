@@ -76,6 +76,9 @@ class Asset {
   final String descripcion;
   final DateTime fechaCompra;
   final double importeTotal;
+  final double importeConIva;
+  final double ivaRate;
+  final double ivaAmount;
   final double valorResidual;
   final int vidaUtilAnos;
   final String metodoAmortizacion;
@@ -93,6 +96,9 @@ class Asset {
     required this.descripcion,
     required this.fechaCompra,
     required this.importeTotal,
+    this.importeConIva = 0.0,
+    this.ivaRate = 21.0,
+    this.ivaAmount = 0.0,
     this.valorResidual = 0.0,
     required this.vidaUtilAnos,
     this.metodoAmortizacion = 'lineal',
@@ -105,6 +111,9 @@ class Asset {
   });
 
   // ── Getters calculados ──────────────────────────────────────────────────────
+
+  /// IVA deducible en el trimestre de compra (importe_con_iva - base imponible)
+  double get ivaDeducible => importeConIva > 0 ? importeConIva - importeTotal : 0.0;
 
   int get anosTranscurridos {
     final hoy = DateTime.now();
@@ -170,6 +179,9 @@ class Asset {
       'descripcion': descripcion,
       'fecha_compra': fechaCompra.toIso8601String(),
       'importe_total': importeTotal,
+      'importe_con_iva': importeConIva,
+      'iva_rate': ivaRate,
+      'iva_amount': ivaAmount,
       'valor_residual': valorResidual,
       'vida_util_anos': vidaUtilAnos,
       'metodo_amortizacion': metodoAmortizacion,
@@ -190,6 +202,9 @@ class Asset {
       descripcion: map['descripcion'] as String,
       fechaCompra: DateTime.parse(map['fecha_compra'] as String),
       importeTotal: (map['importe_total'] as num).toDouble(),
+      importeConIva: (map['importe_con_iva'] as num? ?? 0).toDouble(),
+      ivaRate: (map['iva_rate'] as num? ?? 21.0).toDouble(),
+      ivaAmount: (map['iva_amount'] as num? ?? 0).toDouble(),
       valorResidual: (map['valor_residual'] as num? ?? 0).toDouble(),
       vidaUtilAnos: map['vida_util_anos'] as int,
       metodoAmortizacion: map['metodo_amortizacion'] as String? ?? 'lineal',
@@ -209,6 +224,9 @@ class Asset {
     String? descripcion,
     DateTime? fechaCompra,
     double? importeTotal,
+    double? importeConIva,
+    double? ivaRate,
+    double? ivaAmount,
     double? valorResidual,
     int? vidaUtilAnos,
     String? metodoAmortizacion,
@@ -226,6 +244,9 @@ class Asset {
       descripcion: descripcion ?? this.descripcion,
       fechaCompra: fechaCompra ?? this.fechaCompra,
       importeTotal: importeTotal ?? this.importeTotal,
+      importeConIva: importeConIva ?? this.importeConIva,
+      ivaRate: ivaRate ?? this.ivaRate,
+      ivaAmount: ivaAmount ?? this.ivaAmount,
       valorResidual: valorResidual ?? this.valorResidual,
       vidaUtilAnos: vidaUtilAnos ?? this.vidaUtilAnos,
       metodoAmortizacion: metodoAmortizacion ?? this.metodoAmortizacion,
