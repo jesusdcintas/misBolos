@@ -24,6 +24,9 @@ import 'screens/profile/profile_screen.dart';
 import 'screens/expenses/expenses_screen.dart';
 import 'screens/expenses/expense_form_screen.dart';
 import 'screens/expenses/expense_detail_screen.dart';
+import 'screens/assets/assets_screen.dart';
+import 'screens/assets/asset_form_screen.dart';
+import 'screens/assets/asset_detail_screen.dart';
 
 Page<void> _slideUpPage(Widget child, GoRouterState state) {
   return CustomTransitionPage(
@@ -106,6 +109,26 @@ final routerProvider = Provider<GoRouter>((ref) {
             pageBuilder: (context, state) => CustomTransitionPage(
               key: state.pageKey,
               child: const ProfileScreen(),
+              transitionDuration: const Duration(milliseconds: 200),
+              transitionsBuilder: (context, animation, secondary, child) =>
+                  FadeTransition(opacity: animation, child: child),
+            ),
+          ),
+          GoRoute(
+            path: '/expenses',
+            pageBuilder: (context, state) => CustomTransitionPage(
+              key: state.pageKey,
+              child: const ExpensesScreen(),
+              transitionDuration: const Duration(milliseconds: 200),
+              transitionsBuilder: (context, animation, secondary, child) =>
+                  FadeTransition(opacity: animation, child: child),
+            ),
+          ),
+          GoRoute(
+            path: '/assets',
+            pageBuilder: (context, state) => CustomTransitionPage(
+              key: state.pageKey,
+              child: const AssetsScreen(),
               transitionDuration: const Duration(milliseconds: 200),
               transitionsBuilder: (context, animation, secondary, child) =>
                   FadeTransition(opacity: animation, child: child),
@@ -204,12 +227,6 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
-        path: '/expenses',
-        pageBuilder: (context, state) =>
-            _slideUpPage(const ExpensesScreen(), state),
-      ),
-      GoRoute(
-        parentNavigatorKey: _rootNavigatorKey,
         path: '/expense/new',
         pageBuilder: (context, state) =>
             _slideUpPage(const ExpenseFormScreen(), state),
@@ -229,6 +246,30 @@ final routerProvider = Provider<GoRouter>((ref) {
         pageBuilder: (context, state) => _slideUpPage(
           ExpenseDetailScreen(
               expenseId: int.parse(state.pathParameters['id']!)),
+          state,
+        ),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/asset/new',
+        pageBuilder: (context, state) =>
+            _slideUpPage(const AssetFormScreen(), state),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/asset/edit/:id',
+        pageBuilder: (context, state) => _slideUpPage(
+          AssetFormScreen(
+              assetId: int.parse(state.pathParameters['id']!)),
+          state,
+        ),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/asset/:id',
+        pageBuilder: (context, state) => _slideUpPage(
+          AssetDetailScreen(
+              assetId: int.parse(state.pathParameters['id']!)),
           state,
         ),
       ),
@@ -297,14 +338,16 @@ class _ScaffoldWithNavBar extends StatefulWidget {
 class _ScaffoldWithNavBarState extends State<_ScaffoldWithNavBar> {
   late final PageController _pageController;
 
-  static const _paths = ['/', '/calendar', '/clients', '/invoices', '/profile'];
+  static const _paths = ['/', '/calendar', '/clients', '/invoices', '/expenses', '/assets', '/profile'];
 
   static int _indexFromLocation(String location) {
     if (location == '/') return 0;
     if (location.startsWith('/calendar')) return 1;
     if (location.startsWith('/clients')) return 2;
     if (location.startsWith('/invoices')) return 3;
-    if (location.startsWith('/profile')) return 4;
+    if (location.startsWith('/expenses')) return 4;
+    if (location.startsWith('/assets')) return 5;
+    if (location.startsWith('/profile')) return 6;
     return 0;
   }
 
@@ -368,6 +411,8 @@ class _ScaffoldWithNavBarState extends State<_ScaffoldWithNavBar> {
           CalendarScreen(),
           ClientsListScreen(),
           InvoicesListScreen(),
+          ExpensesScreen(),
+          AssetsScreen(),
           ProfileScreen(),
         ],
       ),
@@ -394,6 +439,16 @@ class _ScaffoldWithNavBarState extends State<_ScaffoldWithNavBar> {
             icon: Icon(Icons.receipt_long_outlined),
             selectedIcon: Icon(Icons.receipt_long),
             label: 'Facturas',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.euro_outlined),
+            selectedIcon: Icon(Icons.euro),
+            label: 'Gastos',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.inventory_2_outlined),
+            selectedIcon: Icon(Icons.inventory_2),
+            label: 'Inversiones',
           ),
           NavigationDestination(
             icon: Icon(Icons.person_outline),

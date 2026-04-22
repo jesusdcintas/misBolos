@@ -262,7 +262,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
 
             // Categoría
             DropdownButtonFormField<ExpenseCategory>(
-              value: _categoria,
+              initialValue: _categoria,
               decoration: const InputDecoration(labelText: 'Categoría'),
               items: ExpenseCategory.values
                   .map((cat) => DropdownMenuItem(

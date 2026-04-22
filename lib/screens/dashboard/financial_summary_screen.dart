@@ -8,6 +8,7 @@ import '../../core/utils/currency_formatter.dart';
 import '../../models/expense.dart';
 import '../../models/gig.dart';
 import '../../providers/expenses_provider.dart';
+import '../../providers/assets_provider.dart';
 import '../../providers/stats_provider.dart';
 import '../../services/pdf_service.dart';
 import '../../widgets/common/dj_refresh_indicator.dart';
@@ -63,6 +64,10 @@ class FinancialSummaryScreen extends ConsumerWidget {
 
                     // Gastos section
                     _GastosSection(period: period),
+                    const SizedBox(height: 16),
+
+                    // Amortizaciones section
+                    _AmortizacionSection(period: period),
                     const SizedBox(height: 16),
 
                     // Sub-period breakdown
@@ -1293,6 +1298,183 @@ class _GastosQuarterCard extends ConsumerWidget {
                           style: const TextStyle(
                               color: AppColors.success,
                               fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ==================== AMORTIZACIÓN SECTION ====================
+
+class _AmortizacionSection extends ConsumerWidget {
+  final DashboardPeriod period;
+
+  const _AmortizacionSection({required this.period});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final quarters = _quartersForPeriod(period);
+    if (quarters.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Amortizaciones',
+          style: Theme.of(context)
+              .textTheme
+              .titleMedium
+              ?.copyWith(fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        ...quarters.map((q) =>
+            _AmortizacionQuarterCard(year: q.$1, quarter: q.$2)),
+      ],
+    );
+  }
+
+  List<(int, int)> _quartersForPeriod(DashboardPeriod p) {
+    switch (p.mode) {
+      case DashboardPeriodMode.trimestre:
+        return [(p.year, p.quarter)];
+      case DashboardPeriodMode.anio:
+        return [(p.year, 1), (p.year, 2), (p.year, 3), (p.year, 4)];
+      case DashboardPeriodMode.mes:
+        final q = ((p.month - 1) ~/ 3) + 1;
+        return [(p.year, q)];
+    }
+  }
+}
+
+class _AmortizacionQuarterCard extends ConsumerWidget {
+  final int year;
+  final int quarter;
+
+  const _AmortizacionQuarterCard({required this.year, required this.quarter});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final params = (year: year, quarter: quarter);
+    final totalAsync =
+        ref.watch(assetAmortizacionTrimestreProvider(params));
+    final assetsAsync = ref.watch(assetsActivosProvider);
+    final fmt = NumberFormat.currency(locale: 'es_ES', symbol: '€');
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ExpansionTile(
+        leading: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: AppColors.primaryLight,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            'T$quarter',
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              color: AppColors.primary,
+            ),
+          ),
+        ),
+        title: totalAsync.when(
+          loading: () => const SizedBox(
+            height: 16,
+            width: 16,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          error: (_, __) => const Text('Error'),
+          data: (total) => Text(
+            fmt.format(total),
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+          ),
+        ),
+        subtitle: const Text(
+          'Amortización acumulada',
+          style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+        ),
+        children: [
+          assetsAsync.when(
+            loading: () => const Padding(
+              padding: EdgeInsets.all(16),
+              child: CircularProgressIndicator(),
+            ),
+            error: (e, _) => Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text('Error: $e'),
+            ),
+            data: (assets) {
+              final activos = assets.where((a) {
+                return a.cuotaTrimestreConcreto(year, quarter) > 0;
+              }).toList();
+
+              if (activos.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
+                  child: Text(
+                    'Sin amortizaciones en este trimestre',
+                    style: TextStyle(color: AppColors.textSecondary),
+                  ),
+                );
+              }
+
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Divider(height: 8),
+                    ...activos.map((a) => Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Row(
+                            children: [
+                              Icon(a.categoria.icono,
+                                  size: 14,
+                                  color: AppColors.textSecondary),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  a.descripcion,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                              ),
+                              Text(
+                                fmt.format(
+                                    a.cuotaTrimestreConcreto(year, quarter)),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w500,
+                                    fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        )),
+                    const Divider(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Deducible de IRPF',
+                          style: TextStyle(
+                              color: AppColors.textSecondary, fontSize: 12),
+                        ),
+                        totalAsync.when(
+                          loading: () => const SizedBox.shrink(),
+                          error: (_, __) => const SizedBox.shrink(),
+                          data: (total) => Text(
+                            fmt.format(total),
+                            style: const TextStyle(
+                                color: AppColors.success,
+                                fontWeight: FontWeight.bold),
+                          ),
                         ),
                       ],
                     ),
