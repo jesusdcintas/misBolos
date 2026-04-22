@@ -7,11 +7,12 @@ Preparada para **multi-usuario**: cada DJ tiene sus propios datos aislados.
 
 - **Dashboard** con resumen de ingresos oficiales y "en B"
 - **Calendario** con vista mensual de bolos
-- **Gestión de clientes** con historial de bolos
-- **Facturación** con generación de PDF profesional
+- **Gestión de clientes** con historial de bolos y gestión de duplicados
+- **Facturación** con generación de PDF profesional (6 temas de color), soporte IRPF
 - **Estadísticas** con gráficos mensuales y exportación CSV
+- **Resumen financiero** con declaración trimestral de IVA
+- **Importación** de bolos desde CSV o Excel
 - **Sincronización opcional** con Supabase (solo datos oficiales)
-- **Backup opcional** a Google Drive (solo datos oficiales)
 - **Notificaciones** de cobro pendiente
 
 ## Privacidad y seguridad
@@ -21,8 +22,7 @@ Preparada para **multi-usuario**: cada DJ tiene sus propios datos aislados.
 - Los números de factura son únicos **por usuario**, no globales
 - Los bolos marcados como **"No Facturable" (en B)** nunca salen del dispositivo:
 - No se sincronizan con Supabase
-- No se incluyen en backups de Google Drive
-- No se exportan a CSV (salvo exportación explícita con aviso)
+  - No se incluyen en backups
 
 ## Requisitos
 
@@ -45,14 +45,18 @@ flutter pub get
 3. Copia la URL y la clave anónima (anon key)
 4. Introdúcelos en Ajustes > Supabase dentro de la app
 
-### 3. Google Drive Backup (opcional)
+### 3. Autenticación Google (sincronización)
 
+**macOS:**
 1. Ve a [Google Cloud Console](https://console.cloud.google.com)
-2. Crea un proyecto y habilita la API de Google Drive
-3. Configura OAuth 2.0 con los scopes:
-   - `https://www.googleapis.com/auth/drive.file`
-4. Descarga el `client_id` para Android e iOS
-5. Configura `google_sign_in` según la [documentación oficial](https://pub.dev/packages/google_sign_in)
+2. Crea un proyecto y habilita Calendar API y Drive API
+3. Crea credenciales OAuth 2.0 de tipo **Desktop**
+4. El flujo usa `googleapis_auth` con `clientViaUserConsent` (abre el navegador)
+
+**iOS / Android:**
+1. Crea credenciales OAuth 2.0 de tipo **Android** / **iOS** en Google Cloud Console
+2. Configura `google_sign_in` según la [documentación oficial](https://pub.dev/packages/google_sign_in)
+3. El ID token obtenido se usa para autenticar en Supabase (`signInWithIdToken`)
 
 ### 4. Permisos Android
 

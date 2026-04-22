@@ -15,6 +15,8 @@ App de gestión de bolos (actuaciones de DJ), clientes y facturas. Desarrollada 
 - **Calendario:** table_calendar
 
 ## Estructura de navegación
+
+### Pestañas principales (ShellRoute)
 | Pestaña    | Ruta         | Descripción                          |
 |------------|--------------|--------------------------------------|
 | Inicio     | /            | Dashboard con resumen y estadísticas |
@@ -23,8 +25,22 @@ App de gestión de bolos (actuaciones de DJ), clientes y facturas. Desarrollada 
 | Facturas   | /invoices    | Lista y gestión de facturas          |
 | Mi Perfil  | /profile     | Cuenta Google, logo, datos emisor    |
 
-- **Estadísticas** accesibles desde icono en AppBar del Dashboard (`/stats`)
-- **Ajustes** accesibles desde icono en AppBar de Mi Perfil (`/settings`)
+### Rutas modales (fuera del ShellRoute)
+| Ruta                      | Descripción                          |
+|---------------------------|--------------------------------------|
+| `/settings`               | Ajustes (IVA, notificaciones, etc.)  |
+| `/stats`                  | Estadísticas                         |
+| `/financial`              | Resumen financiero                   |
+| `/gig/new`                | Nuevo bolo                           |
+| `/gig/edit/:id`           | Editar bolo                          |
+| `/gig/:id`                | Detalle de bolo                      |
+| `/client/new`             | Nuevo cliente                        |
+| `/client/edit/:id`        | Editar cliente                       |
+| `/client/:id`             | Detalle de cliente                   |
+| `/invoice/:id`            | Detalle de factura                   |
+| `/invoice/preview/:id`    | Preview PDF de factura               |
+| `/invoice/edit/:id`       | Editar factura                       |
+| `/invoice/new/:gigId`     | Nueva factura desde bolo             |
 
 ## Base de datos — Migraciones
 
@@ -38,15 +54,51 @@ App de gestión de bolos (actuaciones de DJ), clientes y facturas. Desarrollada 
 ### v3
 - `clients`: añadidos `provincia`, `alias`
 
-## Integración Google
+### v4
+- `invoices`: añadidos `irpf_rate`, `irpf_amount` (REAL, default 0.0)
 
-### Autenticación
-- **Paquete:** `googleapis_auth` (NO `google_sign_in`, que no soporta `client_secret` en desktop)
+### v5
+- `app_settings`: añadido `logo_size` (REAL, default 80)
+
+### v6
+- `app_settings`: añadido `pdf_theme` (TEXT, default `'clasico'`)
+
+### v7
+- Nueva tabla `pending_deletions` (id, table_name, record_id, deleted_at) — cola de borrados pendientes de sincronizar
+
+### v8
+- `clients`: añadido `aliases` (TEXT JSON array, default `'[]'`)
+
+### v9
+- Nueva tabla `declared_quarters` (id, year, quarter, declared_at, iva_amount) — trimestres de IVA declarados
+
+## Integración Google / Auth
+
+### Estrategia dual por plataforma
+| Plataforma       | Servicio                      | Paquete             |
+|------------------|-------------------------------|---------------------|
+| macOS (desktop)  | `google_auth_service.dart`    | `googleapis_auth`   |
+| iOS / Android    | `platform_auth_service.dart`  | `google_sign_in` + Supabase |
+
+### macOS — googleapis_auth
 - **Flujo:** `clientViaUserConsent` → abre navegador → callback en localhost
 - **Servicio:** `lib/services/google_auth_service.dart` (singleton)
 - **Provider:** `googleAuthProvider` (StateNotifierProvider)
 
-### Configuración OAuth
+### iOS/Android — PlatformAuthService
+- **Servicio:** `lib/services/platform_auth_service.dart` (singleton)
+- Usa `google_sign_in` para obtener ID token + access token
+- Autentica en Supabase con `signInWithIdToken`
+- `isSignedIn` delega en `SupabaseService.isAuthenticated` en macOS
+
+### Supabase
+- **Servicio:** `lib/services/supabase_service.dart` (singleton)
+- Inicializado con URL + anon key desde `AppSettings`
+- RLS: `auth.uid() = user_id` — cada usuario solo ve sus datos
+- Sincronización de clients, gigs, invoices (solo datos oficiales)
+- Cola `pending_deletions` para borrados offline
+
+### Configuración OAuth (macOS)
 - **Proyecto Google Cloud:** "MisBolos"
 - **Tipo de credencial:** Desktop (OAuth 2.0)
 - **Client ID:** `744196169382-knr1najrpc3muiim38k3epg6rdmdpuhj.apps.googleusercontent.com`
@@ -61,11 +113,10 @@ App de gestión de bolos (actuaciones de DJ), clientes y facturas. Desarrollada 
 - Eventos coloreados por estado
 - Lookup por `extendedProperties` (gig ID)
 
-### Google Drive
-- **Servicio:** `lib/services/google_drive_service.dart`
-- Estructura de carpetas: `MisBolos/Facturas`, `MisBolos/Backups`
-- Upload de PDFs de facturas
-- Backup de base de datos
+### Google Drive (macOS)
+- Upload de PDFs de facturas a `MisBolos/Facturas`
+- Backup de base de datos a `MisBolos/Backups`
+- (**Nota:** `google_drive_service.dart` eliminado; la funcionalidad de Drive se gestiona a través del `SupabaseService` en el flujo multiplataforma)
 
 ## Configuración macOS
 
@@ -119,30 +170,41 @@ App de gestión de bolos (actuaciones de DJ), clientes y facturas. Desarrollada 
 ```
 lib/
 ├── main.dart                          # Entry point, FFI init, locale init
-├── app.dart                           # MaterialApp + GoRouter (5 tabs)
+├── app.dart                           # MaterialApp + GoRouter (rutas)
 ├── models/
 │   ├── app_settings.dart              # Settings del emisor
 │   ├── client.dart                    # Cliente con alias, provincia
 │   ├── gig.dart                       # Bolo/actuación
-│   └── invoice.dart                   # Factura
+│   ├── invoice.dart                   # Factura
+│   └── pdf_theme.dart                 # Temas de color para PDF (6 temas)
 ├── database/
 │   ├── database_helper.dart           # SQLite init + migraciones
 │   └── migrations/
 │       ├── v1_initial.dart
 │       ├── v2_add_provincia_cp.dart
-│       └── v3_add_client_provincia_alias.dart
+│       ├── v3_add_client_provincia_alias.dart
+│       ├── v4_add_irpf.dart            # irpf_rate, irpf_amount en invoices
+│       ├── v5_add_logo_size.dart       # logo_size en app_settings
+│       ├── v6_add_pdf_theme.dart       # pdf_theme en app_settings
+│       ├── v7_pending_deletions.dart   # tabla pending_deletions
+│       ├── v8_add_client_aliases.dart  # aliases JSON en clients
+│       └── v9_declared_quarters.dart  # tabla declared_quarters
 ├── services/
-│   ├── google_auth_service.dart       # Auth centralizado (googleapis_auth)
+│   ├── google_auth_service.dart       # Auth macOS (googleapis_auth)
+│   ├── platform_auth_service.dart     # Auth iOS/Android (google_sign_in + Supabase)
+│   ├── supabase_service.dart          # Sincronización Supabase
 │   ├── google_calendar_service.dart   # Sync con Google Calendar
-│   ├── google_drive_service.dart      # Upload a Google Drive
+│   ├── import_service.dart            # Importación desde CSV/Excel
+│   ├── pdf_service.dart               # Generación de PDF
 │   └── notification_service.dart
 ├── screens/
 │   ├── dashboard/                     # Inicio
 │   ├── calendar/                      # Calendario + detalle de bolo
 │   ├── clients/                       # Lista, detalle, formulario
-│   ├── invoices/                      # Lista, detalle, formulario
+│   ├── gigs/                          # Lista de bolos
+│   ├── invoices/                      # Lista, detalle, formulario, preview
 │   ├── profile/                       # Mi Perfil (Google + datos emisor)
-│   ├── settings/                      # Ajustes (IVA, notificaciones, etc.)
+│   ├── settings/                      # Ajustes, importación, duplicados
 │   └── stats/                         # Estadísticas
 ├── providers/                         # Riverpod providers
 ├── repositories/                      # Acceso a BD
