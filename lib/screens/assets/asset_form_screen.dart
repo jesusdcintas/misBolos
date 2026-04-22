@@ -252,7 +252,7 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
 
             // IVA %
             DropdownButtonFormField<double>(
-              value: _ivaRate,
+              initialValue: _ivaRate,
               decoration: const InputDecoration(labelText: 'IVA %'),
               items: const [
                 DropdownMenuItem(value: 21.0, child: Text('21%  — General')),
