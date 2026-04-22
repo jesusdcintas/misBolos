@@ -144,6 +144,18 @@ class DashboardScreen extends ConsumerWidget {
             color: AppColors.purple,
             onTap: (ctx) => ctx.push('/client/new'),
           ),
+          FABAction(
+            icon: Icons.euro_outlined,
+            label: 'Nuevo gasto',
+            color: AppColors.warning,
+            onTap: (ctx) => ctx.push('/expense/new'),
+          ),
+          FABAction(
+            icon: Icons.inventory_2_outlined,
+            label: 'Nueva inversión',
+            color: AppColors.success,
+            onTap: (ctx) => ctx.push('/asset/new'),
+          ),
         ],
       ),
     );
@@ -221,7 +233,7 @@ class DashboardScreen extends ConsumerWidget {
                 color: AppColors.warning,
                 icon: Icons.schedule,
                 showChevron: true,
-                onTap: () => context.go('/invoices'),
+                onTap: () => context.go('/finanzas'),
                 subtitle: Text(
                   '(${stats.pendienteCount} factura${stats.pendienteCount == 1 ? '' : 's'} emitida${stats.pendienteCount == 1 ? '' : 's'} sin cobrar)',
                   style: const TextStyle(fontSize: 11, color: Color(0xFF8C95A6)),
@@ -874,7 +886,7 @@ class _OverdueBanner extends StatelessWidget {
     final n = alert.invoices.length;
 
     return GestureDetector(
-      onTap: () => context.go('/invoices'),
+      onTap: () => context.go('/finanzas'),
       child: Container(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
         decoration: BoxDecoration(

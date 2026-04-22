@@ -13,7 +13,6 @@ import 'screens/calendar/gig_form_screen.dart';
 import 'screens/clients/clients_list_screen.dart';
 import 'screens/clients/client_detail_screen.dart';
 import 'screens/clients/client_form_screen.dart';
-import 'screens/invoices/invoices_list_screen.dart';
 import 'screens/invoices/invoice_detail_screen.dart';
 import 'screens/invoices/invoice_preview_screen.dart';
 import 'screens/invoices/invoice_form_screen.dart';
@@ -21,12 +20,11 @@ import 'screens/stats/stats_screen.dart';
 import 'screens/settings/settings_screen.dart';
 import 'screens/dashboard/financial_summary_screen.dart';
 import 'screens/profile/profile_screen.dart';
-import 'screens/expenses/expenses_screen.dart';
 import 'screens/expenses/expense_form_screen.dart';
 import 'screens/expenses/expense_detail_screen.dart';
-import 'screens/assets/assets_screen.dart';
 import 'screens/assets/asset_form_screen.dart';
 import 'screens/assets/asset_detail_screen.dart';
+import 'screens/finanzas/finanzas_screen.dart';
 
 Page<void> _slideUpPage(Widget child, GoRouterState state) {
   return CustomTransitionPage(
@@ -95,10 +93,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             ),
           ),
           GoRoute(
-            path: '/invoices',
+            path: '/finanzas',
             pageBuilder: (context, state) => CustomTransitionPage(
               key: state.pageKey,
-              child: const InvoicesListScreen(),
+              child: const FinanzasScreen(),
               transitionDuration: const Duration(milliseconds: 200),
               transitionsBuilder: (context, animation, secondary, child) =>
                   FadeTransition(opacity: animation, child: child),
@@ -109,26 +107,6 @@ final routerProvider = Provider<GoRouter>((ref) {
             pageBuilder: (context, state) => CustomTransitionPage(
               key: state.pageKey,
               child: const ProfileScreen(),
-              transitionDuration: const Duration(milliseconds: 200),
-              transitionsBuilder: (context, animation, secondary, child) =>
-                  FadeTransition(opacity: animation, child: child),
-            ),
-          ),
-          GoRoute(
-            path: '/expenses',
-            pageBuilder: (context, state) => CustomTransitionPage(
-              key: state.pageKey,
-              child: const ExpensesScreen(),
-              transitionDuration: const Duration(milliseconds: 200),
-              transitionsBuilder: (context, animation, secondary, child) =>
-                  FadeTransition(opacity: animation, child: child),
-            ),
-          ),
-          GoRoute(
-            path: '/assets',
-            pageBuilder: (context, state) => CustomTransitionPage(
-              key: state.pageKey,
-              child: const AssetsScreen(),
               transitionDuration: const Duration(milliseconds: 200),
               transitionsBuilder: (context, animation, secondary, child) =>
                   FadeTransition(opacity: animation, child: child),
@@ -338,16 +316,14 @@ class _ScaffoldWithNavBar extends StatefulWidget {
 class _ScaffoldWithNavBarState extends State<_ScaffoldWithNavBar> {
   late final PageController _pageController;
 
-  static const _paths = ['/', '/calendar', '/clients', '/invoices', '/expenses', '/assets', '/profile'];
+  static const _paths = ['/', '/calendar', '/finanzas', '/clients', '/profile'];
 
   static int _indexFromLocation(String location) {
     if (location == '/') return 0;
     if (location.startsWith('/calendar')) return 1;
-    if (location.startsWith('/clients')) return 2;
-    if (location.startsWith('/invoices')) return 3;
-    if (location.startsWith('/expenses')) return 4;
-    if (location.startsWith('/assets')) return 5;
-    if (location.startsWith('/profile')) return 6;
+    if (location.startsWith('/finanzas')) return 2;
+    if (location.startsWith('/clients')) return 3;
+    if (location.startsWith('/profile')) return 4;
     return 0;
   }
 
@@ -409,10 +385,8 @@ class _ScaffoldWithNavBarState extends State<_ScaffoldWithNavBar> {
         children: const [
           DashboardScreen(),
           CalendarScreen(),
+          FinanzasScreen(),
           ClientsListScreen(),
-          InvoicesListScreen(),
-          ExpensesScreen(),
-          AssetsScreen(),
           ProfileScreen(),
         ],
       ),
@@ -421,39 +395,29 @@ class _ScaffoldWithNavBarState extends State<_ScaffoldWithNavBar> {
         onDestinationSelected: _onNavTapped,
         destinations: const [
           NavigationDestination(
-            icon: Icon(Icons.dashboard_outlined),
-            selectedIcon: Icon(Icons.dashboard),
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home),
             label: 'Inicio',
           ),
           NavigationDestination(
             icon: Icon(Icons.calendar_month_outlined),
             selectedIcon: Icon(Icons.calendar_month),
-            label: 'Calendario',
+            label: 'Agenda',
           ),
           NavigationDestination(
-            icon: Icon(Icons.people_outlined),
+            icon: Icon(Icons.account_balance_wallet_outlined),
+            selectedIcon: Icon(Icons.account_balance_wallet),
+            label: 'Finanzas',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.people_outline),
             selectedIcon: Icon(Icons.people),
             label: 'Clientes',
           ),
           NavigationDestination(
-            icon: Icon(Icons.receipt_long_outlined),
-            selectedIcon: Icon(Icons.receipt_long),
-            label: 'Facturas',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.euro_outlined),
-            selectedIcon: Icon(Icons.euro),
-            label: 'Gastos',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.inventory_2_outlined),
-            selectedIcon: Icon(Icons.inventory_2),
-            label: 'Inversiones',
-          ),
-          NavigationDestination(
             icon: Icon(Icons.person_outline),
             selectedIcon: Icon(Icons.person),
-            label: 'Mi Perfil',
+            label: 'Perfil',
           ),
         ],
       ),
