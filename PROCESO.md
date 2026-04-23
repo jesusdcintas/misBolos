@@ -5,8 +5,8 @@ App de gestión de bolos (actuaciones de DJ), clientes y facturas. Desarrollada 
 
 ## Stack técnico
 - **Framework:** Flutter 3.x / Dart 3.x
-- **Estado:** Riverpod (StateNotifierProvider)
-- **Navegación:** GoRouter con ShellRoute (5 pestañas)
+- **Estado:** Riverpod 2.x (AsyncNotifierProvider)
+- **Navegación:** GoRouter con ShellRoute (**5 pestañas**)
 - **BD local:** SQLite (sqflite + sqflite_common_ffi para desktop)
 - **Cloud:** Supabase (sincronización de datos)
 - **Google APIs:** googleapis + googleapis_auth (Calendar v3, Drive v3)
@@ -16,14 +16,14 @@ App de gestión de bolos (actuaciones de DJ), clientes y facturas. Desarrollada 
 
 ## Estructura de navegación
 
-### Pestañas principales (ShellRoute)
-| Pestaña    | Ruta         | Descripción                          |
-|------------|--------------|--------------------------------------|
-| Inicio     | /            | Dashboard con resumen y estadísticas |
-| Calendario | /calendar    | Vista calendario con bolos           |
-| Clientes   | /clients     | Lista y gestión de clientes          |
-| Facturas   | /invoices    | Lista y gestión de facturas          |
-| Mi Perfil  | /profile     | Cuenta Google, logo, datos emisor    |
+### Pestañas principales (ShellRoute) — 5 tabs (reorganizado en abdefcd)
+| Pestaña    | Ruta         | Descripción                                              |
+|------------|--------------|----------------------------------------------------------|
+| Inicio     | /            | Dashboard con resumen, estadísticas y FAB expandible (4 acciones) |
+| Agenda     | /calendar    | Vista calendario con bolos                               |
+| Finanzas   | /finanzas    | TabBar interno: Facturas / Gastos / Inversiones          |
+| Clientes   | /clients     | Lista y gestión de clientes                              |
+| Perfil     | /profile     | Cuenta Google, logo, datos emisor                        |
 
 ### Rutas modales (fuera del ShellRoute)
 | Ruta                      | Descripción                          |
@@ -41,6 +41,12 @@ App de gestión de bolos (actuaciones de DJ), clientes y facturas. Desarrollada 
 | `/invoice/preview/:id`    | Preview PDF de factura               |
 | `/invoice/edit/:id`       | Editar factura                       |
 | `/invoice/new/:gigId`     | Nueva factura desde bolo             |
+| `/expense/new`            | Nuevo gasto                          |
+| `/expense/edit/:id`       | Editar gasto                         |
+| `/expense/:id`            | Detalle de gasto                     |
+| `/asset/new`              | Nueva inversión                      |
+| `/asset/edit/:id`         | Editar inversión                     |
+| `/asset/:id`              | Detalle de inversión                 |
 
 ## Base de datos — Migraciones
 
@@ -74,6 +80,21 @@ App de gestión de bolos (actuaciones de DJ), clientes y facturas. Desarrollada 
 
 ### v10
 - Nueva tabla `expenses` (id, user_id, fecha, concepto, proveedor, importe_base, iva_rate, iva_amount, total, categoria, es_deducible, porcentaje_deduccion, documento_path, notas, synced, created_at)
+
+### v11
+- Nueva tabla `assets` (id, user_id, descripcion, fecha_compra, importe_total, valor_residual, vida_util_anos, metodo_amortizacion, categoria, documento_path, notas, activo, synced, created_at)
+- Modelo con cálculos de amortización: `cuotaAnual`, `cuotaMensual`, `cuotaTrimestral`, `valorContable`, `anosTranscurridos`
+- Provider `assetAmortizacionTrimestreProvider` para calcular cuota de un trimestre concreto
+
+### v12
+- `expenses`: añadida columna `cloud_id TEXT` (UUID Supabase para sync)
+- `assets`: añadida columna `cloud_id TEXT` (UUID Supabase para sync)
+- Estrategia: int AUTOINCREMENT local + cloud_id nullable generado en primer upload
+
+### v13
+- `assets`: añadidas columnas `importe_con_iva REAL DEFAULT 0.0`, `iva_rate REAL DEFAULT 21.0`, `iva_amount REAL DEFAULT 0.0`
+- El campo `importe_total` pasa a representar la **base imponible sin IVA** (amortizable)
+- El IVA se deduce en el trimestre de compra (modelo 303); la base se amortiza por años (modelo 130)
 
 ## Integración Google / Auth
 
@@ -173,15 +194,17 @@ App de gestión de bolos (actuaciones de DJ), clientes y facturas. Desarrollada 
 ```
 lib/
 ├── main.dart                          # Entry point, FFI init, locale init
-├── app.dart                           # MaterialApp + GoRouter (rutas)
+├── app.dart                           # MaterialApp + GoRouter (5 tabs ShellRoute)
 ├── models/
 │   ├── app_settings.dart              # Settings del emisor
 │   ├── client.dart                    # Cliente con alias, provincia
 │   ├── gig.dart                       # Bolo/actuación
 │   ├── invoice.dart                   # Factura
+│   ├── expense.dart                   # Gasto con IVA y deducibilidad
+│   ├── asset.dart                     # Inversión/inmovilizado + amortización + IVA
 │   └── pdf_theme.dart                 # Temas de color para PDF (6 temas)
 ├── database/
-│   ├── database_helper.dart           # SQLite init + migraciones
+│   ├── database_helper.dart           # SQLite init + migraciones (versión 13)
 │   └── migrations/
 │       ├── v1_initial.dart
 │       ├── v2_add_provincia_cp.dart
@@ -191,13 +214,36 @@ lib/
 │       ├── v6_add_pdf_theme.dart       # pdf_theme en app_settings
 │       ├── v7_pending_deletions.dart   # tabla pending_deletions
 │       ├── v8_add_client_aliases.dart  # aliases JSON en clients
-│       └── v9_declared_quarters.dart  # tabla declared_quarters
+│       ├── v9_declared_quarters.dart  # tabla declared_quarters
+│       ├── v10_expenses.dart          # tabla expenses
+│       ├── v11_assets.dart            # tabla assets
+│       ├── v12_cloud_ids.dart         # cloud_id en expenses y assets
+│       └── v13_assets_iva.dart        # importe_con_iva, iva_rate, iva_amount en assets
 ├── services/
 │   ├── google_auth_service.dart       # Auth macOS (googleapis_auth)
 │   ├── platform_auth_service.dart     # Auth iOS/Android (google_sign_in + Supabase)
-│   ├── supabase_service.dart          # Sincronización Supabase
+│   ├── supabase_service.dart          # Sincronización Supabase (clients/gigs/invoices/expenses/assets)
 │   ├── google_calendar_service.dart   # Sync con Google Calendar
 │   ├── import_service.dart            # Importación desde CSV/Excel
+│   ├── pdf_service.dart               # Generación de PDF
+│   └── notification_service.dart
+├── screens/
+│   ├── dashboard/                     # Inicio + FAB 4 acciones
+│   ├── calendar/                      # Calendario + detalle de bolo
+│   ├── clients/                       # Lista, detalle, formulario
+│   ├── finanzas/
+│   │   └── finanzas_screen.dart       # TabBar Facturas/Gastos/Inversiones
+│   ├── invoices/                      # Lista, detalle, formulario, preview
+│   ├── expenses/                      # Lista, detalle, formulario
+│   ├── assets/                        # Lista, detalle, formulario con IVA
+│   ├── gigs/                          # Lista de bolos
+│   ├── profile/                       # Mi Perfil (Google + datos emisor)
+│   ├── settings/                      # Ajustes, importación, duplicados
+│   └── stats/                         # Estadísticas
+├── providers/                         # Riverpod providers
+├── repositories/                      # Acceso a BD
+└── widgets/                           # Widgets compartidos
+```
 │   ├── pdf_service.dart               # Generación de PDF
 │   └── notification_service.dart
 ├── screens/
@@ -216,22 +262,41 @@ lib/
 
 ## Pendientes prioritarios
 
-### 1) ✅ Modulo de gastos (implementado)
-- Migracion `v10` con tabla `expenses`
+### 1) ✅ Módulo de gastos (implementado — v10)
+- Migración `v10` con tabla `expenses`
 - Pantallas: lista con filtros, formulario (nuevo/editar), detalle
 - Adjuntar justificante (PDF/foto) con `file_picker` + `image_picker`
-- Conectado al resumen financiero: desglose por categoria e IVA soportado
-- Rutas: `/expenses`, `/expense/new`, `/expense/edit/:id`, `/expense/:id`
+- Conectado al resumen financiero: desglose por categoría e IVA soportado
+- Rutas: `/expense/new`, `/expense/edit/:id`, `/expense/:id`
 
-### 2) Asistente IA
+### 2) ✅ Módulo de inversiones/inmovilizado (implementado — v11)
+- Migración `v11` con tabla `assets`
+- Pantallas: lista, formulario, detalle con tabla de amortización trimestral
+- Separación IVA / base imponible (v13): `importe_con_iva`, `iva_rate`, `iva_amount`
+- Dropdown IVA 21/10/4/0%; preview amortización con base sin IVA
+- Cálculo de cuota anual/trimestral/mensual y valor contable
+- Rutas: `/asset/new`, `/asset/edit/:id`, `/asset/:id`
+
+### 3) ✅ Sincronización Supabase para gastos e inversiones (implementado — v12)
+- Columnas `cloud_id` en `expenses` y `assets`
+- `SyncProvider`: `uploadToCloud()` genera UUID y lo guarda, `downloadFromCloud()` hace upsert por `cloud_id`
+- RLS en Supabase: cada usuario solo ve sus datos
+
+### 4) ✅ Reorganización NavBar 7 → 5 tabs (commit 482b173)
+- ANTES: Inicio | Calendario | Clientes | Facturas | Gastos | Inversiones | Perfil
+- DESPUÉS: Inicio | Agenda | **Finanzas** | Clientes | Perfil
+- `FinanzasScreen`: `DefaultTabController(3)` con TabBar interno Facturas/Gastos/Inversiones
+- FAB del Dashboard expandido a 4 acciones: bolo / cliente / gasto / inversión
+
+### 5) Asistente IA
 - Integrar asistente sobre la arquitectura actual de repositorios
 - Enviar contexto real de negocio a Claude API
-- Enfocar como diferencial academico del proyecto
+- Enfocar como diferencial académico del proyecto
 
-### 3) Envio de facturas por email
+### 6) Envío de facturas por email
 - Reutilizar el PDF de factura ya generado
-- Implementar envio por correo con BRevo
-- Completar el flujo final post-generacion de factura
+- Implementar envío por correo con Brevo
+- Completar el flujo final post-generación de factura
 
 ## Variables de entorno (.env)
 ```
@@ -241,3 +306,21 @@ SUPABASE_SERVICE_ROLE_KEY=***
 GOOGLE_CLIENT_ID=744196169382-knr1najrpc3muiim38k3epg6rdmdpuhj.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=***
 ```
+
+## Historial de commits relevantes
+
+| Commit    | Fecha      | Descripción                                                         |
+|-----------|------------|---------------------------------------------------------------------|
+| 482b173   | 2026-04-23 | nav: reorganizar NavigationBar 7→5 tabs; añadir FinanzasScreen; FAB 4 acciones |
+| 32e507f   | 2026-04-23 | feat(assets): separar IVA de base amortizable; migración v13; sync Supabase |
+| abdefcd   | 2026-04-23 | fix(forms): replace deprecated DropdownButtonFormField value with initialValue |
+
+## Problemas resueltos (recientes)
+
+### 9. `DropdownButtonFormField.value` deprecado (Flutter 3.33+)
+- **Causa:** El parámetro `value:` fue reemplazado por `initialValue:` en Flutter 3.33
+- **Solución:** Cambiar `value: _ivaRate` → `initialValue: _ivaRate` en `asset_form_screen.dart`
+
+### 10. Typo spread operator `..[ → ...[`
+- **Causa:** Error tipográfico en la lista de `ActionButton` del `ExpandableFAB`
+- **Solución:** Corregir el spread operator `...[` en `dashboard_screen.dart`
