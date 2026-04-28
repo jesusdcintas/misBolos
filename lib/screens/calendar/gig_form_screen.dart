@@ -77,7 +77,10 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
             // Fecha
             Card(
               child: ListTile(
-                leading: const Icon(Icons.calendar_today, color: AppColors.primary),
+                leading: const Icon(
+                  Icons.calendar_today,
+                  color: AppColors.primary,
+                ),
                 title: const Text(AppStrings.fecha),
                 subtitle: Text(DateFormatter.display(_fecha)),
                 onTap: _pickDate,
@@ -93,12 +96,17 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
                   labelText: AppStrings.cliente,
                   prefixIcon: Icon(Icons.person),
                 ),
-                items: clients.map((c) => DropdownMenuItem(
-                  value: c.id,
-                  child: Text(c.alias.isNotEmpty ? c.alias : c.nombre),
-                )).toList(),
+                items: clients
+                    .map(
+                      (c) => DropdownMenuItem(
+                        value: c.id,
+                        child: Text(c.alias.isNotEmpty ? c.alias : c.nombre),
+                      ),
+                    )
+                    .toList(),
                 onChanged: (v) => setState(() => _clientId = v),
-                validator: (v) => v == null ? AppStrings.campoObligatorio : null,
+                validator: (v) =>
+                    v == null ? AppStrings.campoObligatorio : null,
               ),
               loading: () => const CircularProgressIndicator(),
               error: (_, __) => const Text('Error cargando clientes'),
@@ -121,7 +129,9 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
                 prefixIcon: Icon(Icons.euro),
                 suffixText: '€',
               ),
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               validator: (v) {
                 if (v == null || v.isEmpty) return AppStrings.campoObligatorio;
                 if (double.tryParse(v.replaceAll(',', '.')) == null) {
@@ -168,11 +178,11 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
                       AnimatedDefaultTextStyle(
                         duration: const Duration(milliseconds: 400),
                         style: Theme.of(context).textTheme.titleLarge!.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: _facturable
-                                  ? AppColors.accentGreen
-                                  : AppColors.accentPurple,
-                            ),
+                          fontWeight: FontWeight.bold,
+                          color: _facturable
+                              ? AppColors.accentGreen
+                              : AppColors.accentPurple,
+                        ),
                         child: Text(AppStrings.facturable),
                       ),
                       const SizedBox(width: 16),
@@ -213,7 +223,9 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
                         width: 20,
                         height: 20,
                         child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white),
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
                       )
                     : const Icon(Icons.save),
                 label: Text(AppStrings.guardar),
@@ -247,8 +259,7 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final cachet =
-          double.parse(_cachetController.text.replaceAll(',', '.'));
+      final cachet = double.parse(_cachetController.text.replaceAll(',', '.'));
       final notas = _notasController.text.trim();
       Gig savedGig;
 
@@ -276,7 +287,9 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
       final authState = ref.read(googleAuthProvider);
       if (authState.isSignedIn) {
         try {
-          final client = await ref.read(clientByIdProvider(savedGig.clientId).future);
+          final client = await ref.read(
+            clientByIdProvider(savedGig.clientId).future,
+          );
           await GoogleCalendarService().syncGig(
             gig: savedGig,
             clientName: client?.nombre ?? 'Cliente',
@@ -286,24 +299,27 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
       }
 
       ref.invalidate(gigsProvider);
+      ref.invalidate(gigByIdProvider(savedGig.id));
       ref.invalidate(recentGigsProvider);
       ref.invalidate(dashboardStatsProvider);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(_existingGig != null
-                ? AppStrings.boloActualizado
-                : AppStrings.boloCreado),
+            content: Text(
+              _existingGig != null
+                  ? AppStrings.boloActualizado
+                  : AppStrings.boloCreado,
+            ),
           ),
         );
         context.pop();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);

@@ -107,14 +107,12 @@ class FinancialSummaryScreen extends ConsumerWidget {
   ) async {
     try {
       final file = await PdfService().generateSummaryPdf(summary: summary);
-      await Share.shareXFiles(
-        [XFile(file.path)],
-      );
+      await Share.shareXFiles([XFile(file.path)]);
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al generar PDF: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error al generar PDF: $e')));
       }
     }
   }
@@ -149,14 +147,16 @@ class _PeriodHeader extends ConsumerWidget {
                 return Expanded(
                   child: GestureDetector(
                     onTap: () {
-                      ref.read(financialPeriodProvider.notifier).state =
-                          period.copyWith(mode: mode);
+                      ref.read(financialPeriodProvider.notifier).state = period
+                          .copyWith(mode: mode);
                     },
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       decoration: BoxDecoration(
-                        color: isSelected ? AppColors.primary : Colors.transparent,
+                        color: isSelected
+                            ? AppColors.primary
+                            : Colors.transparent,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       alignment: Alignment.center,
@@ -183,13 +183,16 @@ class _PeriodHeader extends ConsumerWidget {
               IconButton(
                 icon: const Icon(Icons.chevron_left, size: 28),
                 onPressed: () {
-                  ref.read(financialPeriodProvider.notifier).state = period.previous;
+                  ref.read(financialPeriodProvider.notifier).state =
+                      period.previous;
                 },
               ),
               GestureDetector(
                 onTap: () {
                   final now = DateTime.now();
-                  ref.read(financialPeriodProvider.notifier).state = DashboardPeriod(
+                  ref
+                      .read(financialPeriodProvider.notifier)
+                      .state = DashboardPeriod(
                     mode: period.mode,
                     year: now.year,
                     month: now.month,
@@ -197,7 +200,10 @@ class _PeriodHeader extends ConsumerWidget {
                   );
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.primaryLight,
                     borderRadius: BorderRadius.circular(20),
@@ -221,7 +227,8 @@ class _PeriodHeader extends ConsumerWidget {
                 onPressed: period.isFuture
                     ? null
                     : () {
-                        ref.read(financialPeriodProvider.notifier).state = period.next;
+                        ref.read(financialPeriodProvider.notifier).state =
+                            period.next;
                       },
               ),
             ],
@@ -241,8 +248,8 @@ class _SummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final totalCobrado = summary.cobrado;
-    final progress = summary.totalPrevisto > 0
-        ? (totalCobrado / summary.totalPrevisto).clamp(0.0, 1.0)
+    final progress = summary.totalPrevistoGlobal > 0
+        ? (totalCobrado / summary.totalPrevistoGlobal).clamp(0.0, 1.0)
         : 0.0;
 
     return Card(
@@ -254,14 +261,17 @@ class _SummaryCard extends StatelessWidget {
           children: [
             Text(
               'Resumen · ${summary.period.label}',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 4),
             Text(
               '${summary.numBolos} bolos · ${summary.numFacturasPagadas} facturas cobradas · ${summary.pendienteCount} pendientes',
-              style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.textSecondary,
+              ),
             ),
             const Divider(height: 24),
 
@@ -311,6 +321,16 @@ class _SummaryCard extends StatelessWidget {
               ),
             ],
 
+            if (summary.previstoEnB > 0) ...[
+              const SizedBox(height: 14),
+              _statRow(
+                icon: Icons.event_available,
+                color: AppColors.purple,
+                label: 'Previsto en B',
+                value: summary.previstoEnB,
+              ),
+            ],
+
             if (summary.previsto > 0) ...[
               const SizedBox(height: 14),
               _statRow(
@@ -335,7 +355,11 @@ class _SummaryCard extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.trending_up, color: AppColors.primary, size: 28),
+                      Icon(
+                        Icons.trending_up,
+                        color: AppColors.primary,
+                        size: 28,
+                      ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
@@ -350,7 +374,9 @@ class _SummaryCard extends StatelessWidget {
                               ),
                             ),
                             Text(
-                              CurrencyFormatter.format(summary.totalPrevisto),
+                              CurrencyFormatter.format(
+                                summary.totalPrevistoGlobal,
+                              ),
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 22,
@@ -369,7 +395,9 @@ class _SummaryCard extends StatelessWidget {
                       value: progress,
                       minHeight: 8,
                       backgroundColor: AppColors.cardBorder,
-                      valueColor: const AlwaysStoppedAnimation<Color>(AppColors.success),
+                      valueColor: const AlwaysStoppedAnimation<Color>(
+                        AppColors.success,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 6),
@@ -378,10 +406,14 @@ class _SummaryCard extends StatelessWidget {
                     children: [
                       Text(
                         '${(progress * 100).toStringAsFixed(1)}% cobrado',
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.success),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.success,
+                        ),
                       ),
                       Text(
-                        'Falta: ${CurrencyFormatter.format((summary.totalPrevisto - totalCobrado).clamp(0, double.infinity))}',
+                        'Falta: ${CurrencyFormatter.format((summary.totalPrevistoGlobal - totalCobrado).clamp(0, double.infinity))}',
                         style: TextStyle(fontSize: 11, color: Colors.grey[600]),
                       ),
                     ],
@@ -406,10 +438,13 @@ class _SummaryCard extends StatelessWidget {
                     children: [
                       const Text(
                         'ACUMULADO',
-                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                        ),
                       ),
                       Text(
-                        CurrencyFormatter.format(summary.acumulado),
+                        CurrencyFormatter.format(summary.acumuladoTotal),
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 18,
@@ -419,9 +454,14 @@ class _SummaryCard extends StatelessWidget {
                     ],
                   ),
                   // Comparison
-                  if (summary.prevCobradoTotal != null && summary.prevLabel != null) ...[
+                  if (summary.prevCobradoTotal != null &&
+                      summary.prevLabel != null) ...[
                     const SizedBox(height: 8),
-                    _buildComparison(totalCobrado, summary.prevCobradoTotal!, summary.prevLabel!),
+                    _buildComparison(
+                      totalCobrado,
+                      summary.prevCobradoTotal!,
+                      summary.prevLabel!,
+                    ),
                   ],
                 ],
               ),
@@ -450,11 +490,18 @@ class _SummaryCard extends StatelessWidget {
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
+          child: Text(
+            label,
+            style: const TextStyle(fontWeight: FontWeight.w500),
+          ),
         ),
         Text(
           CurrencyFormatter.format(value),
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: color),
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 15,
+            color: color,
+          ),
         ),
       ],
     );
@@ -500,9 +547,9 @@ class _IvaSection extends StatelessWidget {
       children: [
         Text(
           'IVA Trimestral',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.bold,
-          ),
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
         ...quarters.map((q) => _IvaQuarterCard(quarter: q)),
@@ -566,7 +613,8 @@ class _IvaQuarterCard extends ConsumerWidget {
     final declFormat = DateFormat('dd MMM', 'es');
 
     // Can toggle declared? Past quarters only (not en_curso or futuro)
-    final canToggleDeclared = quarter.status == 'pendiente_declarar' ||
+    final canToggleDeclared =
+        quarter.status == 'pendiente_declarar' ||
         quarter.status == 'pasado' ||
         quarter.status == 'declarado';
 
@@ -581,10 +629,7 @@ class _IvaQuarterCard extends ConsumerWidget {
           ),
           child: Text(
             'T${quarter.quarter}',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: badgeText,
-            ),
+            style: TextStyle(fontWeight: FontWeight.bold, color: badgeText),
           ),
         ),
         title: Row(
@@ -602,7 +647,11 @@ class _IvaQuarterCard extends ConsumerWidget {
               ),
               child: Text(
                 estBadgeLabel,
-                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: estBadgeText),
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: estBadgeText,
+                ),
               ),
             ),
             const SizedBox(width: 4),
@@ -614,7 +663,11 @@ class _IvaQuarterCard extends ConsumerWidget {
               ),
               child: Text(
                 badgeLabel,
-                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: badgeText),
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: badgeText,
+                ),
               ),
             ),
           ],
@@ -633,66 +686,124 @@ class _IvaQuarterCard extends ConsumerWidget {
                 if (quarter.invoices.isNotEmpty) ...[
                   const Row(
                     children: [
-                      Expanded(flex: 3, child: Text('Factura', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary))),
-                      Expanded(flex: 2, child: Text('Base', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary), textAlign: TextAlign.right)),
-                      Expanded(flex: 2, child: Text('IVA', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary), textAlign: TextAlign.right)),
+                      Expanded(
+                        flex: 3,
+                        child: Text(
+                          'Factura',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: Text(
+                          'Base',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textSecondary,
+                          ),
+                          textAlign: TextAlign.right,
+                        ),
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: Text(
+                          'IVA',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textSecondary,
+                          ),
+                          textAlign: TextAlign.right,
+                        ),
+                      ),
                     ],
                   ),
                   const Divider(height: 12),
-                  ...quarter.invoices.map((inv) => InkWell(
-                    onTap: () => context.push('/invoice/${inv.invoiceId}'),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            flex: 3,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '#${inv.numero} · ${inv.clientName}',
-                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                  ...quarter.invoices.map(
+                    (inv) => InkWell(
+                      onTap: () => context.push('/invoice/${inv.invoiceId}'),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '#${inv.numero} · ${inv.clientName}',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  Text(
+                                    DateFormat('dd/MM/yy').format(inv.fecha),
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Expanded(
+                              flex: 2,
+                              child: Text(
+                                CurrencyFormatter.format(inv.base),
+                                style: const TextStyle(fontSize: 12),
+                                textAlign: TextAlign.right,
+                              ),
+                            ),
+                            Expanded(
+                              flex: 2,
+                              child: Text(
+                                CurrencyFormatter.format(inv.iva),
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
                                 ),
-                                Text(
-                                  DateFormat('dd/MM/yy').format(inv.fecha),
-                                  style: const TextStyle(fontSize: 10, color: AppColors.textSecondary),
-                                ),
-                              ],
+                                textAlign: TextAlign.right,
+                              ),
                             ),
-                          ),
-                          Expanded(
-                            flex: 2,
-                            child: Text(
-                              CurrencyFormatter.format(inv.base),
-                              style: const TextStyle(fontSize: 12),
-                              textAlign: TextAlign.right,
-                            ),
-                          ),
-                          Expanded(
-                            flex: 2,
-                            child: Text(
-                              CurrencyFormatter.format(inv.iva),
-                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                              textAlign: TextAlign.right,
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
-                  )),
+                  ),
                   if (quarter.ivaFacturas > 0) ...[
                     const Divider(height: 12),
                     Row(
                       children: [
-                        const Expanded(flex: 3, child: Text('IVA facturas', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500))),
-                        Expanded(flex: 4, child: Text(
-                          CurrencyFormatter.format(quarter.ivaFacturas),
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-                          textAlign: TextAlign.right,
-                        )),
+                        const Expanded(
+                          flex: 3,
+                          child: Text(
+                            'IVA facturas',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          flex: 4,
+                          child: Text(
+                            CurrencyFormatter.format(quarter.ivaFacturas),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            textAlign: TextAlign.right,
+                          ),
+                        ),
                       ],
                     ),
                   ],
@@ -714,23 +825,41 @@ class _IvaQuarterCard extends ConsumerWidget {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text('IVA estimado (histórico)',
-                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF5F5E5A)),
+                            const Text(
+                              'IVA estimado (histórico)',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF5F5E5A),
+                              ),
                             ),
-                            Text(CurrencyFormatter.format(quarter.ivaHistoricoEstimado),
-                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF5F5E5A)),
+                            Text(
+                              CurrencyFormatter.format(
+                                quarter.ivaHistoricoEstimado,
+                              ),
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF5F5E5A),
+                              ),
                             ),
                           ],
                         ),
                         const SizedBox(height: 4),
                         Text(
                           'Base estimada: ${CurrencyFormatter.format(quarter.ivaHistoricoEstimado / 0.21 * 1.21)} · IVA 21%',
-                          style: const TextStyle(fontSize: 11, color: Color(0xFF5F5E5A)),
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFF5F5E5A),
+                          ),
                         ),
                         const SizedBox(height: 6),
                         const Text(
                           'IVA calculado sobre el cachet de los bolos importados. Puede diferir del IVA real declarado.',
-                          style: TextStyle(fontSize: 10, color: AppColors.textSecondary),
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: AppColors.textSecondary,
+                          ),
                         ),
                       ],
                     ),
@@ -742,7 +871,10 @@ class _IvaQuarterCard extends ConsumerWidget {
                     padding: EdgeInsets.symmetric(vertical: 8),
                     child: Text(
                       'Sin facturas cobradas en este trimestre',
-                      style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 13,
+                      ),
                     ),
                   ),
 
@@ -751,12 +883,27 @@ class _IvaQuarterCard extends ConsumerWidget {
                   const Divider(height: 16),
                   Row(
                     children: [
-                      const Expanded(flex: 3, child: Text('Total IVA', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
-                      Expanded(flex: 4, child: Text(
-                        CurrencyFormatter.format(quarter.ivaTotal),
-                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
-                        textAlign: TextAlign.right,
-                      )),
+                      const Expanded(
+                        flex: 3,
+                        child: Text(
+                          'Total IVA',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        flex: 4,
+                        child: Text(
+                          CurrencyFormatter.format(quarter.ivaTotal),
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.right,
+                        ),
+                      ),
                     ],
                   ),
                 ],
@@ -776,21 +923,42 @@ class _IvaQuarterCard extends ConsumerWidget {
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                const Icon(Icons.check_circle, color: AppColors.success, size: 16),
+                                const Icon(
+                                  Icons.check_circle,
+                                  color: AppColors.success,
+                                  size: 16,
+                                ),
                                 const SizedBox(width: 6),
-                                const Text('Declarado ✓',
-                                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.success),
+                                const Text(
+                                  'Declarado ✓',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.success,
+                                  ),
                                 ),
                                 const SizedBox(width: 12),
                                 GestureDetector(
                                   onTap: () {
-                                    ref.read(declaredQuartersProvider.notifier)
-                                        .toggle(quarter.year, quarter.quarter, ivaAmount: quarter.ivaTotal);
+                                    ref
+                                        .read(declaredQuartersProvider.notifier)
+                                        .toggle(
+                                          quarter.year,
+                                          quarter.quarter,
+                                          ivaAmount: quarter.ivaTotal,
+                                        );
                                     // Invalidate financial summary
-                                    ref.invalidate(financialPeriodSummaryProvider);
+                                    ref.invalidate(
+                                      financialPeriodSummaryProvider,
+                                    );
                                   },
-                                  child: const Text('Deshacer',
-                                    style: TextStyle(fontSize: 11, color: AppColors.textSecondary, decoration: TextDecoration.underline),
+                                  child: const Text(
+                                    'Deshacer',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: AppColors.textSecondary,
+                                      decoration: TextDecoration.underline,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -798,8 +966,13 @@ class _IvaQuarterCard extends ConsumerWidget {
                           )
                         : OutlinedButton.icon(
                             onPressed: () {
-                              ref.read(declaredQuartersProvider.notifier)
-                                  .toggle(quarter.year, quarter.quarter, ivaAmount: quarter.ivaTotal);
+                              ref
+                                  .read(declaredQuartersProvider.notifier)
+                                  .toggle(
+                                    quarter.year,
+                                    quarter.quarter,
+                                    ivaAmount: quarter.ivaTotal,
+                                  );
                               // Invalidate financial summary
                               ref.invalidate(financialPeriodSummaryProvider);
                             },
@@ -808,7 +981,9 @@ class _IvaQuarterCard extends ConsumerWidget {
                             style: OutlinedButton.styleFrom(
                               foregroundColor: AppColors.primary,
                               side: const BorderSide(color: AppColors.primary),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
                             ),
                           ),
                   ),
@@ -840,10 +1015,12 @@ class _SubPeriodBreakdown extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          mode == DashboardPeriodMode.anio ? 'Desglose por Meses' : 'Desglose por Meses',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.bold,
-          ),
+          mode == DashboardPeriodMode.anio
+              ? 'Desglose por Meses'
+              : 'Desglose por Meses',
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
         ...subPeriods.map((sp) => _SubPeriodCard(stats: sp, year: year)),
@@ -873,11 +1050,17 @@ class _SubPeriodCard extends StatelessWidget {
             child: Center(
               child: Text(
                 stats.label,
-                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey[500]),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[500],
+                ),
               ),
             ),
           ),
-          title: Text('Sin actividad', style: TextStyle(color: Colors.grey[500])),
+          title: Text(
+            'Sin actividad',
+            style: TextStyle(color: Colors.grey[500]),
+          ),
         ),
       );
     }
@@ -895,12 +1078,15 @@ class _SubPeriodCard extends StatelessWidget {
           child: Center(
             child: Text(
               stats.label,
-              style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary),
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                color: AppColors.primary,
+              ),
             ),
           ),
         ),
         title: Text(
-          'Total previsto: ${CurrencyFormatter.format(stats.totalPrevisto)}',
+          'Total previsto: ${CurrencyFormatter.format(stats.totalPrevistoGlobal)}',
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
         subtitle: Text(
@@ -913,22 +1099,51 @@ class _SubPeriodCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _detailRow('Cobrado (facturas)', stats.cobrado, AppColors.success),
+                _detailRow(
+                  'Cobrado (facturas)',
+                  stats.cobrado,
+                  AppColors.success,
+                ),
                 if (stats.cobradoHistorico > 0)
-                  _detailRow('Cobrado (histórico)', stats.cobradoHistorico, AppColors.success),
+                  _detailRow(
+                    'Cobrado (histórico)',
+                    stats.cobradoHistorico,
+                    AppColors.success,
+                  ),
                 _detailRow('Pendiente', stats.pendiente, AppColors.warning),
                 _detailRow('Cobrado en B', stats.cobradoEnB, AppColors.purple),
+                if (stats.pendienteEnB > 0)
+                  _detailRow(
+                    'Pendiente en B',
+                    stats.pendienteEnB,
+                    AppColors.purple,
+                  ),
                 if (stats.previsto > 0)
                   _detailRow('Previsto', stats.previsto, AppColors.primary),
+                if (stats.previstoEnB > 0)
+                  _detailRow(
+                    'Previsto en B',
+                    stats.previstoEnB,
+                    AppColors.purple,
+                  ),
                 const Divider(),
-                _detailRow('Total previsto', stats.totalPrevisto, AppColors.primary, bold: true),
+                _detailRow(
+                  'Total previsto',
+                  stats.totalPrevistoGlobal,
+                  AppColors.primary,
+                  bold: true,
+                ),
                 const SizedBox(height: 8),
 
                 // Gigs
                 if (stats.gigs.isNotEmpty) ...[
                   Row(
                     children: [
-                      const Icon(Icons.music_note, size: 14, color: AppColors.textSecondary),
+                      const Icon(
+                        Icons.music_note,
+                        size: 14,
+                        color: AppColors.textSecondary,
+                      ),
                       const SizedBox(width: 4),
                       Text(
                         '${stats.numBolos} bolos',
@@ -941,40 +1156,54 @@ class _SubPeriodCard extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 6),
-                  ...stats.gigs.map((gig) => InkWell(
-                    onTap: () => context.push('/gig/${gig.gigId}'),
-                    borderRadius: BorderRadius.circular(8),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  gig.clientName,
-                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                Text(
-                                  DateFormat('dd MMM', 'es').format(gig.fecha),
-                                  style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
-                                ),
-                              ],
+                  ...stats.gigs.map(
+                    (gig) => InkWell(
+                      onTap: () => context.push('/gig/${gig.gigId}'),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    gig.clientName,
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  Text(
+                                    DateFormat(
+                                      'dd MMM',
+                                      'es',
+                                    ).format(gig.fecha),
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                          Text(
-                            CurrencyFormatter.format(gig.importe),
-                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-                          ),
-                          const SizedBox(width: 8),
-                          _statusPill(gig.status),
-                        ],
+                            Text(
+                              CurrencyFormatter.format(gig.importe),
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            _statusPill(gig.status),
+                          ],
+                        ),
                       ),
                     ),
-                  )),
+                  ),
                 ],
               ],
             ),
@@ -984,16 +1213,29 @@ class _SubPeriodCard extends StatelessWidget {
     );
   }
 
-  Widget _detailRow(String label, double value, Color color, {bool bold = false}) {
+  Widget _detailRow(
+    String label,
+    double value,
+    Color color, {
+    bool bold = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(fontWeight: bold ? FontWeight.bold : FontWeight.normal)),
+          Text(
+            label,
+            style: TextStyle(
+              fontWeight: bold ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
           Text(
             CurrencyFormatter.format(value),
-            style: TextStyle(color: color, fontWeight: bold ? FontWeight.bold : FontWeight.w500),
+            style: TextStyle(
+              color: color,
+              fontWeight: bold ? FontWeight.bold : FontWeight.w500,
+            ),
           ),
         ],
       ),
@@ -1031,7 +1273,14 @@ class _SubPeriodCard extends StatelessWidget {
         color: bg,
         borderRadius: BorderRadius.circular(20),
       ),
-      child: Text(status.label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: text)),
+      child: Text(
+        status.label,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          color: text,
+        ),
+      ),
     );
   }
 }
@@ -1053,57 +1302,68 @@ class _GigsList extends StatelessWidget {
             const SizedBox(width: 6),
             Text(
               '${gigs.length} bolos',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
           ],
         ),
         const SizedBox(height: 8),
-        ...gigs.map((gig) => Card(
-          margin: const EdgeInsets.only(bottom: 6),
-          child: ListTile(
-            onTap: () => context.push('/gig/${gig.gigId}'),
-            leading: Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: gig.status == GigStatus.cobradoEnB
-                    ? AppColors.purpleBg
-                    : AppColors.primaryLight,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(
-                Icons.music_note_outlined,
-                size: 20,
-                color: gig.status == GigStatus.cobradoEnB
-                    ? AppColors.purple
-                    : AppColors.primary,
-              ),
-            ),
-            title: Text(
-              gig.clientName,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            subtitle: Text(
-              DateFormat('dd MMM yyyy', 'es').format(gig.fecha),
-              style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
-            ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  CurrencyFormatter.format(gig.importe),
-                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+        ...gigs.map(
+          (gig) => Card(
+            margin: const EdgeInsets.only(bottom: 6),
+            child: ListTile(
+              onTap: () => context.push('/gig/${gig.gigId}'),
+              leading: Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: gig.status == GigStatus.cobradoEnB
+                      ? AppColors.purpleBg
+                      : AppColors.primaryLight,
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                const SizedBox(width: 8),
-                _statusPill(gig.status),
-              ],
+                child: Icon(
+                  Icons.music_note_outlined,
+                  size: 20,
+                  color: gig.status == GigStatus.cobradoEnB
+                      ? AppColors.purple
+                      : AppColors.primary,
+                ),
+              ),
+              title: Text(
+                gig.clientName,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              subtitle: Text(
+                DateFormat('dd MMM yyyy', 'es').format(gig.fecha),
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    CurrencyFormatter.format(gig.importe),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  _statusPill(gig.status),
+                ],
+              ),
             ),
           ),
-        )),
+        ),
       ],
     );
   }
@@ -1139,7 +1399,14 @@ class _GigsList extends StatelessWidget {
         color: bg,
         borderRadius: BorderRadius.circular(20),
       ),
-      child: Text(status.label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: text)),
+      child: Text(
+        status.label,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          color: text,
+        ),
+      ),
     );
   }
 }
@@ -1161,10 +1428,9 @@ class _GastosSection extends ConsumerWidget {
       children: [
         Text(
           'Gastos',
-          style: Theme.of(context)
-              .textTheme
-              .titleMedium
-              ?.copyWith(fontWeight: FontWeight.bold),
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
         ...quarters.map((q) => _GastosQuarterCard(year: q.$1, quarter: q.$2)),
@@ -1237,7 +1503,9 @@ class _GastosQuarterCard extends ConsumerWidget {
           data: (_) => Text(
             'IVA soportado: ${fmt.format(ivaSoportado)}',
             style: const TextStyle(
-                fontSize: 11, color: AppColors.textSecondary),
+              fontSize: 11,
+              color: AppColors.textSecondary,
+            ),
           ),
         ),
         children: [
@@ -1267,8 +1535,7 @@ class _GastosQuarterCard extends ConsumerWidget {
                   children: [
                     const Divider(height: 8),
                     ...totales.entries.map((entry) {
-                      final cat =
-                          ExpenseCategoryExtension.fromDb(entry.key);
+                      final cat = ExpenseCategoryExtension.fromDb(entry.key);
                       return Padding(
                         padding: const EdgeInsets.symmetric(vertical: 4),
                         child: Row(
@@ -1277,7 +1544,8 @@ class _GastosQuarterCard extends ConsumerWidget {
                             Text(
                               fmt.format(entry.value),
                               style: const TextStyle(
-                                  fontWeight: FontWeight.w500),
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
                           ],
                         ),
@@ -1290,14 +1558,16 @@ class _GastosQuarterCard extends ConsumerWidget {
                         const Text(
                           'IVA soportado deducible',
                           style: TextStyle(
-                              color: AppColors.textSecondary,
-                              fontSize: 12),
+                            color: AppColors.textSecondary,
+                            fontSize: 12,
+                          ),
                         ),
                         Text(
                           fmt.format(ivaSoportado),
                           style: const TextStyle(
-                              color: AppColors.success,
-                              fontWeight: FontWeight.bold),
+                            color: AppColors.success,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ],
                     ),
@@ -1329,14 +1599,14 @@ class _AmortizacionSection extends ConsumerWidget {
       children: [
         Text(
           'Amortizaciones',
-          style: Theme.of(context)
-              .textTheme
-              .titleMedium
-              ?.copyWith(fontWeight: FontWeight.bold),
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
-        ...quarters.map((q) =>
-            _AmortizacionQuarterCard(year: q.$1, quarter: q.$2)),
+        ...quarters.map(
+          (q) => _AmortizacionQuarterCard(year: q.$1, quarter: q.$2),
+        ),
       ],
     );
   }
@@ -1363,8 +1633,7 @@ class _AmortizacionQuarterCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final params = (year: year, quarter: quarter);
-    final totalAsync =
-        ref.watch(assetAmortizacionTrimestreProvider(params));
+    final totalAsync = ref.watch(assetAmortizacionTrimestreProvider(params));
     final assetsAsync = ref.watch(assetsActivosProvider);
     final fmt = NumberFormat.currency(locale: 'es_ES', symbol: '€');
 
@@ -1432,31 +1701,37 @@ class _AmortizacionQuarterCard extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Divider(height: 8),
-                    ...activos.map((a) => Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          child: Row(
-                            children: [
-                              Icon(a.categoria.icono,
-                                  size: 14,
-                                  color: AppColors.textSecondary),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  a.descripcion,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(fontSize: 12),
-                                ),
+                    ...activos.map(
+                      (a) => Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Row(
+                          children: [
+                            Icon(
+                              a.categoria.icono,
+                              size: 14,
+                              color: AppColors.textSecondary,
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                a.descripcion,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 12),
                               ),
-                              Text(
-                                fmt.format(
-                                    a.cuotaTrimestreConcreto(year, quarter)),
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w500,
-                                    fontSize: 12),
+                            ),
+                            Text(
+                              fmt.format(
+                                a.cuotaTrimestreConcreto(year, quarter),
                               ),
-                            ],
-                          ),
-                        )),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w500,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                     const Divider(height: 12),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1464,7 +1739,9 @@ class _AmortizacionQuarterCard extends ConsumerWidget {
                         const Text(
                           'Deducible de IRPF',
                           style: TextStyle(
-                              color: AppColors.textSecondary, fontSize: 12),
+                            color: AppColors.textSecondary,
+                            fontSize: 12,
+                          ),
                         ),
                         totalAsync.when(
                           loading: () => const SizedBox.shrink(),
@@ -1472,8 +1749,9 @@ class _AmortizacionQuarterCard extends ConsumerWidget {
                           data: (total) => Text(
                             fmt.format(total),
                             style: const TextStyle(
-                                color: AppColors.success,
-                                fontWeight: FontWeight.bold),
+                              color: AppColors.success,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ],

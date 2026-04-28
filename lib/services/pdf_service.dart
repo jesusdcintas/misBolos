@@ -19,7 +19,9 @@ class PdfService {
 
   static Future<void> _loadFonts() async {
     if (_regularFont == null) {
-      final regularData = await rootBundle.load('assets/fonts/Roboto-Regular.ttf');
+      final regularData = await rootBundle.load(
+        'assets/fonts/Roboto-Regular.ttf',
+      );
       _regularFont = pw.Font.ttf(regularData);
     }
     if (_boldFont == null) {
@@ -34,7 +36,7 @@ class PdfService {
     required AppSettings settings,
   }) async {
     await _loadFonts();
-    
+
     final pdf = pw.Document();
     final theme = PdfTheme.fromName(settings.pdfTheme);
     final primaryColor = theme.primaryColor;
@@ -54,10 +56,7 @@ class PdfService {
       pw.Page(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(56.7), // ~2cm
-        theme: pw.ThemeData.withFont(
-          base: _regularFont,
-          bold: _boldFont,
-        ),
+        theme: pw.ThemeData.withFont(base: _regularFont, bold: _boldFont),
         build: (context) {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -70,7 +69,11 @@ class PdfService {
                     child: pw.Align(
                       alignment: pw.Alignment.centerLeft,
                       child: logoImage != null
-                          ? pw.Image(logoImage, height: settings.logoSize, fit: pw.BoxFit.contain)
+                          ? pw.Image(
+                              logoImage,
+                              height: settings.logoSize,
+                              fit: pw.BoxFit.contain,
+                            )
                           : pw.SizedBox(height: settings.logoSize),
                     ),
                   ),
@@ -97,36 +100,51 @@ class PdfService {
                     child: pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
-                        pw.Text('EMISOR',
-                            style: pw.TextStyle(
-                              fontSize: 12,
-                              fontWeight: pw.FontWeight.bold,
-                              color: primaryColor,
-                            )),
-                        pw.SizedBox(height: 6),
-                        pw.Text(settings.emisorNombre,
-                            style: const pw.TextStyle(fontSize: 10)),
-                        pw.Text(settings.emisorNIF,
-                            style: const pw.TextStyle(fontSize: 10)),
-                        if (settings.emisorDireccion.isNotEmpty)
-                          pw.Text(settings.emisorDireccion,
-                              style: const pw.TextStyle(fontSize: 10)),
                         pw.Text(
-                            [
-                              settings.emisorCiudad,
-                              if (settings.emisorProvincia.isNotEmpty) settings.emisorProvincia,
-                              if (settings.emisorCodigoPostal.isNotEmpty) settings.emisorCodigoPostal,
-                            ].where((s) => s.isNotEmpty).join(', '),
-                            style: const pw.TextStyle(fontSize: 10)),
+                          'EMISOR',
+                          style: pw.TextStyle(
+                            fontSize: 12,
+                            fontWeight: pw.FontWeight.bold,
+                            color: primaryColor,
+                          ),
+                        ),
+                        pw.SizedBox(height: 6),
+                        pw.Text(
+                          settings.emisorNombre,
+                          style: const pw.TextStyle(fontSize: 10),
+                        ),
+                        pw.Text(
+                          settings.emisorNIF,
+                          style: const pw.TextStyle(fontSize: 10),
+                        ),
+                        if (settings.emisorDireccion.isNotEmpty)
+                          pw.Text(
+                            settings.emisorDireccion,
+                            style: const pw.TextStyle(fontSize: 10),
+                          ),
+                        pw.Text(
+                          [
+                            settings.emisorCiudad,
+                            if (settings.emisorProvincia.isNotEmpty)
+                              settings.emisorProvincia,
+                            if (settings.emisorCodigoPostal.isNotEmpty)
+                              settings.emisorCodigoPostal,
+                          ].where((s) => s.isNotEmpty).join(', '),
+                          style: const pw.TextStyle(fontSize: 10),
+                        ),
                         if (settings.emisorEmail.isNotEmpty)
-                          pw.Text(settings.emisorEmail,
-                              style: pw.TextStyle(
-                                fontSize: 10,
-                                color: PdfColors.blue800,
-                              )),
+                          pw.Text(
+                            settings.emisorEmail,
+                            style: pw.TextStyle(
+                              fontSize: 10,
+                              color: PdfColors.blue800,
+                            ),
+                          ),
                         if (settings.emisorTelefono.isNotEmpty)
-                          pw.Text(settings.emisorTelefono,
-                              style: const pw.TextStyle(fontSize: 10)),
+                          pw.Text(
+                            settings.emisorTelefono,
+                            style: const pw.TextStyle(fontSize: 10),
+                          ),
                       ],
                     ),
                   ),
@@ -136,35 +154,50 @@ class PdfService {
                     child: pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
-                        pw.Text('FACTURAR A',
-                            style: pw.TextStyle(
-                              fontSize: 12,
-                              fontWeight: pw.FontWeight.bold,
-                              color: primaryColor,
-                            )),
-                        pw.SizedBox(height: 6),
-                        pw.Text(client.nombre,
-                            style: const pw.TextStyle(fontSize: 10)),
-                        pw.Text(client.cifNif,
-                            style: const pw.TextStyle(fontSize: 10)),
-                        pw.Text(client.direccion,
-                            style: const pw.TextStyle(fontSize: 10)),
                         pw.Text(
-                            [
-                              client.ciudad,
-                              if (client.provincia.isNotEmpty) client.provincia,
-                              if (client.codigoPostal.isNotEmpty) client.codigoPostal,
-                            ].where((s) => s.isNotEmpty).join(', '),
-                            style: const pw.TextStyle(fontSize: 10)),
+                          'FACTURAR A',
+                          style: pw.TextStyle(
+                            fontSize: 12,
+                            fontWeight: pw.FontWeight.bold,
+                            color: primaryColor,
+                          ),
+                        ),
+                        pw.SizedBox(height: 6),
+                        pw.Text(
+                          client.nombre,
+                          style: const pw.TextStyle(fontSize: 10),
+                        ),
+                        pw.Text(
+                          client.cifNif,
+                          style: const pw.TextStyle(fontSize: 10),
+                        ),
+                        pw.Text(
+                          client.direccion,
+                          style: const pw.TextStyle(fontSize: 10),
+                        ),
+                        pw.Text(
+                          [
+                            client.ciudad,
+                            if (client.provincia.isNotEmpty) client.provincia,
+                            if (client.codigoPostal.isNotEmpty)
+                              client.codigoPostal,
+                          ].where((s) => s.isNotEmpty).join(', '),
+                          style: const pw.TextStyle(fontSize: 10),
+                        ),
                         if (client.email != null && client.email!.isNotEmpty)
-                          pw.Text(client.email!,
-                              style: pw.TextStyle(
-                                fontSize: 10,
-                                color: PdfColors.blue800,
-                              )),
-                        if (client.telefono != null && client.telefono!.isNotEmpty)
-                          pw.Text(client.telefono!,
-                              style: const pw.TextStyle(fontSize: 10)),
+                          pw.Text(
+                            client.email!,
+                            style: pw.TextStyle(
+                              fontSize: 10,
+                              color: PdfColors.blue800,
+                            ),
+                          ),
+                        if (client.telefono != null &&
+                            client.telefono!.isNotEmpty)
+                          pw.Text(
+                            client.telefono!,
+                            style: const pw.TextStyle(fontSize: 10),
+                          ),
                       ],
                     ),
                   ),
@@ -180,12 +213,16 @@ class PdfService {
                     flex: 2,
                     child: pw.Row(
                       children: [
-                        pw.Text('Fecha:       ',
-                            style: const pw.TextStyle(fontSize: 10)),
+                        pw.Text(
+                          'Fecha:       ',
+                          style: const pw.TextStyle(fontSize: 10),
+                        ),
                         pw.Text(
                           '${invoice.fecha.day}/${invoice.fecha.month}/${invoice.fecha.year}',
                           style: pw.TextStyle(
-                              fontSize: 10, fontWeight: pw.FontWeight.bold),
+                            fontSize: 10,
+                            fontWeight: pw.FontWeight.bold,
+                          ),
                         ),
                       ],
                     ),
@@ -195,12 +232,18 @@ class PdfService {
                     flex: 2,
                     child: pw.Row(
                       children: [
-                        pw.Text('N.º de factura',
-                            style: const pw.TextStyle(fontSize: 10)),
+                        pw.Text(
+                          'N.º de factura',
+                          style: const pw.TextStyle(fontSize: 10),
+                        ),
                         pw.SizedBox(width: 30),
-                        pw.Text('${invoice.numero}',
-                            style: pw.TextStyle(
-                                fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                        pw.Text(
+                          '${invoice.numero}',
+                          style: pw.TextStyle(
+                            fontSize: 10,
+                            fontWeight: pw.FontWeight.bold,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -209,11 +252,17 @@ class PdfService {
               pw.SizedBox(height: 4),
               pw.Row(
                 children: [
-                  pw.Text('Información de pago: ',
-                      style: const pw.TextStyle(fontSize: 10)),
-                  pw.Text(settings.iban,
-                      style: pw.TextStyle(
-                          fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                  pw.Text(
+                    'Información de pago: ',
+                    style: const pw.TextStyle(fontSize: 10),
+                  ),
+                  pw.Text(
+                    settings.iban,
+                    style: pw.TextStyle(
+                      fontSize: 10,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
                 ],
               ),
               pw.SizedBox(height: 20),
@@ -233,9 +282,11 @@ class PdfService {
                       children: [
                         pw.SizedBox(
                           width: 180,
-                          child: pw.Text('Subtotal',
-                              textAlign: pw.TextAlign.right,
-                              style: const pw.TextStyle(fontSize: 10)),
+                          child: pw.Text(
+                            'Subtotal',
+                            textAlign: pw.TextAlign.right,
+                            style: const pw.TextStyle(fontSize: 10),
+                          ),
                         ),
                         pw.SizedBox(width: 20),
                         pw.SizedBox(
@@ -299,7 +350,9 @@ class PdfService {
                     pw.SizedBox(height: 8),
                     pw.Container(
                       padding: const pw.EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 10),
+                        horizontal: 20,
+                        vertical: 10,
+                      ),
                       decoration: pw.BoxDecoration(
                         color: headerBg,
                         borderRadius: pw.BorderRadius.circular(4),
@@ -350,7 +403,11 @@ class PdfService {
     return file;
   }
 
-  static pw.Widget _buildInvoiceTable(Invoice invoice, PdfColor headerBg, PdfColor rowAlt) {
+  static pw.Widget _buildInvoiceTable(
+    Invoice invoice,
+    PdfColor headerBg,
+    PdfColor rowAlt,
+  ) {
     final items = invoice.items;
 
     return pw.Table(
@@ -375,16 +432,18 @@ class PdfService {
         // Data rows only (no empty rows)
         for (int i = 0; i < items.length; i++)
           pw.TableRow(
-            decoration: pw.BoxDecoration(
-              color: i % 2 == 1 ? rowAlt : _white,
-            ),
+            decoration: pw.BoxDecoration(color: i % 2 == 1 ? rowAlt : _white),
             children: [
               _dataCell('${items[i].cantidad}', pw.TextAlign.center),
               _dataCell(items[i].descripcion, pw.TextAlign.left),
-              _dataCell(_formatCurrency(items[i].precioUnitario),
-                  pw.TextAlign.right),
-              _dataCell(_formatCurrency(items[i].totalLinea),
-                  pw.TextAlign.right),
+              _dataCell(
+                _formatCurrency(items[i].precioUnitario),
+                pw.TextAlign.right,
+              ),
+              _dataCell(
+                _formatCurrency(items[i].totalLinea),
+                pw.TextAlign.right,
+              ),
             ],
           ),
       ],
@@ -443,10 +502,7 @@ class PdfService {
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(40),
-        theme: pw.ThemeData.withFont(
-          base: _regularFont,
-          bold: _boldFont,
-        ),
+        theme: pw.ThemeData.withFont(base: _regularFont, bold: _boldFont),
         header: (context) => pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
@@ -487,33 +543,81 @@ class PdfService {
           widgets.add(_sectionTitle('Resumen General', primary));
           widgets.add(pw.SizedBox(height: 8));
 
-          widgets.add(pw.Container(
-            padding: const pw.EdgeInsets.all(14),
-            decoration: pw.BoxDecoration(
-              border: pw.Border.all(color: PdfColors.grey300),
-              borderRadius: pw.BorderRadius.circular(6),
+          widgets.add(
+            pw.Container(
+              padding: const pw.EdgeInsets.all(14),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: PdfColors.grey300),
+                borderRadius: pw.BorderRadius.circular(6),
+              ),
+              child: pw.Column(
+                children: [
+                  _summaryRow('Bolos', '${summary.numBolos}'),
+                  _summaryRow(
+                    'Facturas cobradas',
+                    '${summary.numFacturasPagadas}',
+                  ),
+                  _summaryRow(
+                    'Facturas pendientes',
+                    '${summary.pendienteCount}',
+                  ),
+                  pw.Divider(color: PdfColors.grey300),
+                  _summaryRow(
+                    'Cobrado (facturas)',
+                    _formatCurrency(summary.cobradoFacturas),
+                    color: success,
+                  ),
+                  if (summary.cobradoHistorico > 0)
+                    _summaryRow(
+                      'Cobrado (histórico)',
+                      _formatCurrency(summary.cobradoHistorico),
+                      color: success,
+                    ),
+                  _summaryRow(
+                    'Pendiente',
+                    _formatCurrency(summary.pendiente),
+                    color: warning,
+                  ),
+                  _summaryRow(
+                    'Cobrado en B',
+                    _formatCurrency(summary.cobradoEnB),
+                    color: purple,
+                  ),
+                  if (summary.pendienteEnB > 0)
+                    _summaryRow(
+                      'Pendiente en B',
+                      _formatCurrency(summary.pendienteEnB),
+                      color: purple,
+                    ),
+                  if (summary.previstoEnB > 0)
+                    _summaryRow(
+                      'Previsto en B',
+                      _formatCurrency(summary.previstoEnB),
+                      color: purple,
+                    ),
+                  if (summary.previsto > 0)
+                    _summaryRow(
+                      'Previsto',
+                      _formatCurrency(summary.previsto),
+                      color: primary,
+                    ),
+                  pw.Divider(color: PdfColors.grey300),
+                  _summaryRow(
+                    'Acumulado',
+                    _formatCurrency(summary.acumuladoTotal),
+                    color: success,
+                    bold: true,
+                  ),
+                  _summaryRow(
+                    'Total previsto',
+                    _formatCurrency(summary.totalPrevistoGlobal),
+                    color: primary,
+                    bold: true,
+                  ),
+                ],
+              ),
             ),
-            child: pw.Column(
-              children: [
-                _summaryRow('Bolos', '${summary.numBolos}'),
-                _summaryRow('Facturas cobradas', '${summary.numFacturasPagadas}'),
-                _summaryRow('Facturas pendientes', '${summary.pendienteCount}'),
-                pw.Divider(color: PdfColors.grey300),
-                _summaryRow('Cobrado (facturas)', _formatCurrency(summary.cobradoFacturas), color: success),
-                if (summary.cobradoHistorico > 0)
-                  _summaryRow('Cobrado (histórico)', _formatCurrency(summary.cobradoHistorico), color: success),
-                _summaryRow('Pendiente', _formatCurrency(summary.pendiente), color: warning),
-                _summaryRow('Cobrado en B', _formatCurrency(summary.cobradoEnB), color: purple),
-                if (summary.pendienteEnB > 0)
-                  _summaryRow('Pendiente en B', _formatCurrency(summary.pendienteEnB), color: purple),
-                if (summary.previsto > 0)
-                  _summaryRow('Previsto', _formatCurrency(summary.previsto), color: primary),
-                pw.Divider(color: PdfColors.grey300),
-                _summaryRow('Acumulado', _formatCurrency(summary.acumulado), color: success, bold: true),
-                _summaryRow('Total previsto', _formatCurrency(summary.totalPrevisto), color: primary, bold: true),
-              ],
-            ),
-          ));
+          );
 
           widgets.add(pw.SizedBox(height: 16));
 
@@ -523,73 +627,104 @@ class PdfService {
             widgets.add(pw.SizedBox(height: 8));
 
             for (final q in summary.ivaQuarters) {
-              widgets.add(pw.Container(
-                margin: const pw.EdgeInsets.only(bottom: 8),
-                padding: const pw.EdgeInsets.all(12),
-                decoration: pw.BoxDecoration(
-                  border: pw.Border.all(color: PdfColors.grey300),
-                  borderRadius: pw.BorderRadius.circular(6),
-                ),
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Row(
-                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                      children: [
-                        pw.Text(
-                          'T${q.quarter} ${q.year}',
-                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13, color: primary),
-                        ),
-                        pw.Text(
-                          'IVA: ${_formatCurrency(q.ivaTotal)}',
-                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13),
-                        ),
-                      ],
-                    ),
-                    pw.SizedBox(height: 4),
-                    pw.Text(
-                      'Declaración: ${dateFormat.format(q.declarationDate)}',
-                      style: const pw.TextStyle(fontSize: 9, color: grey),
-                    ),
-                    if (q.invoices.isNotEmpty) ...[
-                      pw.SizedBox(height: 8),
-                      pw.Table(
-                        border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
-                        columnWidths: {
-                          0: const pw.FlexColumnWidth(1),
-                          1: const pw.FlexColumnWidth(3),
-                          2: const pw.FlexColumnWidth(2),
-                          3: const pw.FlexColumnWidth(2),
-                          4: const pw.FlexColumnWidth(2),
-                        },
+              widgets.add(
+                pw.Container(
+                  margin: const pw.EdgeInsets.only(bottom: 8),
+                  padding: const pw.EdgeInsets.all(12),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: PdfColors.grey300),
+                    borderRadius: pw.BorderRadius.circular(6),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                         children: [
-                          pw.TableRow(
-                            decoration: const pw.BoxDecoration(color: headerBg),
-                            children: [
-                              _headerCell('Nº'),
-                              _headerCell('Cliente'),
-                              _headerCell('Fecha'),
-                              _headerCell('Base'),
-                              _headerCell('IVA'),
-                            ],
-                          ),
-                          for (int i = 0; i < q.invoices.length; i++)
-                            pw.TableRow(
-                              decoration: pw.BoxDecoration(color: i % 2 == 1 ? rowAlt : _white),
-                              children: [
-                                _dataCell('#${q.invoices[i].numero}', pw.TextAlign.center),
-                                _dataCell(q.invoices[i].clientName, pw.TextAlign.left),
-                                _dataCell(dateFormat.format(q.invoices[i].fecha), pw.TextAlign.center),
-                                _dataCell(_formatCurrency(q.invoices[i].base), pw.TextAlign.right),
-                                _dataCell(_formatCurrency(q.invoices[i].iva), pw.TextAlign.right),
-                              ],
+                          pw.Text(
+                            'T${q.quarter} ${q.year}',
+                            style: pw.TextStyle(
+                              fontWeight: pw.FontWeight.bold,
+                              fontSize: 13,
+                              color: primary,
                             ),
+                          ),
+                          pw.Text(
+                            'IVA: ${_formatCurrency(q.ivaTotal)}',
+                            style: pw.TextStyle(
+                              fontWeight: pw.FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
                         ],
                       ),
+                      pw.SizedBox(height: 4),
+                      pw.Text(
+                        'Declaración: ${dateFormat.format(q.declarationDate)}',
+                        style: const pw.TextStyle(fontSize: 9, color: grey),
+                      ),
+                      if (q.invoices.isNotEmpty) ...[
+                        pw.SizedBox(height: 8),
+                        pw.Table(
+                          border: pw.TableBorder.all(
+                            color: PdfColors.grey300,
+                            width: 0.5,
+                          ),
+                          columnWidths: {
+                            0: const pw.FlexColumnWidth(1),
+                            1: const pw.FlexColumnWidth(3),
+                            2: const pw.FlexColumnWidth(2),
+                            3: const pw.FlexColumnWidth(2),
+                            4: const pw.FlexColumnWidth(2),
+                          },
+                          children: [
+                            pw.TableRow(
+                              decoration: const pw.BoxDecoration(
+                                color: headerBg,
+                              ),
+                              children: [
+                                _headerCell('Nº'),
+                                _headerCell('Cliente'),
+                                _headerCell('Fecha'),
+                                _headerCell('Base'),
+                                _headerCell('IVA'),
+                              ],
+                            ),
+                            for (int i = 0; i < q.invoices.length; i++)
+                              pw.TableRow(
+                                decoration: pw.BoxDecoration(
+                                  color: i % 2 == 1 ? rowAlt : _white,
+                                ),
+                                children: [
+                                  _dataCell(
+                                    '#${q.invoices[i].numero}',
+                                    pw.TextAlign.center,
+                                  ),
+                                  _dataCell(
+                                    q.invoices[i].clientName,
+                                    pw.TextAlign.left,
+                                  ),
+                                  _dataCell(
+                                    dateFormat.format(q.invoices[i].fecha),
+                                    pw.TextAlign.center,
+                                  ),
+                                  _dataCell(
+                                    _formatCurrency(q.invoices[i].base),
+                                    pw.TextAlign.right,
+                                  ),
+                                  _dataCell(
+                                    _formatCurrency(q.invoices[i].iva),
+                                    pw.TextAlign.right,
+                                  ),
+                                ],
+                              ),
+                          ],
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ));
+              );
             }
 
             widgets.add(pw.SizedBox(height: 16));
@@ -600,42 +735,69 @@ class PdfService {
             widgets.add(_sectionTitle('Desglose por Períodos', primary));
             widgets.add(pw.SizedBox(height: 8));
 
-            widgets.add(pw.Table(
-              border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
-              columnWidths: {
-                0: const pw.FlexColumnWidth(2),
-                1: const pw.FlexColumnWidth(1),
-                2: const pw.FlexColumnWidth(2),
-                3: const pw.FlexColumnWidth(2),
-                4: const pw.FlexColumnWidth(2),
-                5: const pw.FlexColumnWidth(2),
-              },
-              children: [
-                pw.TableRow(
-                  decoration: const pw.BoxDecoration(color: headerBg),
-                  children: [
-                    _headerCell('Período'),
-                    _headerCell('Bolos'),
-                    _headerCell('Cobrado'),
-                    _headerCell('Pendiente'),
-                    _headerCell('En B'),
-                    _headerCell('T. Previsto'),
-                  ],
+            widgets.add(
+              pw.Table(
+                border: pw.TableBorder.all(
+                  color: PdfColors.grey300,
+                  width: 0.5,
                 ),
-                for (int i = 0; i < summary.subPeriods.length; i++)
+                columnWidths: {
+                  0: const pw.FlexColumnWidth(2),
+                  1: const pw.FlexColumnWidth(1),
+                  2: const pw.FlexColumnWidth(2),
+                  3: const pw.FlexColumnWidth(2),
+                  4: const pw.FlexColumnWidth(2),
+                  5: const pw.FlexColumnWidth(2),
+                },
+                children: [
                   pw.TableRow(
-                    decoration: pw.BoxDecoration(color: i % 2 == 1 ? rowAlt : _white),
+                    decoration: const pw.BoxDecoration(color: headerBg),
                     children: [
-                      _dataCell(summary.subPeriods[i].label, pw.TextAlign.center),
-                      _dataCell('${summary.subPeriods[i].numBolos}', pw.TextAlign.center),
-                      _dataCell(_formatCurrency(summary.subPeriods[i].cobradoOficial), pw.TextAlign.right),
-                      _dataCell(_formatCurrency(summary.subPeriods[i].pendiente), pw.TextAlign.right),
-                      _dataCell(_formatCurrency(summary.subPeriods[i].cobradoEnB), pw.TextAlign.right),
-                      _dataCell(_formatCurrency(summary.subPeriods[i].totalPrevisto), pw.TextAlign.right),
+                      _headerCell('Período'),
+                      _headerCell('Bolos'),
+                      _headerCell('Cobrado'),
+                      _headerCell('Pendiente'),
+                      _headerCell('En B'),
+                      _headerCell('T. Previsto'),
                     ],
                   ),
-              ],
-            ));
+                  for (int i = 0; i < summary.subPeriods.length; i++)
+                    pw.TableRow(
+                      decoration: pw.BoxDecoration(
+                        color: i % 2 == 1 ? rowAlt : _white,
+                      ),
+                      children: [
+                        _dataCell(
+                          summary.subPeriods[i].label,
+                          pw.TextAlign.center,
+                        ),
+                        _dataCell(
+                          '${summary.subPeriods[i].numBolos}',
+                          pw.TextAlign.center,
+                        ),
+                        _dataCell(
+                          _formatCurrency(summary.subPeriods[i].cobradoOficial),
+                          pw.TextAlign.right,
+                        ),
+                        _dataCell(
+                          _formatCurrency(summary.subPeriods[i].pendiente),
+                          pw.TextAlign.right,
+                        ),
+                        _dataCell(
+                          _formatCurrency(summary.subPeriods[i].cobradoEnB),
+                          pw.TextAlign.right,
+                        ),
+                        _dataCell(
+                          _formatCurrency(
+                            summary.subPeriods[i].totalPrevistoGlobal,
+                          ),
+                          pw.TextAlign.right,
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+            );
 
             widgets.add(pw.SizedBox(height: 16));
           }
@@ -646,36 +808,49 @@ class PdfService {
             widgets.add(_sectionTitle('Detalle de Bolos', primary));
             widgets.add(pw.SizedBox(height: 8));
 
-            widgets.add(pw.Table(
-              border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
-              columnWidths: {
-                0: const pw.FlexColumnWidth(2),
-                1: const pw.FlexColumnWidth(3),
-                2: const pw.FlexColumnWidth(2),
-                3: const pw.FlexColumnWidth(2),
-              },
-              children: [
-                pw.TableRow(
-                  decoration: const pw.BoxDecoration(color: headerBg),
-                  children: [
-                    _headerCell('Fecha'),
-                    _headerCell('Cliente'),
-                    _headerCell('Importe'),
-                    _headerCell('Estado'),
-                  ],
+            widgets.add(
+              pw.Table(
+                border: pw.TableBorder.all(
+                  color: PdfColors.grey300,
+                  width: 0.5,
                 ),
-                for (int i = 0; i < allGigs.length; i++)
+                columnWidths: {
+                  0: const pw.FlexColumnWidth(2),
+                  1: const pw.FlexColumnWidth(3),
+                  2: const pw.FlexColumnWidth(2),
+                  3: const pw.FlexColumnWidth(2),
+                },
+                children: [
                   pw.TableRow(
-                    decoration: pw.BoxDecoration(color: i % 2 == 1 ? rowAlt : _white),
+                    decoration: const pw.BoxDecoration(color: headerBg),
                     children: [
-                      _dataCell(dateFormat.format(allGigs[i].fecha), pw.TextAlign.center),
-                      _dataCell(allGigs[i].clientName, pw.TextAlign.left),
-                      _dataCell(_formatCurrency(allGigs[i].importe), pw.TextAlign.right),
-                      _dataCell(allGigs[i].status.label, pw.TextAlign.center),
+                      _headerCell('Fecha'),
+                      _headerCell('Cliente'),
+                      _headerCell('Importe'),
+                      _headerCell('Estado'),
                     ],
                   ),
-              ],
-            ));
+                  for (int i = 0; i < allGigs.length; i++)
+                    pw.TableRow(
+                      decoration: pw.BoxDecoration(
+                        color: i % 2 == 1 ? rowAlt : _white,
+                      ),
+                      children: [
+                        _dataCell(
+                          dateFormat.format(allGigs[i].fecha),
+                          pw.TextAlign.center,
+                        ),
+                        _dataCell(allGigs[i].clientName, pw.TextAlign.left),
+                        _dataCell(
+                          _formatCurrency(allGigs[i].importe),
+                          pw.TextAlign.right,
+                        ),
+                        _dataCell(allGigs[i].status.label, pw.TextAlign.center),
+                      ],
+                    ),
+                ],
+              ),
+            );
           }
 
           return widgets;
@@ -684,7 +859,9 @@ class PdfService {
     );
 
     final dir = await getTemporaryDirectory();
-    final safeName = summary.period.label.replaceAll(' ', '_').replaceAll('/', '-');
+    final safeName = summary.period.label
+        .replaceAll(' ', '_')
+        .replaceAll('/', '-');
     final file = File('${dir.path}/resumen_$safeName.pdf');
     await file.writeAsBytes(await pdf.save());
     return file;
@@ -701,13 +878,24 @@ class PdfService {
     );
   }
 
-  static pw.Widget _summaryRow(String label, String value, {PdfColor? color, bool bold = false}) {
+  static pw.Widget _summaryRow(
+    String label,
+    String value, {
+    PdfColor? color,
+    bool bold = false,
+  }) {
     return pw.Padding(
       padding: const pw.EdgeInsets.symmetric(vertical: 3),
       child: pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
-          pw.Text(label, style: pw.TextStyle(fontSize: 10, fontWeight: bold ? pw.FontWeight.bold : null)),
+          pw.Text(
+            label,
+            style: pw.TextStyle(
+              fontSize: 10,
+              fontWeight: bold ? pw.FontWeight.bold : null,
+            ),
+          ),
           pw.Text(
             value,
             style: pw.TextStyle(

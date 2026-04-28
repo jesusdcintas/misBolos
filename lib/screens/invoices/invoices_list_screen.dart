@@ -12,6 +12,7 @@ import '../../providers/invoice_provider.dart';
 import '../../providers/client_provider.dart';
 import '../../providers/gig_provider.dart';
 import '../../providers/settings_provider.dart';
+import '../../services/pdf_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/google_auth_service.dart';
 import '../../services/google_calendar_service.dart';
@@ -19,6 +20,7 @@ import '../../widgets/common/empty_state.dart';
 import '../../widgets/common/skeleton_loading.dart';
 import '../../core/utils/app_haptics.dart';
 import '../../models/client.dart';
+import 'package:share_plus/share_plus.dart';
 
 final _filterProvider = StateProvider<InvoiceStatus?>((ref) => null);
 final _invoiceYearFilterProvider = StateProvider<int?>((ref) => null);
@@ -32,8 +34,18 @@ void _clearAllInvoiceFilters(WidgetRef ref) {
   ref.read(_invoiceClientFilterProvider.notifier).state = null;
 }
 
-enum InvoiceSortOption { fechaDesc, fechaAsc, clienteAsc, clienteDesc, precioDesc, precioAsc }
-final _sortProvider = StateProvider<InvoiceSortOption>((ref) => InvoiceSortOption.fechaDesc);
+enum InvoiceSortOption {
+  fechaDesc,
+  fechaAsc,
+  clienteAsc,
+  clienteDesc,
+  precioDesc,
+  precioAsc,
+}
+
+final _sortProvider = StateProvider<InvoiceSortOption>(
+  (ref) => InvoiceSortOption.fechaDesc,
+);
 
 // Modo selección masiva
 final _selectionModeProvider = StateProvider<bool>((ref) => false);
@@ -61,379 +73,715 @@ class InvoicesListScreen extends ConsumerWidget {
     final clientFilter = ref.watch(_invoiceClientFilterProvider);
     final clientsAsync = ref.watch(clientsProvider);
 
-    final hasActiveFilters = filter != null ||
+    final hasActiveFilters =
+        filter != null ||
         selectedYear != null ||
         selectedMonth != null ||
         clientFilter != null;
 
     return Scaffold(
-      appBar: selectionMode
-          ? _buildSelectionAppBar(context, ref, selectedInvoices)
-          : AppBar(
-              title: const Text(AppStrings.facturas),
-              actions: [
-                // Botón de selección masiva
-                IconButton(
-                  icon: const Icon(Icons.checklist),
-                  tooltip: 'Selección masiva',
-                  onPressed: () {
-                    ref.read(_selectionModeProvider.notifier).state = true;
-                  },
-                ),
-                // Botón de ordenación
-                PopupMenuButton<InvoiceSortOption>(
-                  icon: const Icon(Icons.sort),
-                  tooltip: 'Ordenar',
-                  onSelected: (value) {
-                    ref.read(_sortProvider.notifier).state = value;
-                  },
-                  itemBuilder: (context) => [
-                    _buildSortMenuItem(context, sortOption, InvoiceSortOption.fechaDesc, 'Fecha (reciente)', Icons.arrow_downward),
-                    _buildSortMenuItem(context, sortOption, InvoiceSortOption.fechaAsc, 'Fecha (antigua)', Icons.arrow_upward),
-                    const PopupMenuDivider(),
-                    _buildSortMenuItem(context, sortOption, InvoiceSortOption.clienteAsc, 'Cliente (A-Z)', Icons.sort_by_alpha),
-                    _buildSortMenuItem(context, sortOption, InvoiceSortOption.clienteDesc, 'Cliente (Z-A)', Icons.sort_by_alpha),
-                    const PopupMenuDivider(),
-                    _buildSortMenuItem(context, sortOption, InvoiceSortOption.precioDesc, 'Precio (mayor)', Icons.arrow_downward),
-                    _buildSortMenuItem(context, sortOption, InvoiceSortOption.precioAsc, 'Precio (menor)', Icons.arrow_upward),
+      body: Column(
+        children: [
+          selectionMode
+              ? _buildSelectionHeader(context, ref, selectedInvoices)
+              : _buildHeader(),
+          Expanded(
+            child: invoicesAsync.when(
+              data: (allInvoices) {
+                final clients = clientsAsync.valueOrNull ?? [];
+                final clientMap = {for (final c in clients) c.id: c};
+                final clientsMap = clientsCacheAsync.valueOrNull ?? {};
+
+                // Totales sin filtrar
+                final totalCount = allInvoices.length;
+
+                // Aplicar todos los filtros
+                var filtered = allInvoices.where((inv) {
+                  if (filter != null && inv.status != filter) return false;
+                  if (selectedYear != null && inv.fecha.year != selectedYear) {
+                    return false;
+                  }
+                  if (selectedMonth != null &&
+                      inv.fecha.month != selectedMonth) {
+                    return false;
+                  }
+                  if (clientFilter != null && inv.clientId != clientFilter) {
+                    return false;
+                  }
+                  return true;
+                }).toList();
+
+                // Aplicar ordenación
+                filtered.sort((a, b) {
+                  switch (sortOption) {
+                    case InvoiceSortOption.fechaDesc:
+                      return b.fecha.compareTo(a.fecha);
+                    case InvoiceSortOption.fechaAsc:
+                      return a.fecha.compareTo(b.fecha);
+                    case InvoiceSortOption.clienteAsc:
+                      final clientA = clientsMap[a.clientId]?.alias ?? '';
+                      final clientB = clientsMap[b.clientId]?.alias ?? '';
+                      return clientA.toLowerCase().compareTo(
+                        clientB.toLowerCase(),
+                      );
+                    case InvoiceSortOption.clienteDesc:
+                      final clientA = clientsMap[a.clientId]?.alias ?? '';
+                      final clientB = clientsMap[b.clientId]?.alias ?? '';
+                      return clientB.toLowerCase().compareTo(
+                        clientA.toLowerCase(),
+                      );
+                    case InvoiceSortOption.precioDesc:
+                      return b.total.compareTo(a.total);
+                    case InvoiceSortOption.precioAsc:
+                      return a.total.compareTo(b.total);
+                  }
+                });
+
+                final filteredCount = filtered.length;
+                final filteredTotal = filtered.fold<double>(
+                  0,
+                  (sum, inv) => sum + inv.total,
+                );
+
+                // Conteos por año
+                final yearCounts = <int, int>{};
+                for (final inv in allInvoices) {
+                  yearCounts[inv.fecha.year] =
+                      (yearCounts[inv.fecha.year] ?? 0) + 1;
+                }
+
+                // Meses con datos
+                final monthsWithData = <int, int>{};
+                for (final inv in allInvoices) {
+                  if (selectedYear == null || inv.fecha.year == selectedYear) {
+                    monthsWithData[inv.fecha.month] =
+                        (monthsWithData[inv.fecha.month] ?? 0) + 1;
+                  }
+                }
+
+                // Conteo por cliente
+                final clientInvoiceCounts = <String, int>{};
+                for (final inv in allInvoices) {
+                  clientInvoiceCounts[inv.clientId] =
+                      (clientInvoiceCounts[inv.clientId] ?? 0) + 1;
+                }
+
+                // Nombre del cliente filtrado
+                String? clientFilterName;
+                if (clientFilter != null &&
+                    clientMap.containsKey(clientFilter)) {
+                  clientFilterName = clientMap[clientFilter]!.alias.isNotEmpty
+                      ? clientMap[clientFilter]!.alias
+                      : clientMap[clientFilter]!.nombre;
+                }
+
+                // Label de mes filtrado
+                String? monthLabel;
+                if (selectedMonth != null) {
+                  final m = DateFormat.MMM(
+                    'es',
+                  ).format(DateTime(2024, selectedMonth));
+                  monthLabel = m[0].toUpperCase() + m.substring(1);
+                }
+
+                return Column(
+                  children: [
+                    // ── Resumen dinámico ──
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      color: AppColors.primaryLight,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.receipt_long,
+                            color: AppColors.primary,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            '$filteredCount facturas',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          const Text(
+                            '·',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            CurrencyFormatter.format(filteredTotal),
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                          if (hasActiveFilters) ...[
+                            const SizedBox(width: 8),
+                            Text(
+                              '[de $totalCount]',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+
+                    if (!selectionMode)
+                      _buildInvoiceActions(context, ref, sortOption),
+
+                    // ── Fila 1: Chips de estado ──
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                      child: SizedBox(
+                        height: 36,
+                        child: ListView(
+                          scrollDirection: Axis.horizontal,
+                          children: [
+                            _FilterChip(
+                              label: AppStrings.todas,
+                              selected: filter == null,
+                              onTap: () =>
+                                  ref.read(_filterProvider.notifier).state =
+                                      null,
+                            ),
+                            _FilterChip(
+                              label: AppStrings.borrador,
+                              selected: filter == InvoiceStatus.borrador,
+                              onTap: () =>
+                                  ref.read(_filterProvider.notifier).state =
+                                      InvoiceStatus.borrador,
+                            ),
+                            _FilterChip(
+                              label: AppStrings.enviada,
+                              selected: filter == InvoiceStatus.enviada,
+                              onTap: () =>
+                                  ref.read(_filterProvider.notifier).state =
+                                      InvoiceStatus.enviada,
+                            ),
+                            _FilterChip(
+                              label: AppStrings.pagada,
+                              selected: filter == InvoiceStatus.pagada,
+                              onTap: () =>
+                                  ref.read(_filterProvider.notifier).state =
+                                      InvoiceStatus.pagada,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    // ── Fila 2: Botones de filtro secundarios ──
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                      child: SizedBox(
+                        height: 36,
+                        child: ListView(
+                          scrollDirection: Axis.horizontal,
+                          children: [
+                            _SecondaryFilterButton(
+                              icon: Icons.calendar_today,
+                              label: selectedYear?.toString() ?? 'Año',
+                              active: selectedYear != null,
+                              onTap: () => _showInvoiceYearSheet(
+                                context,
+                                ref,
+                                yearCounts,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            _SecondaryFilterButton(
+                              icon: Icons.date_range,
+                              label: monthLabel ?? 'Mes',
+                              active: selectedMonth != null,
+                              onTap: () => _showInvoiceMonthSheet(
+                                context,
+                                ref,
+                                monthsWithData,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            _SecondaryFilterButton(
+                              icon: Icons.person,
+                              label: clientFilterName ?? 'Cliente',
+                              active: clientFilter != null,
+                              onTap: () => _showInvoiceClientSheet(
+                                context,
+                                ref,
+                                clients,
+                                clientInvoiceCounts,
+                              ),
+                            ),
+                            if (hasActiveFilters) ...[
+                              const SizedBox(width: 8),
+                              _InvClearFiltersButton(
+                                onTap: () => _clearAllInvoiceFilters(ref),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    if (selectionMode)
+                      _buildSelectionBottomBar(context, ref, selectedInvoices),
+
+                    // ── Lista o empty state ──
+                    if (filtered.isEmpty)
+                      const Expanded(
+                        child: EmptyState(
+                          icon: Icons.receipt_long_outlined,
+                          message: AppStrings.sinFacturas,
+                        ),
+                      )
+                    else
+                      Expanded(
+                        child: ListView.builder(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                          ).copyWith(bottom: selectionMode ? 16 : 80),
+                          itemCount: filtered.length,
+                          itemBuilder: (context, index) {
+                            final inv = filtered[index];
+                            return _InvoiceTile(
+                              invoice: inv,
+                              selectionMode: selectionMode,
+                              isSelected: selectedInvoices.contains(inv.id),
+                              onSelect: (selected) {
+                                final current = ref.read(
+                                  _selectedInvoicesProvider,
+                                );
+                                if (selected) {
+                                  ref
+                                      .read(_selectedInvoicesProvider.notifier)
+                                      .state = {
+                                    ...current,
+                                    inv.id,
+                                  };
+                                } else {
+                                  ref
+                                      .read(_selectedInvoicesProvider.notifier)
+                                      .state = current
+                                      .where((id) => id != inv.id)
+                                      .toSet();
+                                }
+                              },
+                              onLongPress: () {
+                                if (!selectionMode) {
+                                  ref
+                                          .read(_selectionModeProvider.notifier)
+                                          .state =
+                                      true;
+                                  ref
+                                      .read(_selectedInvoicesProvider.notifier)
+                                      .state = {
+                                    inv.id,
+                                  };
+                                }
+                              },
+                            );
+                          },
+                        ),
+                      ),
                   ],
+                );
+              },
+              loading: () => Column(
+                children: List.generate(5, (_) => const InvoiceCardSkeleton()),
+              ),
+              error: (e, _) => Center(child: Text('Error: $e')),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Container(
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        border: Border(
+          bottom: BorderSide(color: AppColors.cardBorder, width: 0.5),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Expanded(
+            child: Text(
+              AppStrings.facturas,
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w500,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInvoiceActions(
+    BuildContext context,
+    WidgetRef ref,
+    InvoiceSortOption sortOption,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      child: Row(
+        children: [
+          _InlineActionButton(
+            icon: Icons.checklist,
+            label: 'Seleccionar',
+            onTap: () {
+              ref.read(_selectionModeProvider.notifier).state = true;
+            },
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: PopupMenuButton<InvoiceSortOption>(
+              onSelected: (value) {
+                ref.read(_sortProvider.notifier).state = value;
+              },
+              itemBuilder: (context) => [
+                _buildSortMenuItem(
+                  context,
+                  sortOption,
+                  InvoiceSortOption.fechaDesc,
+                  'Fecha (reciente)',
+                  Icons.arrow_downward,
                 ),
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert),
-                  onSelected: (value) {
-                    if (value == 'renumber') {
-                      _showRenumberDialog(context, ref);
+                _buildSortMenuItem(
+                  context,
+                  sortOption,
+                  InvoiceSortOption.fechaAsc,
+                  'Fecha (antigua)',
+                  Icons.arrow_upward,
+                ),
+                const PopupMenuDivider(),
+                _buildSortMenuItem(
+                  context,
+                  sortOption,
+                  InvoiceSortOption.clienteAsc,
+                  'Cliente (A-Z)',
+                  Icons.sort_by_alpha,
+                ),
+                _buildSortMenuItem(
+                  context,
+                  sortOption,
+                  InvoiceSortOption.clienteDesc,
+                  'Cliente (Z-A)',
+                  Icons.sort_by_alpha,
+                ),
+                const PopupMenuDivider(),
+                _buildSortMenuItem(
+                  context,
+                  sortOption,
+                  InvoiceSortOption.precioDesc,
+                  'Precio (mayor)',
+                  Icons.arrow_downward,
+                ),
+                _buildSortMenuItem(
+                  context,
+                  sortOption,
+                  InvoiceSortOption.precioAsc,
+                  'Precio (menor)',
+                  Icons.arrow_upward,
+                ),
+              ],
+              child: const _InlineActionButtonContent(
+                icon: Icons.sort,
+                label: 'Ordenar',
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: PopupMenuButton<String>(
+              onSelected: (value) {
+                if (value == 'renumber') {
+                  _showRenumberDialog(context, ref);
+                }
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'renumber',
+                  child: Row(
+                    children: [
+                      Icon(Icons.format_list_numbered, size: 20),
+                      SizedBox(width: 12),
+                      Text('Reenumerar facturas'),
+                    ],
+                  ),
+                ),
+              ],
+              child: const _InlineActionButtonContent(
+                icon: Icons.more_horiz,
+                label: 'Más',
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSelectionHeader(
+    BuildContext context,
+    WidgetRef ref,
+    Set<String> selectedInvoices,
+  ) {
+    return Container(
+      height: 56,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        border: Border(
+          bottom: BorderSide(color: AppColors.cardBorder, width: 0.5),
+        ),
+      ),
+      alignment: Alignment.centerLeft,
+      child: MediaQuery(
+        data: MediaQuery.of(context).copyWith(textScaler: TextScaler.noScaling),
+        child: Text(
+          '${selectedInvoices.length} seleccionadas',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.w500,
+            color: AppColors.textPrimary,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSelectionBottomBar(
+    BuildContext context,
+    WidgetRef ref,
+    Set<String> selectedInvoices,
+  ) {
+    final hasSelection = selectedInvoices.isNotEmpty;
+
+    return Builder(
+      builder: (actionContext) => Material(
+        color: AppColors.surface,
+        child: Container(
+          height: 70,
+          margin: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.cardBorder),
+          ),
+          child: Row(
+            children: [
+              _SelectionBottomAction(
+                icon: Icons.close,
+                label: 'Cancelar',
+                onTap: () {
+                  ref.read(_selectionModeProvider.notifier).state = false;
+                  ref.read(_selectedInvoicesProvider.notifier).state = {};
+                },
+              ),
+              _SelectionBottomAction(
+                icon: Icons.ios_share,
+                label: 'Enviar',
+                enabled: hasSelection,
+                onTap: () {
+                  _showSelectionActionFeedback(
+                    actionContext,
+                    'Preparando envío',
+                  );
+                  _bulkShareInvoices(actionContext, ref, selectedInvoices);
+                },
+              ),
+              _SelectionBottomAction(
+                icon: Icons.check_circle,
+                label: 'Cobrar',
+                enabled: hasSelection,
+                onTap: () {
+                  _showSelectionActionFeedback(actionContext, 'Cambiar estado');
+                  _bulkMarkAs(
+                    actionContext,
+                    ref,
+                    selectedInvoices,
+                    InvoiceStatus.pagada,
+                  );
+                },
+              ),
+              _SelectionBottomAction(
+                icon: Icons.undo,
+                label: 'Revertir',
+                enabled: hasSelection,
+                onTap: () {
+                  _showSelectionActionFeedback(
+                    actionContext,
+                    'Revertir estado',
+                  );
+                  _bulkRevert(actionContext, ref, selectedInvoices);
+                },
+              ),
+              Expanded(
+                child: PopupMenuButton<String>(
+                  enabled: hasSelection,
+                  onSelected: (value) async {
+                    if (value == 'selectAll') {
+                      final invoices =
+                          ref.read(invoicesProvider).valueOrNull ?? [];
+                      ref.read(_selectedInvoicesProvider.notifier).state =
+                          invoices.map((i) => i.id).toSet();
+                    } else if (value == 'deselectAll') {
+                      ref.read(_selectedInvoicesProvider.notifier).state = {};
+                    } else if (value == 'markPending') {
+                      await _bulkMarkAs(
+                        actionContext,
+                        ref,
+                        selectedInvoices,
+                        InvoiceStatus.enviada,
+                      );
                     }
                   },
                   itemBuilder: (context) => [
                     const PopupMenuItem(
-                      value: 'renumber',
+                      value: 'markPending',
                       child: Row(
                         children: [
-                          Icon(Icons.format_list_numbered, size: 20),
+                          Icon(Icons.send, size: 20),
                           SizedBox(width: 12),
-                          Text('Reenumerar facturas'),
+                          Text('Marcar como pendiente'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuDivider(),
+                    const PopupMenuItem(
+                      value: 'selectAll',
+                      child: Row(
+                        children: [
+                          Icon(Icons.select_all, size: 20),
+                          SizedBox(width: 12),
+                          Text('Seleccionar todas'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'deselectAll',
+                      child: Row(
+                        children: [
+                          Icon(Icons.deselect, size: 20),
+                          SizedBox(width: 12),
+                          Text('Deseleccionar todas'),
                         ],
                       ),
                     ),
                   ],
-                ),
-              ],
-            ),
-      body: invoicesAsync.when(
-        data: (allInvoices) {
-          final clients = clientsAsync.valueOrNull ?? [];
-          final clientMap = {for (final c in clients) c.id: c};
-          final clientsMap = clientsCacheAsync.valueOrNull ?? {};
-
-          // Totales sin filtrar
-          final totalCount = allInvoices.length;
-
-          // Aplicar todos los filtros
-          var filtered = allInvoices.where((inv) {
-            if (filter != null && inv.status != filter) return false;
-            if (selectedYear != null && inv.fecha.year != selectedYear) return false;
-            if (selectedMonth != null && inv.fecha.month != selectedMonth) return false;
-            if (clientFilter != null && inv.clientId != clientFilter) return false;
-            return true;
-          }).toList();
-
-          // Aplicar ordenación
-          filtered.sort((a, b) {
-            switch (sortOption) {
-              case InvoiceSortOption.fechaDesc:
-                return b.fecha.compareTo(a.fecha);
-              case InvoiceSortOption.fechaAsc:
-                return a.fecha.compareTo(b.fecha);
-              case InvoiceSortOption.clienteAsc:
-                final clientA = clientsMap[a.clientId]?.alias ?? '';
-                final clientB = clientsMap[b.clientId]?.alias ?? '';
-                return clientA.toLowerCase().compareTo(clientB.toLowerCase());
-              case InvoiceSortOption.clienteDesc:
-                final clientA = clientsMap[a.clientId]?.alias ?? '';
-                final clientB = clientsMap[b.clientId]?.alias ?? '';
-                return clientB.toLowerCase().compareTo(clientA.toLowerCase());
-              case InvoiceSortOption.precioDesc:
-                return b.total.compareTo(a.total);
-              case InvoiceSortOption.precioAsc:
-                return a.total.compareTo(b.total);
-            }
-          });
-
-          final filteredCount = filtered.length;
-          final filteredTotal = filtered.fold<double>(0, (sum, inv) => sum + inv.total);
-
-          // Conteos por año
-          final yearCounts = <int, int>{};
-          for (final inv in allInvoices) {
-            yearCounts[inv.fecha.year] = (yearCounts[inv.fecha.year] ?? 0) + 1;
-          }
-
-          // Meses con datos
-          final monthsWithData = <int, int>{};
-          for (final inv in allInvoices) {
-            if (selectedYear == null || inv.fecha.year == selectedYear) {
-              monthsWithData[inv.fecha.month] = (monthsWithData[inv.fecha.month] ?? 0) + 1;
-            }
-          }
-
-          // Conteo por cliente
-          final clientInvoiceCounts = <String, int>{};
-          for (final inv in allInvoices) {
-            clientInvoiceCounts[inv.clientId] = (clientInvoiceCounts[inv.clientId] ?? 0) + 1;
-          }
-
-          // Nombre del cliente filtrado
-          String? clientFilterName;
-          if (clientFilter != null && clientMap.containsKey(clientFilter)) {
-            clientFilterName = clientMap[clientFilter]!.alias.isNotEmpty
-                ? clientMap[clientFilter]!.alias
-                : clientMap[clientFilter]!.nombre;
-          }
-
-          // Label de mes filtrado
-          String? monthLabel;
-          if (selectedMonth != null) {
-            final m = DateFormat.MMM('es').format(DateTime(2024, selectedMonth));
-            monthLabel = m[0].toUpperCase() + m.substring(1);
-          }
-
-          return Column(
-            children: [
-              // ── Resumen dinámico ──
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                color: AppColors.primaryLight,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.receipt_long, color: AppColors.primary, size: 20),
-                    const SizedBox(width: 6),
-                    Text(
-                      '$filteredCount facturas',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    const Text('·', style: TextStyle(fontSize: 16, color: AppColors.primary)),
-                    const SizedBox(width: 8),
-                    Text(
-                      CurrencyFormatter.format(filteredTotal),
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                    if (hasActiveFilters) ...[
-                      const SizedBox(width: 8),
-                      Text(
-                        '[de $totalCount]',
-                        style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-
-              // ── Fila 1: Chips de estado ──
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-                child: SizedBox(
-                  height: 36,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    children: [
-                      _FilterChip(
-                        label: AppStrings.todas,
-                        selected: filter == null,
-                        onTap: () => ref.read(_filterProvider.notifier).state = null,
-                      ),
-                      _FilterChip(
-                        label: AppStrings.borrador,
-                        selected: filter == InvoiceStatus.borrador,
-                        onTap: () => ref.read(_filterProvider.notifier).state = InvoiceStatus.borrador,
-                      ),
-                      _FilterChip(
-                        label: AppStrings.enviada,
-                        selected: filter == InvoiceStatus.enviada,
-                        onTap: () => ref.read(_filterProvider.notifier).state = InvoiceStatus.enviada,
-                      ),
-                      _FilterChip(
-                        label: AppStrings.pagada,
-                        selected: filter == InvoiceStatus.pagada,
-                        onTap: () => ref.read(_filterProvider.notifier).state = InvoiceStatus.pagada,
-                      ),
-                    ],
+                  child: _SelectionBottomActionContent(
+                    icon: Icons.more_horiz,
+                    label: 'Más',
+                    enabled: hasSelection,
                   ),
                 ),
               ),
-
-              // ── Fila 2: Botones de filtro secundarios ──
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-                child: SizedBox(
-                  height: 36,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    children: [
-                      _SecondaryFilterButton(
-                        icon: Icons.calendar_today,
-                        label: selectedYear?.toString() ?? 'Año',
-                        active: selectedYear != null,
-                        onTap: () => _showInvoiceYearSheet(context, ref, yearCounts),
-                      ),
-                      const SizedBox(width: 8),
-                      _SecondaryFilterButton(
-                        icon: Icons.date_range,
-                        label: monthLabel ?? 'Mes',
-                        active: selectedMonth != null,
-                        onTap: () => _showInvoiceMonthSheet(context, ref, monthsWithData),
-                      ),
-                      const SizedBox(width: 8),
-                      _SecondaryFilterButton(
-                        icon: Icons.person,
-                        label: clientFilterName ?? 'Cliente',
-                        active: clientFilter != null,
-                        onTap: () => _showInvoiceClientSheet(context, ref, clients, clientInvoiceCounts),
-                      ),
-                      if (hasActiveFilters) ...[
-                        const SizedBox(width: 8),
-                        _InvClearFiltersButton(onTap: () => _clearAllInvoiceFilters(ref)),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-
-              // ── Lista o empty state ──
-              if (filtered.isEmpty)
-                const Expanded(
-                  child: EmptyState(
-                    icon: Icons.receipt_long_outlined,
-                    message: AppStrings.sinFacturas,
-                  ),
-                )
-              else
-                Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 8).copyWith(bottom: 80),
-                    itemCount: filtered.length,
-                    itemBuilder: (context, index) {
-                      final inv = filtered[index];
-                      return _InvoiceTile(
-                        invoice: inv,
-                        selectionMode: selectionMode,
-                        isSelected: selectedInvoices.contains(inv.id),
-                        onSelect: (selected) {
-                          final current = ref.read(_selectedInvoicesProvider);
-                          if (selected) {
-                            ref.read(_selectedInvoicesProvider.notifier).state = {...current, inv.id};
-                          } else {
-                            ref.read(_selectedInvoicesProvider.notifier).state = current.where((id) => id != inv.id).toSet();
-                          }
-                        },
-                        onLongPress: () {
-                          if (!selectionMode) {
-                            ref.read(_selectionModeProvider.notifier).state = true;
-                            ref.read(_selectedInvoicesProvider.notifier).state = {inv.id};
-                          }
-                        },
-                      );
-                    },
-                  ),
-                ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showSelectionActionFeedback(BuildContext context, String message) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          duration: const Duration(milliseconds: 700),
+        ),
+      );
+  }
+
+  Future<void> _bulkShareInvoices(
+    BuildContext context,
+    WidgetRef ref,
+    Set<String> ids,
+  ) async {
+    final box = context.findRenderObject() as RenderBox?;
+    final shareOrigin = box != null
+        ? box.localToGlobal(Offset.zero) & box.size
+        : const Rect.fromLTWH(0, 0, 100, 100);
+
+    try {
+      final invoices = ref.read(invoicesProvider).valueOrNull ?? [];
+      final selected =
+          invoices.where((invoice) => ids.contains(invoice.id)).toList()
+            ..sort((a, b) => a.numero.compareTo(b.numero));
+      final settings = await ref.read(settingsProvider.future);
+      final files = <XFile>[];
+
+      for (final invoice in selected) {
+        final client = await ref.read(
+          clientByIdProvider(invoice.clientId).future,
+        );
+        if (client == null) continue;
+        final file = await PdfService().generateInvoicePdf(
+          invoice: invoice,
+          client: client,
+          settings: settings,
+        );
+        files.add(XFile(file.path));
+      }
+
+      if (files.isEmpty) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No se pudieron generar PDFs')),
           );
-        },
-        loading: () => Column(
-          children: List.generate(5, (_) => const InvoiceCardSkeleton()),
-        ),
-        error: (e, _) => Center(child: Text('Error: $e')),
-      ),
-    );
+        }
+        return;
+      }
+
+      await Share.shareXFiles(files, sharePositionOrigin: shareOrigin);
+
+      ref.read(_selectionModeProvider.notifier).state = false;
+      ref.read(_selectedInvoicesProvider.notifier).state = {};
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error enviando facturas: $e')));
+      }
+    }
   }
 
-  AppBar _buildSelectionAppBar(BuildContext context, WidgetRef ref, Set<String> selectedInvoices) {
-    return AppBar(
-      leading: IconButton(
-        icon: const Icon(Icons.close),
-        onPressed: () {
-          ref.read(_selectionModeProvider.notifier).state = false;
-          ref.read(_selectedInvoicesProvider.notifier).state = {};
-        },
-      ),
-      title: Text('${selectedInvoices.length} seleccionadas'),
-      actions: [
-        // Marcar como pendiente de cobro
-        IconButton(
-          icon: const Icon(Icons.send),
-          tooltip: 'Marcar como pendiente',
-          onPressed: selectedInvoices.isEmpty
-              ? null
-              : () => _bulkMarkAs(context, ref, selectedInvoices, InvoiceStatus.enviada),
-        ),
-        // Marcar como cobrada
-        IconButton(
-          icon: const Icon(Icons.check_circle),
-          tooltip: 'Marcar como cobrada',
-          onPressed: selectedInvoices.isEmpty
-              ? null
-              : () => _bulkMarkAs(context, ref, selectedInvoices, InvoiceStatus.pagada),
-        ),
-        // Revertir estado
-        IconButton(
-          icon: const Icon(Icons.undo),
-          tooltip: 'Revertir estado',
-          onPressed: selectedInvoices.isEmpty
-              ? null
-              : () => _bulkRevert(context, ref, selectedInvoices),
-        ),
-        // Seleccionar todas
-        PopupMenuButton<String>(
-          icon: const Icon(Icons.more_vert),
-          onSelected: (value) async {
-            if (value == 'selectAll') {
-              final invoices = ref.read(invoicesProvider).valueOrNull ?? [];
-              ref.read(_selectedInvoicesProvider.notifier).state = 
-                  invoices.map((i) => i.id).toSet();
-            } else if (value == 'deselectAll') {
-              ref.read(_selectedInvoicesProvider.notifier).state = {};
-            }
-          },
-          itemBuilder: (context) => [
-            const PopupMenuItem(
-              value: 'selectAll',
-              child: Row(
-                children: [
-                  Icon(Icons.select_all, size: 20),
-                  SizedBox(width: 12),
-                  Text('Seleccionar todas'),
-                ],
-              ),
-            ),
-            const PopupMenuItem(
-              value: 'deselectAll',
-              child: Row(
-                children: [
-                  Icon(Icons.deselect, size: 20),
-                  SizedBox(width: 12),
-                  Text('Deseleccionar todas'),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
+  Future<void> _bulkMarkAs(
+    BuildContext context,
+    WidgetRef ref,
+    Set<String> ids,
+    InvoiceStatus status,
+  ) async {
+    final statusLabel = status == InvoiceStatus.enviada
+        ? 'pendientes'
+        : 'cobradas';
 
-  Future<void> _bulkMarkAs(BuildContext context, WidgetRef ref, Set<String> ids, InvoiceStatus status) async {
-    final statusLabel = status == InvoiceStatus.enviada ? 'pendientes' : 'cobradas';
-    
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -453,13 +801,16 @@ class InvoicesListScreen extends ConsumerWidget {
 
     if (confirm == true && context.mounted) {
       final invoices = ref.read(invoicesProvider).valueOrNull ?? [];
-      
+
       for (final id in ids) {
-        final invoice = invoices.firstWhere((i) => i.id == id, orElse: () => throw Exception());
-        
+        final invoice = invoices.firstWhere(
+          (i) => i.id == id,
+          orElse: () => throw Exception(),
+        );
+
         // Actualizar factura
         await ref.read(invoicesProvider.notifier).updateStatus(id, status);
-        
+
         // Actualizar gig asociado
         final gig = await ref.read(gigByIdProvider(invoice.gigId).future);
         if (gig != null) {
@@ -469,39 +820,53 @@ class InvoicesListScreen extends ConsumerWidget {
             // Programar recordatorio
             final settings = await ref.read(settingsProvider.future);
             if (settings.notificacionesActivas) {
-              final client = await ref.read(clientByIdProvider(invoice.clientId).future);
+              final client = await ref.read(
+                clientByIdProvider(invoice.clientId).future,
+              );
               if (client != null) {
                 await NotificationService.instance.schedulePaymentReminder(
                   id: invoice.numero,
                   clientName: client.nombre,
                   total: invoice.total,
                   invoiceNumber: invoice.numero,
-                  scheduledDate: DateTime.now().add(Duration(days: settings.diasRecordatorio)),
+                  scheduledDate: DateTime.now().add(
+                    Duration(days: settings.diasRecordatorio),
+                  ),
                 );
               }
             }
           } else {
             newGigStatus = GigStatus.pagado;
-            await NotificationService.instance.cancelNotification(invoice.numero);
+            await NotificationService.instance.cancelNotification(
+              invoice.numero,
+            );
           }
-          
-          await ref.read(gigsProvider.notifier).updateStatus(gig.id, newGigStatus);
+
+          await ref
+              .read(gigsProvider.notifier)
+              .updateStatus(gig.id, newGigStatus);
           await _syncGigToCalendar(ref, gig.copyWith(status: newGigStatus));
         }
       }
-      
+
       ref.read(_selectionModeProvider.notifier).state = false;
       ref.read(_selectedInvoicesProvider.notifier).state = {};
-      
+
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${ids.length} facturas marcadas como $statusLabel')),
+          SnackBar(
+            content: Text('${ids.length} facturas marcadas como $statusLabel'),
+          ),
         );
       }
     }
   }
 
-  Future<void> _bulkRevert(BuildContext context, WidgetRef ref, Set<String> ids) async {
+  Future<void> _bulkRevert(
+    BuildContext context,
+    WidgetRef ref,
+    Set<String> ids,
+  ) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -523,12 +888,15 @@ class InvoicesListScreen extends ConsumerWidget {
     if (confirm == true && context.mounted) {
       final invoices = ref.read(invoicesProvider).valueOrNull ?? [];
       int count = 0;
-      
+
       for (final id in ids) {
-        final invoice = invoices.firstWhere((i) => i.id == id, orElse: () => throw Exception());
+        final invoice = invoices.firstWhere(
+          (i) => i.id == id,
+          orElse: () => throw Exception(),
+        );
         InvoiceStatus? newStatus;
         GigStatus? newGigStatus;
-        
+
         if (invoice.status == InvoiceStatus.pagada) {
           newStatus = InvoiceStatus.enviada;
           newGigStatus = GigStatus.facturaEnviada;
@@ -536,28 +904,30 @@ class InvoicesListScreen extends ConsumerWidget {
           newStatus = InvoiceStatus.borrador;
           newGigStatus = GigStatus.facturaGenerada;
         }
-        
+
         if (newStatus != null) {
           await ref.read(invoicesProvider.notifier).updateStatus(id, newStatus);
-          
+
           // Actualizar gig asociado
           final gig = await ref.read(gigByIdProvider(invoice.gigId).future);
           if (gig != null && newGigStatus != null) {
-            await ref.read(gigsProvider.notifier).updateStatus(gig.id, newGigStatus);
+            await ref
+                .read(gigsProvider.notifier)
+                .updateStatus(gig.id, newGigStatus);
             await _syncGigToCalendar(ref, gig.copyWith(status: newGigStatus));
           }
-          
+
           count++;
         }
       }
-      
+
       ref.read(_selectionModeProvider.notifier).state = false;
       ref.read(_selectedInvoicesProvider.notifier).state = {};
-      
+
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$count facturas revertidas')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$count facturas revertidas')));
       }
     }
   }
@@ -607,8 +977,13 @@ class InvoicesListScreen extends ConsumerWidget {
 
   // ─── Bottom sheets para filtros ───
 
-  void _showInvoiceYearSheet(BuildContext context, WidgetRef ref, Map<int, int> yearCounts) {
-    final sortedYears = yearCounts.keys.toList()..sort((a, b) => b.compareTo(a));
+  void _showInvoiceYearSheet(
+    BuildContext context,
+    WidgetRef ref,
+    Map<int, int> yearCounts,
+  ) {
+    final sortedYears = yearCounts.keys.toList()
+      ..sort((a, b) => b.compareTo(a));
     final selectedYear = ref.read(_invoiceYearFilterProvider);
 
     showModalBottomSheet(
@@ -624,7 +999,10 @@ class InvoicesListScreen extends ConsumerWidget {
           children: [
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16),
-              child: Text('Filtrar por año', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              child: Text(
+                'Filtrar por año',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
             ),
             const SizedBox(height: 8),
             RadioGroup<int?>(
@@ -641,11 +1019,13 @@ class InvoicesListScreen extends ConsumerWidget {
                     title: Text('Todos los años'),
                     value: null,
                   ),
-                  ...sortedYears.map((year) => RadioListTile<int?>(
-                    title: Text(year.toString()),
-                    subtitle: Text('${yearCounts[year]} facturas'),
-                    value: year,
-                  )),
+                  ...sortedYears.map(
+                    (year) => RadioListTile<int?>(
+                      title: Text(year.toString()),
+                      subtitle: Text('${yearCounts[year]} facturas'),
+                      value: year,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -655,7 +1035,11 @@ class InvoicesListScreen extends ConsumerWidget {
     );
   }
 
-  void _showInvoiceMonthSheet(BuildContext context, WidgetRef ref, Map<int, int> monthsWithData) {
+  void _showInvoiceMonthSheet(
+    BuildContext context,
+    WidgetRef ref,
+    Map<int, int> monthsWithData,
+  ) {
     final selectedMonth = ref.read(_invoiceMonthFilterProvider);
 
     showModalBottomSheet(
@@ -669,12 +1053,19 @@ class InvoicesListScreen extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Filtrar por mes', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const Text(
+              'Filtrar por mes',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 12),
             ListTile(
               leading: Icon(
-                selectedMonth == null ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                color: selectedMonth == null ? AppColors.primary : AppColors.textSecondary,
+                selectedMonth == null
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_unchecked,
+                color: selectedMonth == null
+                    ? AppColors.primary
+                    : AppColors.textSecondary,
               ),
               title: const Text('Todos los meses'),
               contentPadding: EdgeInsets.zero,
@@ -704,7 +1095,8 @@ class InvoicesListScreen extends ConsumerWidget {
                 return GestureDetector(
                   onTap: hasData
                       ? () {
-                          ref.read(_invoiceMonthFilterProvider.notifier).state = month;
+                          ref.read(_invoiceMonthFilterProvider.notifier).state =
+                              month;
                           Navigator.pop(ctx);
                         }
                       : null,
@@ -714,15 +1106,15 @@ class InvoicesListScreen extends ConsumerWidget {
                       color: isSelected
                           ? AppColors.primary
                           : hasData
-                              ? AppColors.primaryLight
-                              : AppColors.surface,
+                          ? AppColors.primaryLight
+                          : AppColors.surface,
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
                         color: isSelected
                             ? AppColors.primary
                             : hasData
-                                ? AppColors.cardBorder
-                                : AppColors.divider,
+                            ? AppColors.cardBorder
+                            : AppColors.divider,
                       ),
                     ),
                     child: Column(
@@ -732,12 +1124,16 @@ class InvoicesListScreen extends ConsumerWidget {
                           name,
                           style: TextStyle(
                             fontSize: 12,
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                            fontWeight: isSelected
+                                ? FontWeight.bold
+                                : FontWeight.normal,
                             color: isSelected
                                 ? Colors.white
                                 : hasData
-                                    ? AppColors.textPrimary
-                                    : AppColors.textSecondary.withValues(alpha: 0.4),
+                                ? AppColors.textPrimary
+                                : AppColors.textSecondary.withValues(
+                                    alpha: 0.4,
+                                  ),
                           ),
                         ),
                         if (hasData)
@@ -745,7 +1141,9 @@ class InvoicesListScreen extends ConsumerWidget {
                             '${monthsWithData[month]}',
                             style: TextStyle(
                               fontSize: 10,
-                              color: isSelected ? Colors.white70 : AppColors.textSecondary,
+                              color: isSelected
+                                  ? Colors.white70
+                                  : AppColors.textSecondary,
                             ),
                           ),
                       ],
@@ -766,10 +1164,11 @@ class InvoicesListScreen extends ConsumerWidget {
     List<Client> clients,
     Map<String, int> invoiceCounts,
   ) {
-    final clientsWithInvoices = clients
-        .where((c) => (invoiceCounts[c.id] ?? 0) > 0)
-        .toList()
-      ..sort((a, b) => (invoiceCounts[b.id] ?? 0).compareTo(invoiceCounts[a.id] ?? 0));
+    final clientsWithInvoices =
+        clients.where((c) => (invoiceCounts[c.id] ?? 0) > 0).toList()..sort(
+          (a, b) =>
+              (invoiceCounts[b.id] ?? 0).compareTo(invoiceCounts[a.id] ?? 0),
+        );
 
     final selectedClientId = ref.read(_invoiceClientFilterProvider);
 
@@ -826,13 +1225,157 @@ class _FilterChip extends StatelessWidget {
   }
 }
 
+class _InlineActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _InlineActionButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(10),
+          child: _InlineActionButtonContent(icon: icon, label: label),
+        ),
+      ),
+    );
+  }
+}
+
+class _InlineActionButtonContent extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _InlineActionButtonContent({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.cardBorder),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 18, color: AppColors.primary),
+          const SizedBox(width: 6),
+          Flexible(
+            child: MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.noScaling),
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.primary,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SelectionBottomAction extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool enabled;
+
+  const _SelectionBottomAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.enabled = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: enabled ? onTap : null,
+          child: _SelectionBottomActionContent(
+            icon: icon,
+            label: label,
+            enabled: enabled,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SelectionBottomActionContent extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool enabled;
+
+  const _SelectionBottomActionContent({
+    required this.icon,
+    required this.label,
+    required this.enabled,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = enabled
+        ? AppColors.primary
+        : AppColors.textSecondary.withValues(alpha: 0.4);
+
+    return MediaQuery(
+      data: MediaQuery.of(context).copyWith(textScaler: TextScaler.noScaling),
+      child: SizedBox(
+        height: 74,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: color, size: 24),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: color,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _InvoiceTile extends ConsumerWidget {
   final Invoice invoice;
   final bool selectionMode;
   final bool isSelected;
   final ValueChanged<bool>? onSelect;
   final VoidCallback? onLongPress;
-  
+
   const _InvoiceTile({
     required this.invoice,
     this.selectionMode = false,
@@ -902,7 +1445,8 @@ class _InvoiceTile extends ConsumerWidget {
                 ),
               ),
         title: clientAsync.when(
-          data: (c) => Text(c?.alias.isNotEmpty == true ? c!.alias : c?.nombre ?? ''),
+          data: (c) =>
+              Text(c?.alias.isNotEmpty == true ? c!.alias : c?.nombre ?? ''),
           loading: () => const Text('...'),
           error: (_, __) => const Text('Error'),
         ),
@@ -925,7 +1469,11 @@ class _InvoiceTile extends ConsumerWidget {
               ),
               child: Text(
                 invoice.status.label,
-                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: _statusTextColor),
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: _statusTextColor,
+                ),
               ),
             ),
           ],
@@ -937,7 +1485,7 @@ class _InvoiceTile extends ConsumerWidget {
 
 Future<void> _showRenumberDialog(BuildContext context, WidgetRef ref) async {
   final controller = TextEditingController(text: '1');
-  
+
   final startNumber = await showDialog<int>(
     context: context,
     builder: (ctx) => AlertDialog(
@@ -969,7 +1517,10 @@ Future<void> _showRenumberDialog(BuildContext context, WidgetRef ref) async {
             ),
             child: Row(
               children: [
-                Icon(Icons.warning_amber_rounded, color: Colors.orange.shade700),
+                Icon(
+                  Icons.warning_amber_rounded,
+                  color: Colors.orange.shade700,
+                ),
                 const SizedBox(width: 8),
                 const Expanded(
                   child: Text(
@@ -1015,9 +1566,7 @@ Future<void> _showRenumberDialog(BuildContext context, WidgetRef ref) async {
             child: const Text('Cancelar'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange,
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Confirmar'),
           ),
@@ -1027,7 +1576,7 @@ Future<void> _showRenumberDialog(BuildContext context, WidgetRef ref) async {
 
     if (confirm == true && context.mounted) {
       await ref.read(invoicesProvider.notifier).renumberAll(startNumber);
-      
+
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Facturas reenumeradas correctamente')),
@@ -1058,13 +1607,13 @@ class _SecondaryFilterButton extends StatelessWidget {
     final bgColor = active
         ? AppColors.warningBg
         : disabled
-            ? AppColors.surface
-            : AppColors.surface;
+        ? AppColors.surface
+        : AppColors.surface;
     final fgColor = active
         ? AppColors.warning
         : disabled
-            ? AppColors.textSecondary.withValues(alpha: 0.5)
-            : AppColors.textSecondary;
+        ? AppColors.textSecondary.withValues(alpha: 0.5)
+        : AppColors.textSecondary;
 
     return GestureDetector(
       onTap: onTap,
@@ -1074,7 +1623,9 @@ class _SecondaryFilterButton extends StatelessWidget {
           color: bgColor,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: active ? AppColors.warning.withValues(alpha: 0.3) : AppColors.cardBorder,
+            color: active
+                ? AppColors.warning.withValues(alpha: 0.3)
+                : AppColors.cardBorder,
           ),
         ),
         child: Row(
@@ -1122,7 +1673,11 @@ class _InvClearFiltersButton extends StatelessWidget {
             SizedBox(width: 4),
             Text(
               'Limpiar',
-              style: TextStyle(fontSize: 12, color: AppColors.error, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                fontSize: 12,
+                color: AppColors.error,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
         ),
@@ -1168,7 +1723,9 @@ class _InvClientSheetContentState extends State<_InvClientSheetContent> {
         : widget.clients.where((c) {
             if (c.nombre.toLowerCase().contains(lower)) return true;
             if (c.alias.toLowerCase().contains(lower)) return true;
-            if (c.aliases.any((a) => a.toLowerCase().contains(lower))) return true;
+            if (c.aliases.any((a) => a.toLowerCase().contains(lower))) {
+              return true;
+            }
             return false;
           }).toList();
 
@@ -1186,7 +1743,10 @@ class _InvClientSheetContentState extends State<_InvClientSheetContent> {
         const SizedBox(height: 12),
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: 16),
-          child: Text('Filtrar por cliente', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          child: Text(
+            'Filtrar por cliente',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
         ),
         const SizedBox(height: 8),
         Padding(
@@ -1198,7 +1758,9 @@ class _InvClientSheetContentState extends State<_InvClientSheetContent> {
               prefixIcon: const Icon(Icons.search, size: 20),
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(vertical: 8),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             onChanged: (v) => setState(() => _query = v),
           ),
@@ -1210,8 +1772,12 @@ class _InvClientSheetContentState extends State<_InvClientSheetContent> {
             children: [
               ListTile(
                 leading: Icon(
-                  widget.selectedClientId == null ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                  color: widget.selectedClientId == null ? AppColors.primary : AppColors.textSecondary,
+                  widget.selectedClientId == null
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_unchecked,
+                  color: widget.selectedClientId == null
+                      ? AppColors.primary
+                      : AppColors.textSecondary,
                 ),
                 title: const Text('Todos los clientes'),
                 onTap: () => widget.onSelect(null),
@@ -1219,11 +1785,17 @@ class _InvClientSheetContentState extends State<_InvClientSheetContent> {
               ...filtered.map((client) {
                 final isSelected = widget.selectedClientId == client.id;
                 final count = widget.invoiceCounts[client.id] ?? 0;
-                final displayName = client.alias.isNotEmpty ? client.alias : client.nombre;
+                final displayName = client.alias.isNotEmpty
+                    ? client.alias
+                    : client.nombre;
                 return ListTile(
                   leading: Icon(
-                    isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                    color: isSelected ? AppColors.primary : AppColors.textSecondary,
+                    isSelected
+                        ? Icons.radio_button_checked
+                        : Icons.radio_button_unchecked,
+                    color: isSelected
+                        ? AppColors.primary
+                        : AppColors.textSecondary,
                   ),
                   title: Text(displayName),
                   subtitle: Text('$count facturas'),

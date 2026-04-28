@@ -7,11 +7,19 @@ import '../../models/expense.dart';
 import '../../providers/expenses_provider.dart';
 import '../../widgets/common/empty_state.dart';
 
-final _expenseCategoryFilterProvider =
-    StateProvider<ExpenseCategory?>((ref) => null);
+final _expenseCategoryFilterProvider = StateProvider<ExpenseCategory?>(
+  (ref) => null,
+);
 final _expenseMonthFilterProvider = StateProvider<int?>((ref) => null);
-final _expenseYearFilterProvider =
-    StateProvider<int?>((ref) => DateTime.now().year);
+final _expenseYearFilterProvider = StateProvider<int?>(
+  (ref) => DateTime.now().year,
+);
+
+enum ExpenseSortOption { fechaDesc, fechaAsc, importeDesc, importeAsc }
+
+final _expenseSortProvider = StateProvider<ExpenseSortOption>(
+  (ref) => ExpenseSortOption.fechaDesc,
+);
 
 class ExpensesScreen extends ConsumerWidget {
   const ExpensesScreen({super.key});
@@ -22,36 +30,9 @@ class ExpensesScreen extends ConsumerWidget {
     final categoriaFilter = ref.watch(_expenseCategoryFilterProvider);
     final monthFilter = ref.watch(_expenseMonthFilterProvider);
     final yearFilter = ref.watch(_expenseYearFilterProvider);
+    final sortOption = ref.watch(_expenseSortProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Gastos'),
-        actions: [
-          PopupMenuButton<ExpenseCategory?>(
-            icon: Icon(
-              Icons.filter_list,
-              color: categoriaFilter != null ? AppColors.primary : null,
-            ),
-            tooltip: 'Filtrar por categoría',
-            onSelected: (value) {
-              ref.read(_expenseCategoryFilterProvider.notifier).state = value;
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: null,
-                child: Text('Todas las categorías'),
-              ),
-              const PopupMenuDivider(),
-              ...ExpenseCategory.values.map(
-                (cat) => PopupMenuItem(
-                  value: cat,
-                  child: Text(cat.label),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
       body: expensesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Error: $e')),
@@ -62,21 +43,31 @@ class ExpensesScreen extends ConsumerWidget {
             monthFilter,
             yearFilter,
           );
-
-          if (filtered.isEmpty) {
-            return const EmptyState(
-              icon: Icons.receipt_long_outlined,
-              message: 'Sin gastos. Añade el primero con el botón +',
-            );
-          }
+          _sortExpenses(filtered, sortOption);
 
           final totalMes = filtered.fold(0.0, (s, e) => s + e.total);
-          final ivaSoportado =
-              filtered.where((e) => e.esDeducible).fold(0.0, (s, e) => s + e.ivaAmount * (e.porcentajeDeduccion / 100));
+          final ivaSoportado = filtered
+              .where((e) => e.esDeducible)
+              .fold(
+                0.0,
+                (s, e) => s + e.ivaAmount * (e.porcentajeDeduccion / 100),
+              );
 
           return Column(
             children: [
+              const _CompactHeader(title: 'Gastos'),
               _ResumenBanner(total: totalMes, ivaSoportado: ivaSoportado),
+              _ExpenseActions(
+                category: categoriaFilter,
+                sortOption: sortOption,
+                onCategoryChanged: (value) {
+                  ref.read(_expenseCategoryFilterProvider.notifier).state =
+                      value;
+                },
+                onSortChanged: (value) {
+                  ref.read(_expenseSortProvider.notifier).state = value;
+                },
+              ),
               _FiltroMes(
                 year: yearFilter,
                 month: monthFilter,
@@ -85,21 +76,31 @@ class ExpensesScreen extends ConsumerWidget {
                   ref.read(_expenseMonthFilterProvider.notifier).state = m;
                 },
               ),
-              Expanded(
-                child: ListView.separated(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 8),
-                  itemCount: filtered.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
-                  itemBuilder: (context, index) {
-                    return _ExpenseCard(
-                      expense: filtered[index],
-                      onTap: () =>
-                          context.push('/expense/${filtered[index].id}'),
-                    );
-                  },
+              if (filtered.isEmpty)
+                const Expanded(
+                  child: EmptyState(
+                    icon: Icons.receipt_long_outlined,
+                    message: 'Sin gastos para este filtro',
+                  ),
+                )
+              else
+                Expanded(
+                  child: ListView.separated(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    itemCount: filtered.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    itemBuilder: (context, index) {
+                      return _ExpenseCard(
+                        expense: filtered[index],
+                        onTap: () =>
+                            context.push('/expense/${filtered[index].id}'),
+                      );
+                    },
+                  ),
                 ),
-              ),
             ],
           );
         },
@@ -124,6 +125,121 @@ class ExpensesScreen extends ConsumerWidget {
       return true;
     }).toList();
   }
+
+  void _sortExpenses(List<Expense> expenses, ExpenseSortOption option) {
+    expenses.sort((a, b) {
+      switch (option) {
+        case ExpenseSortOption.fechaDesc:
+          return b.fecha.compareTo(a.fecha);
+        case ExpenseSortOption.fechaAsc:
+          return a.fecha.compareTo(b.fecha);
+        case ExpenseSortOption.importeDesc:
+          return b.total.compareTo(a.total);
+        case ExpenseSortOption.importeAsc:
+          return a.total.compareTo(b.total);
+      }
+    });
+  }
+}
+
+class _CompactHeader extends StatelessWidget {
+  final String title;
+
+  const _CompactHeader({required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      alignment: Alignment.centerLeft,
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        border: Border(
+          bottom: BorderSide(color: AppColors.cardBorder, width: 0.5),
+        ),
+      ),
+      child: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.w500,
+          color: AppColors.textPrimary,
+        ),
+      ),
+    );
+  }
+}
+
+class _ExpenseActions extends StatelessWidget {
+  final ExpenseCategory? category;
+  final ExpenseSortOption sortOption;
+  final ValueChanged<ExpenseCategory?> onCategoryChanged;
+  final ValueChanged<ExpenseSortOption> onSortChanged;
+
+  const _ExpenseActions({
+    required this.category,
+    required this.sortOption,
+    required this.onCategoryChanged,
+    required this.onSortChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: PopupMenuButton<ExpenseCategory?>(
+              onSelected: onCategoryChanged,
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: null,
+                  child: Text('Todas las categorías'),
+                ),
+                const PopupMenuDivider(),
+                ...ExpenseCategory.values.map(
+                  (cat) => PopupMenuItem(value: cat, child: Text(cat.label)),
+                ),
+              ],
+              child: _ActionPill(
+                icon: Icons.filter_list,
+                label: category?.label ?? 'Categoría',
+                active: category != null,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: PopupMenuButton<ExpenseSortOption>(
+              onSelected: onSortChanged,
+              itemBuilder: (context) => const [
+                PopupMenuItem(
+                  value: ExpenseSortOption.fechaDesc,
+                  child: Text('Fecha reciente'),
+                ),
+                PopupMenuItem(
+                  value: ExpenseSortOption.fechaAsc,
+                  child: Text('Fecha antigua'),
+                ),
+                PopupMenuDivider(),
+                PopupMenuItem(
+                  value: ExpenseSortOption.importeDesc,
+                  child: Text('Importe mayor'),
+                ),
+                PopupMenuItem(
+                  value: ExpenseSortOption.importeAsc,
+                  child: Text('Importe menor'),
+                ),
+              ],
+              child: const _ActionPill(icon: Icons.sort, label: 'Ordenar'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _ResumenBanner extends StatelessWidget {
@@ -146,17 +262,14 @@ class _ResumenBanner extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: _Stat(
-                label: 'Total gastos', value: fmt.format(total)),
+            child: _Stat(label: 'Total gastos', value: fmt.format(total)),
           ),
-          Container(
-            width: 1,
-            height: 32,
-            color: AppColors.divider,
-          ),
+          Container(width: 1, height: 32, color: AppColors.divider),
           Expanded(
             child: _Stat(
-                label: 'IVA soportado', value: fmt.format(ivaSoportado)),
+              label: 'IVA soportado',
+              value: fmt.format(ivaSoportado),
+            ),
           ),
         ],
       ),
@@ -185,10 +298,7 @@ class _Stat extends StatelessWidget {
         const SizedBox(height: 2),
         Text(
           label,
-          style: const TextStyle(
-            fontSize: 11,
-            color: AppColors.textSecondary,
-          ),
+          style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
         ),
       ],
     );
@@ -209,8 +319,18 @@ class _FiltroMes extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final months = [
-      'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
-      'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic',
+      'Ene',
+      'Feb',
+      'Mar',
+      'Abr',
+      'May',
+      'Jun',
+      'Jul',
+      'Ago',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dic',
     ];
     return SizedBox(
       height: 36,
@@ -225,6 +345,11 @@ class _FiltroMes extends StatelessWidget {
             return FilterChip(
               label: const Text('Todo'),
               selected: selected,
+              selectedColor: AppColors.primary,
+              checkmarkColor: Colors.white,
+              labelStyle: TextStyle(
+                color: selected ? Colors.white : AppColors.textPrimary,
+              ),
               onSelected: (_) => onChanged(year, null),
             );
           }
@@ -233,9 +358,66 @@ class _FiltroMes extends StatelessWidget {
           return FilterChip(
             label: Text(months[m - 1]),
             selected: selected,
+            selectedColor: AppColors.primary,
+            checkmarkColor: Colors.white,
+            labelStyle: TextStyle(
+              color: selected ? Colors.white : AppColors.textPrimary,
+            ),
             onSelected: (_) => onChanged(year, selected ? null : m),
           );
         },
+      ),
+    );
+  }
+}
+
+class _ActionPill extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool active;
+
+  const _ActionPill({
+    required this.icon,
+    required this.label,
+    this.active = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = active ? AppColors.primary : AppColors.textPrimary;
+    return Container(
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: active ? AppColors.primary : AppColors.cardBorder,
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 6),
+          Flexible(
+            child: MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.noScaling),
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: color,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

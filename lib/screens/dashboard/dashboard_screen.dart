@@ -96,10 +96,12 @@ class DashboardScreen extends ConsumerWidget {
             const SizedBox(height: 24),
 
             // Recent gigs
-            Text(AppStrings.ultimosBolos,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    )),
+            Text(
+              AppStrings.ultimosBolos,
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 8),
             recentAsync.when(
               data: (gigs) {
@@ -175,18 +177,20 @@ class DashboardScreen extends ConsumerWidget {
         const SizedBox(height: 16),
 
         // Ingresos oficiales
-        Text(AppStrings.ingresosOficiales,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                )),
+        Text(
+          AppStrings.ingresosOficiales,
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+        ),
         const SizedBox(height: 8),
         Row(
           children: [
             Expanded(
               child: SummaryCard(
                 title: 'Cobrado',
-                value: CurrencyFormatter.format(stats.cobrado),
-                numericValue: stats.cobrado,
+                value: CurrencyFormatter.format(stats.cobradoOficial),
+                numericValue: stats.cobradoOficial,
                 color: AppColors.success,
                 icon: Icons.check_circle_outline,
                 showChevron: true,
@@ -194,34 +198,32 @@ class DashboardScreen extends ConsumerWidget {
                 subtitle: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (stats.cobradoHistorico > 0) ...[
-                      Text(
-                        '(facturas: ${CurrencyFormatter.format(stats.cobradoFacturas)}',
-                        style: const TextStyle(fontSize: 11, color: Color(0xFF8C95A6)),
+                    Text(
+                      '(facturas: ${CurrencyFormatter.format(stats.cobradoFacturas)}',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Color(0xFF8C95A6),
                       ),
-                      Text(
-                        ' + histórico: ${CurrencyFormatter.format(stats.cobradoHistorico)}',
-                        style: const TextStyle(fontSize: 11, color: Color(0xFF8C95A6)),
+                    ),
+                    Text(
+                      ' + histórico: ${CurrencyFormatter.format(stats.cobradoHistorico)})',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Color(0xFF8C95A6),
                       ),
-                      Text(
-                        ' + en B: ${CurrencyFormatter.format(stats.cobradoEnB)})',
-                        style: const TextStyle(fontSize: 11, color: Color(0xFF8C95A6)),
-                      ),
-                    ] else ...[
-                      Text(
-                        '(facturas: ${CurrencyFormatter.format(stats.cobradoFacturas)}',
-                        style: const TextStyle(fontSize: 11, color: Color(0xFF8C95A6)),
-                      ),
-                      Text(
-                        ' + en B: ${CurrencyFormatter.format(stats.cobradoEnB)})',
-                        style: const TextStyle(fontSize: 11, color: Color(0xFF8C95A6)),
-                      ),
-                    ],
-                    _buildComparison(stats.cobrado, stats.prevCobrado, stats.prevLabel),
+                    ),
+                    _buildComparison(
+                      stats.cobradoOficial,
+                      stats.prevCobrado,
+                      stats.prevLabel,
+                    ),
                   ],
                 ),
-                onInfoTap: () => _showMetricInfo(context, 'Cobrado',
-                  'Dinero ya recibido.\n· Facturas marcadas como pagadas\n· Bolos históricos importados sin factura\n· Cobros en B confirmados'),
+                onInfoTap: () => _showMetricInfo(
+                  context,
+                  'Cobrado',
+                  'Dinero ya recibido.\n· Facturas marcadas como pagadas\n· Bolos históricos importados sin factura\n· Cobros en B confirmados',
+                ),
               ),
             ),
             const SizedBox(width: 12),
@@ -236,10 +238,16 @@ class DashboardScreen extends ConsumerWidget {
                 onTap: () => context.go('/finanzas'),
                 subtitle: Text(
                   '(${stats.pendienteCount} factura${stats.pendienteCount == 1 ? '' : 's'} emitida${stats.pendienteCount == 1 ? '' : 's'} sin cobrar)',
-                  style: const TextStyle(fontSize: 11, color: Color(0xFF8C95A6)),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF8C95A6),
+                  ),
                 ),
-                onInfoTap: () => _showMetricInfo(context, 'Pendiente',
-                  'Trabajo realizado con factura enviada\nal cliente, a la espera de que paguen.\nNo incluye bolos sin factura emitida.'),
+                onInfoTap: () => _showMetricInfo(
+                  context,
+                  'Pendiente',
+                  'Trabajo realizado con factura enviada\nal cliente, a la espera de que paguen.\nNo incluye bolos sin factura emitida.',
+                ),
               ),
             ),
           ],
@@ -259,8 +267,11 @@ class DashboardScreen extends ConsumerWidget {
               '(${stats.previstoCount} bolo${stats.previstoCount == 1 ? '' : 's'} confirmado${stats.previstoCount == 1 ? '' : 's'} en agenda\n aún no realizado${stats.previstoCount == 1 ? '' : 's'} ni facturado${stats.previstoCount == 1 ? '' : 's'})',
               style: const TextStyle(fontSize: 11, color: Color(0xFF8C95A6)),
             ),
-            onInfoTap: () => _showMetricInfo(context, 'Previsto',
-              'Bolos que tienes en agenda confirmados\npero que aún no has realizado ni facturado.\nEs dinero esperado, puede cambiar.'),
+            onInfoTap: () => _showMetricInfo(
+              context,
+              'Previsto',
+              'Bolos que tienes en agenda confirmados\npero que aún no has realizado ni facturado.\nEs dinero esperado, puede cambiar.',
+            ),
           ),
           const SizedBox(height: 8),
         ],
@@ -277,10 +288,16 @@ class DashboardScreen extends ConsumerWidget {
                 icon: Icons.account_balance,
                 subtitle: Text(
                   '(cobrado oficial ${CurrencyFormatter.format(stats.cobradoOficial)}\n + pendiente ${CurrencyFormatter.format(stats.pendiente)})',
-                  style: const TextStyle(fontSize: 11, color: Color(0xFF8C95A6)),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF8C95A6),
+                  ),
                 ),
-                onInfoTap: () => _showMetricInfo(context, 'Acumulado',
-                  'Todo el trabajo ya ejecutado:\n· Cobrado: dinero recibido\n· Pendiente: facturas emitidas sin cobrar\nEs lo que has ganado hasta hoy.'),
+                onInfoTap: () => _showMetricInfo(
+                  context,
+                  'Acumulado',
+                  'Todo el trabajo ya ejecutado:\n· Cobrado: dinero recibido\n· Pendiente: facturas emitidas sin cobrar\nEs lo que has ganado hasta hoy.',
+                ),
               ),
             ),
             const SizedBox(width: 12),
@@ -296,16 +313,26 @@ class DashboardScreen extends ConsumerWidget {
                   children: [
                     Text(
                       '(acumulado ${CurrencyFormatter.format(stats.acumulado)} + previsto\n ${CurrencyFormatter.format(stats.previsto)})',
-                      style: const TextStyle(fontSize: 11, color: Color(0xFF8C95A6)),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Color(0xFF8C95A6),
+                      ),
                     ),
                     const Text(
                       '· proyección',
-                      style: TextStyle(fontSize: 10, fontStyle: FontStyle.italic, color: Color(0xFF8C95A6)),
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontStyle: FontStyle.italic,
+                        color: Color(0xFF8C95A6),
+                      ),
                     ),
                   ],
                 ),
-                onInfoTap: () => _showMetricInfo(context, 'Total previsto',
-                  'Proyección máxima del período:\n· Acumulado: trabajo ya hecho\n· Previsto: bolos futuros en agenda\nSolo se cumple si cobras todo y\nrealizas todos los bolos confirmados.'),
+                onInfoTap: () => _showMetricInfo(
+                  context,
+                  'Total previsto',
+                  'Proyección máxima del período:\n· Acumulado: trabajo ya hecho\n· Previsto: bolos futuros en agenda\nSolo se cumple si cobras todo y\nrealizas todos los bolos confirmados.',
+                ),
               ),
             ),
           ],
@@ -313,11 +340,14 @@ class DashboardScreen extends ConsumerWidget {
         const SizedBox(height: 8),
 
         // IVA
-        if (stats.ivaTotalEstimado > 0 || period.mode != DashboardPeriodMode.mes)
+        if (stats.ivaTotalEstimado > 0 ||
+            period.mode != DashboardPeriodMode.mes)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: SummaryCard(
-              title: stats.ivaHistoricoEstimado > 0 ? 'IVA acumulado (estimado)' : 'IVA acumulado',
+              title: stats.ivaHistoricoEstimado > 0
+                  ? 'IVA acumulado (estimado)'
+                  : 'IVA acumulado',
               value: CurrencyFormatter.format(stats.ivaTotalEstimado),
               numericValue: stats.ivaTotalEstimado,
               color: AppColors.primary,
@@ -327,7 +357,10 @@ class DashboardScreen extends ConsumerWidget {
               subtitle: stats.ivaHistoricoEstimado > 0
                   ? Text(
                       '(facturas: ${CurrencyFormatter.format(stats.ivaAcumulado)} + est. histórico: ${CurrencyFormatter.format(stats.ivaHistoricoEstimado)})',
-                      style: const TextStyle(fontSize: 11, color: Color(0xFF8C95A6)),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Color(0xFF8C95A6),
+                      ),
                     )
                   : null,
             ),
@@ -336,11 +369,13 @@ class DashboardScreen extends ConsumerWidget {
         const SizedBox(height: 20),
 
         // Ingresos en B
-        Text(AppStrings.ingresosEnB,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.purple,
-                )),
+        Text(
+          AppStrings.ingresosEnB,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+            color: AppColors.purple,
+          ),
+        ),
         const SizedBox(height: 8),
         Row(
           children: [
@@ -353,6 +388,13 @@ class DashboardScreen extends ConsumerWidget {
                 icon: Icons.money_off_outlined,
                 showChevron: true,
                 onTap: () => context.push('/financial'),
+                subtitle: Text(
+                  '(${stats.numBolosB} bolo${stats.numBolosB == 1 ? '' : 's'} en B)',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF8C95A6),
+                  ),
+                ),
               ),
             ),
             const SizedBox(width: 12),
@@ -365,6 +407,151 @@ class DashboardScreen extends ConsumerWidget {
                 icon: Icons.hourglass_empty_outlined,
                 showChevron: true,
                 onTap: () => context.push('/financial'),
+                subtitle: Text(
+                  '(${stats.pendienteEnBCount} pendiente${stats.pendienteEnBCount == 1 ? '' : 's'} en B)',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF8C95A6),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (stats.previstoEnB > 0) ...[
+          SummaryCard(
+            title: 'Previsto en B',
+            value: CurrencyFormatter.format(stats.previstoEnB),
+            numericValue: stats.previstoEnB,
+            color: AppColors.purple,
+            icon: Icons.event_available,
+            backgroundColor: AppColors.purpleBg,
+            subtitle: Text(
+              '(${stats.previstoEnBCount} bolo${stats.previstoEnBCount == 1 ? '' : 's'} futuro${stats.previstoEnBCount == 1 ? '' : 's'} en B)',
+              style: const TextStyle(fontSize: 11, color: Color(0xFF8C95A6)),
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
+        Row(
+          children: [
+            Expanded(
+              child: SummaryCard(
+                title: 'Acumulado en B',
+                value: CurrencyFormatter.format(stats.acumuladoEnB),
+                numericValue: stats.acumuladoEnB,
+                color: AppColors.purple,
+                icon: Icons.account_balance,
+                subtitle: Text(
+                  '(cobrado ${CurrencyFormatter.format(stats.cobradoEnB)}\n + pendiente ${CurrencyFormatter.format(stats.pendienteEnB)})',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF8C95A6),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: SummaryCard(
+                title: 'Total previsto B',
+                value: CurrencyFormatter.format(stats.totalPrevistoEnB),
+                numericValue: stats.totalPrevistoEnB,
+                color: AppColors.purple,
+                icon: Icons.trending_up,
+                subtitle: Text(
+                  '(acumulado ${CurrencyFormatter.format(stats.acumuladoEnB)}\n + previsto ${CurrencyFormatter.format(stats.previstoEnB)})',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF8C95A6),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
+
+        Text(
+          'Facturable + B',
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: SummaryCard(
+                title: 'Cobrado total',
+                value: CurrencyFormatter.format(stats.cobrado),
+                numericValue: stats.cobrado,
+                color: AppColors.success,
+                icon: Icons.check_circle_outline,
+                subtitle: Text(
+                  '(oficial ${CurrencyFormatter.format(stats.cobradoOficial)}\n + B ${CurrencyFormatter.format(stats.cobradoEnB)})',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF8C95A6),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: SummaryCard(
+                title: 'Pendiente total',
+                value: CurrencyFormatter.format(stats.pendienteTotal),
+                numericValue: stats.pendienteTotal,
+                color: AppColors.warning,
+                icon: Icons.schedule,
+                subtitle: Text(
+                  '(oficial ${CurrencyFormatter.format(stats.pendiente)}\n + B ${CurrencyFormatter.format(stats.pendienteEnB)})',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF8C95A6),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (stats.previstoTotal > 0) ...[
+          SummaryCard(
+            title: 'Previsto total',
+            value: CurrencyFormatter.format(stats.previstoTotal),
+            numericValue: stats.previstoTotal,
+            color: AppColors.primary,
+            icon: Icons.event_available,
+            backgroundColor: const Color(0xFFEEF1F7),
+            subtitle: Text(
+              '(oficial ${CurrencyFormatter.format(stats.previsto)} + B ${CurrencyFormatter.format(stats.previstoEnB)})',
+              style: const TextStyle(fontSize: 11, color: Color(0xFF8C95A6)),
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
+        Row(
+          children: [
+            Expanded(
+              child: SummaryCard(
+                title: 'Acumulado total',
+                value: CurrencyFormatter.format(stats.acumuladoTotal),
+                numericValue: stats.acumuladoTotal,
+                color: const Color(0xFF0F5C3A),
+                icon: Icons.account_balance,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: SummaryCard(
+                title: 'Total previsto global',
+                value: CurrencyFormatter.format(stats.totalPrevistoGlobal),
+                numericValue: stats.totalPrevistoGlobal,
+                color: const Color(0xFF5F5E5A),
+                icon: Icons.trending_up,
               ),
             ),
           ],
@@ -403,7 +590,11 @@ class DashboardScreen extends ConsumerWidget {
             const SizedBox(height: 12),
             Text(
               explanation,
-              style: const TextStyle(fontSize: 14, color: Color(0xFF5A6070), height: 1.5),
+              style: const TextStyle(
+                fontSize: 14,
+                color: Color(0xFF5A6070),
+                height: 1.5,
+              ),
             ),
           ],
         ),
@@ -448,18 +639,23 @@ class DashboardScreen extends ConsumerWidget {
   Widget _buildUpcomingGigs(BuildContext context, List<Gig> upcoming) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final futureGigs = upcoming.where((g) {
-      final gDate = DateTime(g.fecha.year, g.fecha.month, g.fecha.day);
-      return !gDate.isBefore(today);
-    }).take(3).toList();
+    final futureGigs = upcoming
+        .where((g) {
+          final gDate = DateTime(g.fecha.year, g.fecha.month, g.fecha.day);
+          return !gDate.isBefore(today);
+        })
+        .take(3)
+        .toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Próximos bolos',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                )),
+        Text(
+          'Próximos bolos',
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+        ),
         const SizedBox(height: 8),
         if (futureGigs.isEmpty)
           Container(
@@ -472,11 +668,18 @@ class DashboardScreen extends ConsumerWidget {
             ),
             child: Column(
               children: [
-                Icon(Icons.event_available, size: 40, color: AppColors.textSecondary),
+                Icon(
+                  Icons.event_available,
+                  size: 40,
+                  color: AppColors.textSecondary,
+                ),
                 const SizedBox(height: 8),
                 const Text(
                   'No tienes bolos programados',
-                  style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 14,
+                  ),
                 ),
                 const SizedBox(height: 12),
                 TextButton.icon(
@@ -489,7 +692,11 @@ class DashboardScreen extends ConsumerWidget {
           )
         else
           ...futureGigs.map((gig) {
-            final gDate = DateTime(gig.fecha.year, gig.fecha.month, gig.fecha.day);
+            final gDate = DateTime(
+              gig.fecha.year,
+              gig.fecha.month,
+              gig.fecha.day,
+            );
             final daysLeft = gDate.difference(today).inDays;
             return _UpcomingGigTile(gig: gig, daysLeft: daysLeft);
           }),
@@ -525,18 +732,21 @@ class _PeriodSelector extends ConsumerWidget {
               return Expanded(
                 child: GestureDetector(
                   onTap: () {
-                    ref.read(dashboardPeriodProvider.notifier).state = period.copyWith(
-                      mode: mode,
-                      month: period.month,
-                      quarter: period.quarter,
-                      year: period.year,
-                    );
+                    ref.read(dashboardPeriodProvider.notifier).state = period
+                        .copyWith(
+                          mode: mode,
+                          month: period.month,
+                          quarter: period.quarter,
+                          year: period.year,
+                        );
                   },
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     decoration: BoxDecoration(
-                      color: isSelected ? AppColors.primary : Colors.transparent,
+                      color: isSelected
+                          ? AppColors.primary
+                          : Colors.transparent,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     alignment: Alignment.center,
@@ -563,14 +773,17 @@ class _PeriodSelector extends ConsumerWidget {
             IconButton(
               icon: const Icon(Icons.chevron_left, size: 28),
               onPressed: () {
-                ref.read(dashboardPeriodProvider.notifier).state = period.previous;
+                ref.read(dashboardPeriodProvider.notifier).state =
+                    period.previous;
               },
             ),
             GestureDetector(
               onTap: () {
                 // Reset to current period
                 final now = DateTime.now();
-                ref.read(dashboardPeriodProvider.notifier).state = DashboardPeriod(
+                ref
+                    .read(dashboardPeriodProvider.notifier)
+                    .state = DashboardPeriod(
                   mode: period.mode,
                   year: now.year,
                   month: now.month,
@@ -578,7 +791,10 @@ class _PeriodSelector extends ConsumerWidget {
                 );
               },
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.primaryLight,
                   borderRadius: BorderRadius.circular(20),
@@ -602,7 +818,8 @@ class _PeriodSelector extends ConsumerWidget {
               onPressed: period.isFuture
                   ? null
                   : () {
-                      ref.read(dashboardPeriodProvider.notifier).state = period.next;
+                      ref.read(dashboardPeriodProvider.notifier).state =
+                          period.next;
                     },
             ),
           ],
@@ -630,7 +847,10 @@ class _FinancialBanner extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             gradient: LinearGradient(
-              colors: [AppColors.primary, AppColors.primary.withValues(alpha: 0.8)],
+              colors: [
+                AppColors.primary,
+                AppColors.primary.withValues(alpha: 0.8),
+              ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
@@ -667,8 +887,8 @@ class _FinancialBanner extends StatelessWidget {
                   Expanded(
                     child: _BannerMini(
                       label: 'Pendiente',
-                      subtitle: '(facturas emitidas)',
-                      value: stats.pendiente,
+                      subtitle: '(oficial + B)',
+                      value: stats.pendienteTotal,
                       color: Colors.amber[200]!,
                     ),
                   ),
@@ -677,7 +897,7 @@ class _FinancialBanner extends StatelessWidget {
                     child: _BannerMini(
                       label: 'Total previsto',
                       subtitle: '(si todo se cobra)',
-                      value: stats.totalPrevisto,
+                      value: stats.totalPrevistoGlobal,
                       color: Colors.greenAccent[100]!,
                     ),
                   ),
@@ -718,22 +938,37 @@ class _BannerMini extends StatelessWidget {
   final String? subtitle;
   final double value;
   final Color color;
-  const _BannerMini({required this.label, this.subtitle, required this.value, required this.color});
+  const _BannerMini({
+    required this.label,
+    this.subtitle,
+    required this.value,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(color: color.withValues(alpha: 0.8), fontSize: 11)),
+        Text(
+          label,
+          style: TextStyle(color: color.withValues(alpha: 0.8), fontSize: 11),
+        ),
         const SizedBox(height: 2),
         AnimatedCounter(
           value: value,
-          style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13),
+          style: TextStyle(
+            color: color,
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
+          ),
         ),
         if (subtitle != null) ...[
           const SizedBox(height: 1),
-          Text(subtitle!, style: TextStyle(color: color.withValues(alpha: 0.5), fontSize: 9)),
+          Text(
+            subtitle!,
+            style: TextStyle(color: color.withValues(alpha: 0.5), fontSize: 9),
+          ),
         ],
       ],
     );
@@ -859,7 +1094,11 @@ class _UpcomingGigTile extends ConsumerWidget {
               ),
               child: Text(
                 badgeText,
-                style: TextStyle(fontSize: 11, color: badgeTextColor, fontWeight: FontWeight.w500),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: badgeTextColor,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
             const SizedBox(width: 6),
@@ -892,9 +1131,7 @@ class _OverdueBanner extends StatelessWidget {
         decoration: BoxDecoration(
           color: bgColor,
           borderRadius: BorderRadius.circular(10),
-          border: Border(
-            left: BorderSide(color: borderColor, width: 3),
-          ),
+          border: Border(left: BorderSide(color: borderColor, width: 3)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -913,19 +1150,28 @@ class _OverdueBanner extends StatelessWidget {
                     ),
                   ),
                 ),
-                const Icon(Icons.chevron_right, size: 18, color: AppColors.textSecondary),
+                const Icon(
+                  Icons.chevron_right,
+                  size: 18,
+                  color: AppColors.textSecondary,
+                ),
               ],
             ),
             const SizedBox(height: 6),
-            ...alert.invoices.map((oi) => Padding(
-              padding: const EdgeInsets.only(left: 28, top: 2),
-              child: Text(
-                '· ${oi.clientName} — ${CurrencyFormatter.format(oi.invoice.total)} — ${oi.daysSinceSent} días',
-                style: const TextStyle(fontSize: 12, color: AppColors.textPrimary),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+            ...alert.invoices.map(
+              (oi) => Padding(
+                padding: const EdgeInsets.only(left: 28, top: 2),
+                child: Text(
+                  '· ${oi.clientName} — ${CurrencyFormatter.format(oi.invoice.total)} — ${oi.daysSinceSent} días',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textPrimary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-            )),
+            ),
           ],
         ),
       ),
@@ -977,7 +1223,11 @@ class _ActivityCard extends StatelessWidget {
           Expanded(
             child: Text(
               text,
-              style: TextStyle(fontSize: 13, color: color, fontWeight: FontWeight.w500),
+              style: TextStyle(
+                fontSize: 13,
+                color: color,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
         ],

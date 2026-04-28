@@ -1,9 +1,11 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/invoice.dart';
+import '../repositories/gig_repository.dart';
 import '../repositories/invoice_repository.dart';
 import '../database/database_helper.dart';
 import '../services/supabase_service.dart';
+import 'gig_provider.dart';
 
 final invoiceRepositoryProvider = Provider((ref) => InvoiceRepository.instance);
 
@@ -28,7 +30,14 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
   }
 
   Future<void> updateStatus(String id, InvoiceStatus status) async {
-    await ref.read(invoiceRepositoryProvider).updateStatus(id, status);
+    final repository = ref.read(invoiceRepositoryProvider);
+    await repository.updateStatus(id, status);
+    final invoice = await repository.getById(id);
+    if (invoice != null) {
+      await GigRepository.instance.repairStatusesFromInvoices([invoice]);
+      ref.invalidate(gigByIdProvider(invoice.gigId));
+      ref.invalidate(gigsProvider);
+    }
     ref.invalidateSelf();
   }
 
@@ -54,7 +63,9 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
   }
 
   Future<bool> isNumberTaken(int number, {String? excludeId}) async {
-    return ref.read(invoiceRepositoryProvider).isNumberTaken(number, excludeId: excludeId);
+    return ref
+        .read(invoiceRepositoryProvider)
+        .isNumberTaken(number, excludeId: excludeId);
   }
 }
 
@@ -64,19 +75,26 @@ final invoiceByIdProvider = FutureProvider.family<Invoice?, String>((ref, id) {
   return ref.read(invoiceRepositoryProvider).getById(id);
 });
 
-final invoiceByGigProvider = FutureProvider.family<Invoice?, String>((ref, gigId) {
+final invoiceByGigProvider = FutureProvider.family<Invoice?, String>((
+  ref,
+  gigId,
+) {
   // Escuchar cambios en invoicesProvider para refrescar automáticamente
   ref.watch(invoicesProvider);
   return ref.read(invoiceRepositoryProvider).getByGigId(gigId);
 });
 
-final invoicesByStatusProvider = FutureProvider.family<List<Invoice>, InvoiceStatus>((ref, status) {
-  // Escuchar cambios en invoicesProvider para refrescar automáticamente
-  ref.watch(invoicesProvider);
-  return ref.read(invoiceRepositoryProvider).getByStatus(status);
-});
+final invoicesByStatusProvider =
+    FutureProvider.family<List<Invoice>, InvoiceStatus>((ref, status) {
+      // Escuchar cambios en invoicesProvider para refrescar automáticamente
+      ref.watch(invoicesProvider);
+      return ref.read(invoiceRepositoryProvider).getByStatus(status);
+    });
 
-final invoicesByClientProvider = FutureProvider.family<List<Invoice>, String>((ref, clientId) {
+final invoicesByClientProvider = FutureProvider.family<List<Invoice>, String>((
+  ref,
+  clientId,
+) {
   // Escuchar cambios en invoicesProvider para refrescar automáticamente
   ref.watch(invoicesProvider);
   return ref.read(invoiceRepositoryProvider).getByClientId(clientId);

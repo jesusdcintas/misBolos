@@ -20,21 +20,25 @@ class GigsNotifier extends AsyncNotifier<List<Gig>> {
 
   Future<void> add(Gig gig) async {
     await ref.read(gigRepositoryProvider).insert(gig);
+    ref.invalidate(gigByIdProvider(gig.id));
     ref.invalidateSelf();
   }
 
   Future<void> updateGig(Gig gig) async {
     await ref.read(gigRepositoryProvider).update(gig);
+    ref.invalidate(gigByIdProvider(gig.id));
     ref.invalidateSelf();
   }
 
   Future<void> updateStatus(String id, GigStatus status) async {
     await ref.read(gigRepositoryProvider).updateStatus(id, status);
+    ref.invalidate(gigByIdProvider(id));
     ref.invalidateSelf();
   }
 
   Future<void> linkInvoice(String gigId, String invoiceId) async {
     await ref.read(gigRepositoryProvider).linkInvoice(gigId, invoiceId);
+    ref.invalidate(gigByIdProvider(gigId));
     ref.invalidateSelf();
   }
 
@@ -58,6 +62,7 @@ class GigsNotifier extends AsyncNotifier<List<Gig>> {
     }
 
     ref.invalidateSelf();
+    ref.invalidate(gigByIdProvider(id));
   }
 }
 
@@ -65,13 +70,19 @@ final gigByIdProvider = FutureProvider.family<Gig?, String>((ref, id) {
   return ref.read(gigRepositoryProvider).getById(id);
 });
 
-final gigsByClientProvider = FutureProvider.family<List<Gig>, String>((ref, clientId) {
+final gigsByClientProvider = FutureProvider.family<List<Gig>, String>((
+  ref,
+  clientId,
+) {
   return ref.read(gigRepositoryProvider).getByClientId(clientId);
 });
 
-final gigsMonthProvider = FutureProvider.family<List<Gig>, ({int year, int month})>((ref, params) {
-  return ref.read(gigRepositoryProvider).getByMonth(params.year, params.month);
-});
+final gigsMonthProvider =
+    FutureProvider.family<List<Gig>, ({int year, int month})>((ref, params) {
+      return ref
+          .read(gigRepositoryProvider)
+          .getByMonth(params.year, params.month);
+    });
 
 final upcomingGigsProvider = FutureProvider<List<Gig>>((ref) {
   return ref.read(gigRepositoryProvider).getUpcoming();

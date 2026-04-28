@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -34,17 +36,11 @@ Page<void> _slideUpPage(Widget child, GoRouterState state) {
     reverseTransitionDuration: const Duration(milliseconds: 250),
     transitionsBuilder: (context, animation, secondary, child) {
       return SlideTransition(
-        position: Tween<Offset>(
-          begin: const Offset(0, 0.08),
-          end: Offset.zero,
-        ).animate(CurvedAnimation(
-          parent: animation,
-          curve: Curves.easeOutCubic,
-        )),
-        child: FadeTransition(
-          opacity: animation,
-          child: child,
-        ),
+        position: Tween<Offset>(begin: const Offset(0, 0.08), end: Offset.zero)
+            .animate(
+              CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+            ),
+        child: FadeTransition(opacity: animation, child: child),
       );
     },
   );
@@ -117,22 +113,26 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/settings',
-        pageBuilder: (context, state) => _slideUpPage(const SettingsScreen(), state),
+        pageBuilder: (context, state) =>
+            _slideUpPage(const SettingsScreen(), state),
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/stats',
-        pageBuilder: (context, state) => _slideUpPage(const StatsScreen(), state),
+        pageBuilder: (context, state) =>
+            _slideUpPage(const StatsScreen(), state),
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/financial',
-        pageBuilder: (context, state) => _slideUpPage(const FinancialSummaryScreen(), state),
+        pageBuilder: (context, state) =>
+            _slideUpPage(const FinancialSummaryScreen(), state),
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/gig/new',
-        pageBuilder: (context, state) => _slideUpPage(const GigFormScreen(), state),
+        pageBuilder: (context, state) =>
+            _slideUpPage(const GigFormScreen(), state),
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
@@ -153,7 +153,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/client/new',
-        pageBuilder: (context, state) => _slideUpPage(const ClientFormScreen(), state),
+        pageBuilder: (context, state) =>
+            _slideUpPage(const ClientFormScreen(), state),
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
@@ -213,8 +214,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: _rootNavigatorKey,
         path: '/expense/edit/:id',
         pageBuilder: (context, state) => _slideUpPage(
-          ExpenseFormScreen(
-              expenseId: int.parse(state.pathParameters['id']!)),
+          ExpenseFormScreen(expenseId: int.parse(state.pathParameters['id']!)),
           state,
         ),
       ),
@@ -223,7 +223,8 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/expense/:id',
         pageBuilder: (context, state) => _slideUpPage(
           ExpenseDetailScreen(
-              expenseId: int.parse(state.pathParameters['id']!)),
+            expenseId: int.parse(state.pathParameters['id']!),
+          ),
           state,
         ),
       ),
@@ -237,8 +238,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: _rootNavigatorKey,
         path: '/asset/edit/:id',
         pageBuilder: (context, state) => _slideUpPage(
-          AssetFormScreen(
-              assetId: int.parse(state.pathParameters['id']!)),
+          AssetFormScreen(assetId: int.parse(state.pathParameters['id']!)),
           state,
         ),
       ),
@@ -246,8 +246,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: _rootNavigatorKey,
         path: '/asset/:id',
         pageBuilder: (context, state) => _slideUpPage(
-          AssetDetailScreen(
-              assetId: int.parse(state.pathParameters['id']!)),
+          AssetDetailScreen(assetId: int.parse(state.pathParameters['id']!)),
           state,
         ),
       ),
@@ -264,23 +263,28 @@ class MisBolosApp extends ConsumerStatefulWidget {
 
 class _MisBolosAppState extends ConsumerState<MisBolosApp> {
   bool _synced = false;
+  Timer? _autoSyncTimer;
 
   @override
   void initState() {
     super.initState();
-    _autoSync();
+    _autoSyncTimer = Timer(const Duration(seconds: 1), _autoSync);
   }
 
   Future<void> _autoSync() async {
     if (_synced) return;
     _synced = true;
-    // Esperar un momento para que Supabase se inicialice
-    await Future.delayed(const Duration(seconds: 1));
     if (!mounted) return;
     final notifier = ref.read(syncProvider.notifier);
     if (notifier.isAuthenticated) {
       await notifier.syncAll();
     }
+  }
+
+  @override
+  void dispose() {
+    _autoSyncTimer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -375,13 +379,15 @@ class _ScaffoldWithNavBarState extends State<_ScaffoldWithNavBar> {
 
   @override
   Widget build(BuildContext context) {
-    final selectedIndex = _indexFromLocation(GoRouterState.of(context).uri.path);
+    final selectedIndex = _indexFromLocation(
+      GoRouterState.of(context).uri.path,
+    );
 
     return Scaffold(
       body: PageView(
         controller: _pageController,
         onPageChanged: _onPageChanged,
-        physics: const BouncingScrollPhysics(),
+        physics: const NeverScrollableScrollPhysics(),
         children: const [
           DashboardScreen(),
           CalendarScreen(),

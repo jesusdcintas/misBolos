@@ -13,6 +13,7 @@ class FinanzasScreen extends StatelessWidget {
       length: 3,
       child: Column(
         children: [
+          const SafeArea(bottom: false, child: SizedBox(height: 12)),
           Material(
             color: AppColors.primary,
             child: TabBar(
@@ -23,12 +24,16 @@ class FinanzasScreen extends StatelessWidget {
               tabs: const [
                 Tab(icon: Icon(Icons.receipt_long_outlined), text: 'Facturas'),
                 Tab(icon: Icon(Icons.euro_outlined), text: 'Gastos'),
-                Tab(icon: Icon(Icons.inventory_2_outlined), text: 'Inversiones'),
+                Tab(
+                  icon: Icon(Icons.inventory_2_outlined),
+                  text: 'Inversiones',
+                ),
               ],
             ),
           ),
           const Expanded(
             child: TabBarView(
+              physics: NeverScrollableScrollPhysics(),
               children: [
                 InvoicesListScreen(),
                 ExpensesScreen(),

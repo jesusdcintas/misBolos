@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 import '../database/database_helper.dart';
 import '../models/gig.dart';
+import '../models/invoice.dart';
 
 class GigRepository {
   static final GigRepository instance = GigRepository._();
@@ -67,11 +68,7 @@ class GigRepository {
 
   Future<List<Gig>> getRecent({int limit = 5}) async {
     final db = await DatabaseHelper.instance.database;
-    final maps = await db.query(
-      'gigs',
-      orderBy: 'fecha DESC',
-      limit: limit,
-    );
+    final maps = await db.query('gigs', orderBy: 'fecha DESC', limit: limit);
     return maps.map((m) => Gig.fromMap(m)).toList();
   }
 
@@ -92,12 +89,7 @@ class GigRepository {
 
   Future<void> update(Gig gig) async {
     final db = await DatabaseHelper.instance.database;
-    await db.update(
-      'gigs',
-      gig.toMap(),
-      where: 'id = ?',
-      whereArgs: [gig.id],
-    );
+    await db.update('gigs', gig.toMap(), where: 'id = ?', whereArgs: [gig.id]);
   }
 
   Future<void> updateStatus(String id, GigStatus status) async {
@@ -110,14 +102,43 @@ class GigRepository {
     );
   }
 
+  Future<int> repairStatusesFromInvoices(List<Invoice> invoices) async {
+    final db = await DatabaseHelper.instance.database;
+    var repaired = 0;
+
+    for (final invoice in invoices) {
+      final expectedStatus = switch (invoice.status) {
+        InvoiceStatus.borrador => GigStatus.facturaGenerada,
+        InvoiceStatus.enviada => GigStatus.facturaEnviada,
+        InvoiceStatus.pagada => GigStatus.pagado,
+      };
+
+      final count = await db.update(
+        'gigs',
+        {'status': expectedStatus.dbValue, 'invoice_id': invoice.id},
+        where: '''
+          id = ?
+          AND facturable = 1
+          AND status != ?
+          AND status != ?
+        ''',
+        whereArgs: [
+          invoice.gigId,
+          expectedStatus.dbValue,
+          GigStatus.cancelado.dbValue,
+        ],
+      );
+      repaired += count;
+    }
+
+    return repaired;
+  }
+
   Future<void> linkInvoice(String gigId, String invoiceId) async {
     final db = await DatabaseHelper.instance.database;
     await db.update(
       'gigs',
-      {
-        'invoice_id': invoiceId,
-        'status': GigStatus.facturaGenerada.dbValue,
-      },
+      {'invoice_id': invoiceId, 'status': GigStatus.facturaGenerada.dbValue},
       where: 'id = ?',
       whereArgs: [gigId],
     );

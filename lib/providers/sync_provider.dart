@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import '../database/database_helper.dart';
+import '../models/app_settings.dart';
 import '../services/supabase_service.dart';
 import '../repositories/client_repository.dart';
 import '../repositories/expense_repository.dart';
@@ -33,11 +34,7 @@ class SyncState {
   final String? message;
   final DateTime? lastSync;
 
-  const SyncState({
-    this.status = SyncStatus.idle,
-    this.message,
-    this.lastSync,
-  });
+  const SyncState({this.status = SyncStatus.idle, this.message, this.lastSync});
 
   SyncState copyWith({
     SyncStatus? status,
@@ -80,7 +77,9 @@ class SyncNotifier extends StateNotifier<SyncState> {
         await dbHelper.removePendingDeletion(pendingId);
         debugPrint('[Sync] Pending deletion processed: $tableName/$recordId');
       } catch (e) {
-        debugPrint('[Sync] Pending deletion still failing: $tableName/$recordId — $e');
+        debugPrint(
+          '[Sync] Pending deletion still failing: $tableName/$recordId — $e',
+        );
       }
     }
   }
@@ -88,19 +87,34 @@ class SyncNotifier extends StateNotifier<SyncState> {
   /// Sincroniza datos locales a la nube
   Future<void> uploadToCloud() async {
     if (!_supabase.isAuthenticated) {
-      state = state.copyWith(status: SyncStatus.error, message: 'No autenticado en la nube');
+      state = state.copyWith(
+        status: SyncStatus.error,
+        message: 'No autenticado en la nube',
+      );
       return;
     }
 
-    state = state.copyWith(status: SyncStatus.syncing, message: 'Subiendo datos...');
+    state = state.copyWith(
+      status: SyncStatus.syncing,
+      message: 'Subiendo datos...',
+    );
 
     try {
       // Primero procesar borrados pendientes para limpiar la nube
       await processPendingDeletions();
 
       final clients = await ClientRepository.instance.getAll();
-      final gigs = await GigRepository.instance.getAll();
       final invoices = await InvoiceRepository.instance.getAll();
+      final repaired = await GigRepository.instance.repairStatusesFromInvoices(
+        invoices,
+      );
+      if (repaired > 0) {
+        debugPrint(
+          '[Sync] Repaired $repaired local gig statuses before upload',
+        );
+        _ref.invalidate(gigsProvider);
+      }
+      final gigs = await GigRepository.instance.getAll();
       final settings = await SettingsRepository().get();
 
       // Asignar cloud_id a expenses sin él
@@ -109,7 +123,10 @@ class SyncNotifier extends StateNotifier<SyncState> {
       for (var i = 0; i < expenses.length; i++) {
         if (expenses[i].cloudId == null) {
           final cloudId = uuid.v4();
-          await ExpenseRepository.instance.saveCloudId(expenses[i].id!, cloudId);
+          await ExpenseRepository.instance.saveCloudId(
+            expenses[i].id!,
+            cloudId,
+          );
           expenses[i] = expenses[i].copyWith(cloudId: cloudId);
         }
       }
@@ -150,11 +167,17 @@ class SyncNotifier extends StateNotifier<SyncState> {
   /// Descarga datos de la nube y los guarda localmente
   Future<void> downloadFromCloud() async {
     if (!_supabase.isAuthenticated) {
-      state = state.copyWith(status: SyncStatus.error, message: 'No autenticado en la nube');
+      state = state.copyWith(
+        status: SyncStatus.error,
+        message: 'No autenticado en la nube',
+      );
       return;
     }
 
-    state = state.copyWith(status: SyncStatus.syncing, message: 'Descargando datos...');
+    state = state.copyWith(
+      status: SyncStatus.syncing,
+      message: 'Descargando datos...',
+    );
 
     try {
       // Primero procesar borrados pendientes para que la nube esté limpia
@@ -177,6 +200,14 @@ class SyncNotifier extends StateNotifier<SyncState> {
       }
       for (final invoice in cloudInvoices) {
         await InvoiceRepository.instance.upsert(invoice);
+      }
+      final repaired = await GigRepository.instance.repairStatusesFromInvoices(
+        cloudInvoices,
+      );
+      if (repaired > 0) {
+        debugPrint(
+          '[Sync] Repaired $repaired local gig statuses after download',
+        );
       }
       for (final expense in cloudExpenses) {
         await ExpenseRepository.instance.upsertByCloudId(expense);
@@ -240,8 +271,15 @@ class SyncNotifier extends StateNotifier<SyncState> {
 
       // Guardar settings si existen en la nube
       if (cloudSettings != null) {
-        debugPrint('[Sync] Saving settings with logoPath: ${cloudSettings.logoPath}');
-        await SettingsRepository().save(cloudSettings);
+        final localSettings = await SettingsRepository().get();
+        final mergedSettings = _mergeDownloadedSettings(
+          localSettings,
+          cloudSettings,
+        );
+        debugPrint(
+          '[Sync] Saving settings with logoPath: ${mergedSettings.logoPath}',
+        );
+        await SettingsRepository().save(mergedSettings);
       }
 
       // Invalidar providers para refrescar UI
@@ -254,7 +292,8 @@ class SyncNotifier extends StateNotifier<SyncState> {
 
       state = state.copyWith(
         status: SyncStatus.success,
-        message: 'Descargados: ${cloudClients.length} clientes, ${cloudGigs.length} bolos, '
+        message:
+            'Descargados: ${cloudClients.length} clientes, ${cloudGigs.length} bolos, '
             '${cloudInvoices.length} facturas, ${cloudExpenses.length} gastos, ${cloudAssets.length} inversiones',
         lastSync: DateTime.now(),
       );
@@ -274,6 +313,50 @@ class SyncNotifier extends StateNotifier<SyncState> {
 
   void clearStatus() {
     state = state.copyWith(status: SyncStatus.idle, message: null);
+  }
+
+  AppSettings _mergeDownloadedSettings(AppSettings local, AppSettings cloud) {
+    String keepLocalIfCloudEmpty(String localValue, String cloudValue) {
+      if (cloudValue.trim().isEmpty && localValue.trim().isNotEmpty) {
+        return localValue;
+      }
+      return cloudValue;
+    }
+
+    return cloud.copyWith(
+      logoPath: keepLocalIfCloudEmpty(local.logoPath, cloud.logoPath),
+      logoSize: local.logoSize,
+      pdfTheme: local.pdfTheme,
+      emisorNombre: keepLocalIfCloudEmpty(
+        local.emisorNombre,
+        cloud.emisorNombre,
+      ),
+      emisorNIF: keepLocalIfCloudEmpty(local.emisorNIF, cloud.emisorNIF),
+      emisorDireccion: keepLocalIfCloudEmpty(
+        local.emisorDireccion,
+        cloud.emisorDireccion,
+      ),
+      emisorCiudad: keepLocalIfCloudEmpty(
+        local.emisorCiudad,
+        cloud.emisorCiudad,
+      ),
+      emisorProvincia: keepLocalIfCloudEmpty(
+        local.emisorProvincia,
+        cloud.emisorProvincia,
+      ),
+      emisorCodigoPostal: keepLocalIfCloudEmpty(
+        local.emisorCodigoPostal,
+        cloud.emisorCodigoPostal,
+      ),
+      emisorEmail: keepLocalIfCloudEmpty(local.emisorEmail, cloud.emisorEmail),
+      emisorTelefono: keepLocalIfCloudEmpty(
+        local.emisorTelefono,
+        cloud.emisorTelefono,
+      ),
+      iban: keepLocalIfCloudEmpty(local.iban, cloud.iban),
+      notificacionesActivas: local.notificacionesActivas,
+      diasRecordatorio: local.diasRecordatorio,
+    );
   }
 }
 

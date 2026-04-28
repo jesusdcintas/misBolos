@@ -59,10 +59,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             padding: const EdgeInsets.all(16),
             children: [
               // IVA
-              Text(AppStrings.ivaPorDefecto,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      )),
+              Text(
+                AppStrings.ivaPorDefecto,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 8),
               SegmentedButton<double>(
                 segments: const [
@@ -77,10 +79,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               const SizedBox(height: 24),
 
               // Tamaño logo
-              Text('Tamaño del logo en PDF',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      )),
+              Text(
+                'Tamaño del logo en PDF',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 8),
               Row(
                 children: [
@@ -107,10 +111,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               const SizedBox(height: 24),
 
               // Tema PDF
-              Text('Tema de color del PDF',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      )),
+              Text(
+                'Tema de color del PDF',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 12),
               GridView.count(
                 shrinkWrap: true,
@@ -133,14 +139,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           width: 3,
                         ),
                         boxShadow: isSelected
-                            ? [BoxShadow(color: color.withValues(alpha: 0.5), blurRadius: 8)]
+                            ? [
+                                BoxShadow(
+                                  color: color.withValues(alpha: 0.5),
+                                  blurRadius: 8,
+                                ),
+                              ]
                             : null,
                       ),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           if (isSelected)
-                            const Icon(Icons.check, color: Colors.white, size: 20),
+                            const Icon(
+                              Icons.check,
+                              color: Colors.white,
+                              size: 20,
+                            ),
                           Text(
                             theme.label,
                             style: const TextStyle(
@@ -162,10 +177,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               const SizedBox(height: 24),
 
               // Notificaciones
-              Text(AppStrings.notificaciones,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      )),
+              Text(
+                AppStrings.notificaciones,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              ),
               SwitchListTile(
                 title: const Text('Activar recordatorios'),
                 value: _notificaciones,
@@ -177,10 +194,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   trailing: DropdownButton<int>(
                     value: _diasRecordatorio,
                     items: [3, 5, 7, 10, 14, 30]
-                        .map((d) => DropdownMenuItem(
-                              value: d,
-                              child: Text('$d días'),
-                            ))
+                        .map(
+                          (d) => DropdownMenuItem(
+                            value: d,
+                            child: Text('$d días'),
+                          ),
+                        )
                         .toList(),
                     onChanged: (v) =>
                         setState(() => _diasRecordatorio = v ?? 7),
@@ -203,10 +222,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               const SizedBox(height: 32),
 
               // Sincronización
-              Text('Sincronización',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      )),
+              Text(
+                'Sincronización',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 8),
               ElevatedButton.icon(
                 onPressed: _syncSupabase,
@@ -216,10 +237,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               const SizedBox(height: 24),
 
               // Exportar CSV
-              Text(AppStrings.exportarCSV,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      )),
+              Text(
+                AppStrings.exportarCSV,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 8),
               Row(
                 children: [
@@ -241,10 +264,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               const SizedBox(height: 24),
 
               // Importar historial
-              Text('Importar historial',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      )),
+              Text(
+                'Importar historial',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 8),
               SizedBox(
                 width: double.infinity,
@@ -259,16 +284,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               const SizedBox(height: 24),
 
               // Herramientas
-              Text('Herramientas',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      )),
+              Text(
+                'Herramientas',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 8),
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
                   onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const DuplicateClientsScreen()),
+                    MaterialPageRoute(
+                      builder: (_) => const DuplicateClientsScreen(),
+                    ),
                   ),
                   icon: const Icon(Icons.people_outline),
                   label: const Text('Buscar clientes duplicados'),
@@ -294,10 +323,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     Expanded(
                       child: Text(
                         AppStrings.avisoLegal,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.purple,
-                        ),
+                        style: TextStyle(fontSize: 12, color: AppColors.purple),
                       ),
                     ),
                   ],
@@ -327,9 +353,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     await ref.read(settingsProvider.notifier).save(settings);
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ajustes guardados')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Ajustes guardados')));
     }
   }
 
@@ -348,12 +374,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       final clients = await ref.read(clientsProvider.future);
       final gigs = await ref.read(gigsProvider.future);
       final invoices = await ref.read(invoicesProvider.future);
+      final settings = await ref.read(settingsProvider.future);
 
-      await service.uploadAll(
-        clients: clients,
-        gigs: gigs,
-        invoices: invoices,
-      );
+      await service.uploadAll(clients: clients, gigs: gigs, invoices: invoices);
+      await service.uploadSettings(settings);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -362,9 +386,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error de sincronización: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error de sincronización: $e')));
       }
     }
   }
@@ -395,21 +419,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ]);
       }
 
-      final csv =
-          rows.map((r) => r.map((e) => '"$e"').join(',')).join('\n');
+      final csv = rows.map((r) => r.map((e) => '"$e"').join(',')).join('\n');
       final dir = await getTemporaryDirectory();
       final file = File('${dir.path}/misbolos_export.csv');
       await file.writeAsString(csv);
 
-      await Share.shareXFiles(
-        [XFile(file.path)],
-        sharePositionOrigin: shareOrigin,
-      );
+      await Share.shareXFiles([
+        XFile(file.path),
+      ], sharePositionOrigin: shareOrigin);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
   }
@@ -521,7 +543,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(height: 6),
           Divider(color: Colors.grey.shade300, thickness: 1),
           const SizedBox(height: 6),
-          
+
           // Info simulada
           Row(
             children: [
@@ -529,9 +551,26 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('EMISOR', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: primaryColor)),
-                    Container(height: 4, width: 50, color: Colors.grey.shade300, margin: const EdgeInsets.only(top: 2)),
-                    Container(height: 4, width: 40, color: Colors.grey.shade300, margin: const EdgeInsets.only(top: 2)),
+                    Text(
+                      'EMISOR',
+                      style: TextStyle(
+                        fontSize: 8,
+                        fontWeight: FontWeight.bold,
+                        color: primaryColor,
+                      ),
+                    ),
+                    Container(
+                      height: 4,
+                      width: 50,
+                      color: Colors.grey.shade300,
+                      margin: const EdgeInsets.only(top: 2),
+                    ),
+                    Container(
+                      height: 4,
+                      width: 40,
+                      color: Colors.grey.shade300,
+                      margin: const EdgeInsets.only(top: 2),
+                    ),
                   ],
                 ),
               ),
@@ -539,16 +578,33 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('FACTURAR A', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: primaryColor)),
-                    Container(height: 4, width: 50, color: Colors.grey.shade300, margin: const EdgeInsets.only(top: 2)),
-                    Container(height: 4, width: 40, color: Colors.grey.shade300, margin: const EdgeInsets.only(top: 2)),
+                    Text(
+                      'FACTURAR A',
+                      style: TextStyle(
+                        fontSize: 8,
+                        fontWeight: FontWeight.bold,
+                        color: primaryColor,
+                      ),
+                    ),
+                    Container(
+                      height: 4,
+                      width: 50,
+                      color: Colors.grey.shade300,
+                      margin: const EdgeInsets.only(top: 2),
+                    ),
+                    Container(
+                      height: 4,
+                      width: 40,
+                      color: Colors.grey.shade300,
+                      margin: const EdgeInsets.only(top: 2),
+                    ),
                   ],
                 ),
               ),
             ],
           ),
           const SizedBox(height: 10),
-          
+
           // Tabla simulada
           Container(
             decoration: BoxDecoration(
@@ -559,39 +615,113 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               children: [
                 // Header de tabla
                 Container(
-                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 4,
+                    horizontal: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: primaryColor,
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(1)),
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(1),
+                    ),
                   ),
                   child: const Row(
                     children: [
-                      Expanded(flex: 1, child: Text('Cant.', style: TextStyle(color: Colors.white, fontSize: 7, fontWeight: FontWeight.bold))),
-                      Expanded(flex: 3, child: Text('Descripción', style: TextStyle(color: Colors.white, fontSize: 7, fontWeight: FontWeight.bold))),
-                      Expanded(flex: 2, child: Text('Precio', style: TextStyle(color: Colors.white, fontSize: 7, fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
+                      Expanded(
+                        flex: 1,
+                        child: Text(
+                          'Cant.',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 7,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        flex: 3,
+                        child: Text(
+                          'Descripción',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 7,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: Text(
+                          'Precio',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 7,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.right,
+                        ),
+                      ),
                     ],
                   ),
                 ),
                 // Filas
                 Container(
-                  padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 6),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 3,
+                    horizontal: 6,
+                  ),
                   color: Colors.white,
                   child: Row(
                     children: [
-                      const Expanded(flex: 1, child: Text('1', style: TextStyle(fontSize: 7))),
-                      const Expanded(flex: 3, child: Text('Servicio DJ', style: TextStyle(fontSize: 7))),
-                      Expanded(flex: 2, child: Text('500,00 €', style: const TextStyle(fontSize: 7), textAlign: TextAlign.right)),
+                      const Expanded(
+                        flex: 1,
+                        child: Text('1', style: TextStyle(fontSize: 7)),
+                      ),
+                      const Expanded(
+                        flex: 3,
+                        child: Text(
+                          'Servicio DJ',
+                          style: TextStyle(fontSize: 7),
+                        ),
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: Text(
+                          '500,00 €',
+                          style: const TextStyle(fontSize: 7),
+                          textAlign: TextAlign.right,
+                        ),
+                      ),
                     ],
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 6),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 3,
+                    horizontal: 6,
+                  ),
                   color: rowAltColor,
                   child: Row(
                     children: [
-                      const Expanded(flex: 1, child: Text('2', style: TextStyle(fontSize: 7))),
-                      const Expanded(flex: 3, child: Text('Desplazamiento', style: TextStyle(fontSize: 7))),
-                      Expanded(flex: 2, child: Text('50,00 €', style: const TextStyle(fontSize: 7), textAlign: TextAlign.right)),
+                      const Expanded(
+                        flex: 1,
+                        child: Text('2', style: TextStyle(fontSize: 7)),
+                      ),
+                      const Expanded(
+                        flex: 3,
+                        child: Text(
+                          'Desplazamiento',
+                          style: TextStyle(fontSize: 7),
+                        ),
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: Text(
+                          '50,00 €',
+                          style: const TextStyle(fontSize: 7),
+                          textAlign: TextAlign.right,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -599,7 +729,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 8),
-          
+
           // Total
           Align(
             alignment: Alignment.centerRight,
@@ -611,7 +741,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
               child: const Text(
                 'TOTAL  665,50 €',
-                style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ),

@@ -93,10 +93,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               const SizedBox(height: 24),
 
               // ── Logo ──
-              Text(AppStrings.logo,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      )),
+              Text(
+                AppStrings.logo,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 12),
               _LogoSelector(
                 logoPath: _logoPath,
@@ -106,10 +108,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               const SizedBox(height: 24),
 
               // ── Datos de facturación ──
-              Text('Datos de facturación',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      )),
+              Text(
+                'Datos de facturación',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _nombreController,
@@ -241,11 +245,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
 
     await ref.read(settingsProvider.notifier).save(settings);
+    if (SupabaseService.instance.isAuthenticated) {
+      try {
+        await SupabaseService.instance.uploadSettings(settings);
+      } catch (_) {
+        // Local settings are the source of truth; cloud sync can be retried later.
+      }
+    }
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Perfil guardado')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Perfil guardado')));
     }
   }
 }
@@ -264,7 +275,11 @@ class _GoogleSection extends ConsumerWidget {
           padding: const EdgeInsets.all(16),
           child: Column(
             children: [
-              const Icon(Icons.account_circle, size: 64, color: AppColors.textSecondary),
+              const Icon(
+                Icons.account_circle,
+                size: 64,
+                color: AppColors.textSecondary,
+              ),
               const SizedBox(height: 12),
               const Text(
                 'Conecta tu cuenta de Google',
@@ -282,7 +297,8 @@ class _GoogleSection extends ConsumerWidget {
                 child: ElevatedButton.icon(
                   icon: const Icon(Icons.login),
                   label: const Text('Iniciar sesión con Google'),
-                  onPressed: () => ref.read(googleAuthProvider.notifier).signIn(),
+                  onPressed: () =>
+                      ref.read(googleAuthProvider.notifier).signIn(),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
@@ -340,21 +356,25 @@ class _GoogleSection extends ConsumerWidget {
           // ── Google Calendar ──
           if (auth.calendarConnected)
             const ListTile(
-              leading:
-                  Icon(Icons.calendar_month, color: AppColors.primary),
+              leading: Icon(Icons.calendar_month, color: AppColors.primary),
               title: Text('Google Calendar'),
               subtitle: Text('Bolos sincronizados'),
-              trailing: Icon(Icons.check_circle,
-                  color: AppColors.accentGreen, size: 20),
+              trailing: Icon(
+                Icons.check_circle,
+                color: AppColors.accentGreen,
+                size: 20,
+              ),
             )
           else
             ListTile(
-              leading: const Icon(Icons.calendar_month,
-                  color: Colors.orange),
+              leading: const Icon(Icons.calendar_month, color: Colors.orange),
               title: const Text('Google Calendar'),
               subtitle: const Text('Sin sincronizar · Toca para conectar'),
-              trailing: const Icon(Icons.warning_amber_rounded,
-                  color: Colors.orange, size: 20),
+              trailing: const Icon(
+                Icons.warning_amber_rounded,
+                color: Colors.orange,
+                size: 20,
+              ),
               onTap: () =>
                   ref.read(googleAuthProvider.notifier).connectCalendarOnly(),
             ),
@@ -398,7 +418,8 @@ class _LogoSelector extends StatelessWidget {
                   width: 100,
                   height: 50,
                   fit: BoxFit.contain,
-                  errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, size: 50),
+                  errorBuilder: (_, __, ___) =>
+                      const Icon(Icons.broken_image, size: 50),
                 ),
               )
             else
@@ -413,7 +434,13 @@ class _LogoSelector extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(Icons.image, color: AppColors.textSecondary, size: 24),
-                    Text('Sin logo', style: TextStyle(fontSize: 10, color: AppColors.textSecondary)),
+                    Text(
+                      'Sin logo',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -431,7 +458,10 @@ class _LogoSelector extends StatelessWidget {
                     const SizedBox(height: 4),
                     TextButton(
                       onPressed: onRemove,
-                      child: const Text('Eliminar', style: TextStyle(color: AppColors.accentRed)),
+                      child: const Text(
+                        'Eliminar',
+                        style: TextStyle(color: AppColors.accentRed),
+                      ),
                     ),
                   ],
                 ],
@@ -454,7 +484,8 @@ class _SyncSection extends ConsumerWidget {
     final syncState = ref.watch(syncProvider);
     // Usar el provider reactivo para el estado de autenticación
     final authState = ref.watch(supabaseAuthProvider);
-    final isCloudAuth = authState.valueOrNull ?? SupabaseService.instance.isAuthenticated;
+    final isCloudAuth =
+        authState.valueOrNull ?? SupabaseService.instance.isAuthenticated;
     final isSupported = PlatformAuthService.isSupported;
 
     return Card(
@@ -467,7 +498,9 @@ class _SyncSection extends ConsumerWidget {
               children: [
                 Icon(
                   isCloudAuth ? Icons.cloud_done : Icons.cloud_off,
-                  color: isCloudAuth ? AppColors.success : AppColors.textSecondary,
+                  color: isCloudAuth
+                      ? AppColors.success
+                      : AppColors.textSecondary,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -476,15 +509,20 @@ class _SyncSection extends ConsumerWidget {
                     children: [
                       const Text(
                         'Sincronización en la nube',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                       Text(
-                        isCloudAuth 
-                          ? 'Conectado: ${SupabaseService.instance.userEmail ?? ""}' 
-                          : 'No conectado',
+                        isCloudAuth
+                            ? 'Conectado: ${SupabaseService.instance.userEmail ?? ""}'
+                            : 'No conectado',
                         style: TextStyle(
-                          fontSize: 13, 
-                          color: isCloudAuth ? AppColors.success : AppColors.textSecondary,
+                          fontSize: 13,
+                          color: isCloudAuth
+                              ? AppColors.success
+                              : AppColors.textSecondary,
                         ),
                       ),
                     ],
@@ -524,12 +562,19 @@ class _SyncSection extends ConsumerWidget {
                 ),
                 child: const Row(
                   children: [
-                    Icon(Icons.info_outline, color: AppColors.warning, size: 20),
+                    Icon(
+                      Icons.info_outline,
+                      color: AppColors.warning,
+                      size: 20,
+                    ),
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         'La sincronización en la nube solo está disponible en iOS, Android y macOS.',
-                        style: TextStyle(fontSize: 13, color: AppColors.warning),
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: AppColors.warning,
+                        ),
                       ),
                     ),
                   ],
@@ -546,7 +591,8 @@ class _SyncSection extends ConsumerWidget {
                       child: OutlinedButton.icon(
                         icon: const Icon(Icons.cloud_upload, size: 18),
                         label: const Text('Subir'),
-                        onPressed: () => ref.read(syncProvider.notifier).uploadToCloud(),
+                        onPressed: () =>
+                            ref.read(syncProvider.notifier).uploadToCloud(),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -554,7 +600,8 @@ class _SyncSection extends ConsumerWidget {
                       child: OutlinedButton.icon(
                         icon: const Icon(Icons.cloud_download, size: 18),
                         label: const Text('Descargar'),
-                        onPressed: () => ref.read(syncProvider.notifier).downloadFromCloud(),
+                        onPressed: () =>
+                            ref.read(syncProvider.notifier).downloadFromCloud(),
                       ),
                     ),
                   ],
@@ -579,8 +626,8 @@ class _SyncSection extends ConsumerWidget {
                     color: syncState.status == SyncStatus.error
                         ? AppColors.errorBg
                         : syncState.status == SyncStatus.success
-                            ? AppColors.successBg
-                            : AppColors.primaryLight,
+                        ? AppColors.successBg
+                        : AppColors.primaryLight,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Row(
@@ -589,14 +636,14 @@ class _SyncSection extends ConsumerWidget {
                         syncState.status == SyncStatus.error
                             ? Icons.error_outline
                             : syncState.status == SyncStatus.success
-                                ? Icons.check_circle_outline
-                                : Icons.info_outline,
+                            ? Icons.check_circle_outline
+                            : Icons.info_outline,
                         size: 18,
                         color: syncState.status == SyncStatus.error
                             ? AppColors.error
                             : syncState.status == SyncStatus.success
-                                ? AppColors.success
-                                : AppColors.primary,
+                            ? AppColors.success
+                            : AppColors.primary,
                       ),
                       const SizedBox(width: 8),
                       Expanded(
@@ -607,8 +654,8 @@ class _SyncSection extends ConsumerWidget {
                             color: syncState.status == SyncStatus.error
                                 ? AppColors.error
                                 : syncState.status == SyncStatus.success
-                                    ? AppColors.success
-                                    : AppColors.primary,
+                                ? AppColors.success
+                                : AppColors.primary,
                           ),
                         ),
                       ),
@@ -622,7 +669,10 @@ class _SyncSection extends ConsumerWidget {
                 const SizedBox(height: 8),
                 Text(
                   'Última sincronización: ${_formatDate(syncState.lastSync!)}',
-                  style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textMuted,
+                  ),
                 ),
               ],
             ],

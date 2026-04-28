@@ -7,9 +7,16 @@ import '../../models/asset.dart';
 import '../../providers/assets_provider.dart';
 import '../../widgets/common/empty_state.dart';
 
-final _assetCategoryFilterProvider =
-    StateProvider<AssetCategory?>((ref) => null);
+final _assetCategoryFilterProvider = StateProvider<AssetCategory?>(
+  (ref) => null,
+);
 final _showInactivosProvider = StateProvider<bool>((ref) => false);
+
+enum AssetSortOption { fechaDesc, fechaAsc, importeDesc, importeAsc, nombreAsc }
+
+final _assetSortProvider = StateProvider<AssetSortOption>(
+  (ref) => AssetSortOption.fechaDesc,
+);
 
 class AssetsScreen extends ConsumerWidget {
   const AssetsScreen({super.key});
@@ -19,6 +26,7 @@ class AssetsScreen extends ConsumerWidget {
     final assetsAsync = ref.watch(assetsProvider);
     final categoriaFilter = ref.watch(_assetCategoryFilterProvider);
     final showInactivos = ref.watch(_showInactivosProvider);
+    final sortOption = ref.watch(_assetSortProvider);
 
     final now = DateTime.now();
     final quarter = ((now.month - 1) ~/ 3) + 1;
@@ -27,52 +35,6 @@ class AssetsScreen extends ConsumerWidget {
     );
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Inversiones'),
-        actions: [
-          IconButton(
-            icon: Icon(
-              showInactivos
-                  ? Icons.visibility_off_outlined
-                  : Icons.visibility_outlined,
-              color: showInactivos ? AppColors.primary : null,
-            ),
-            tooltip: showInactivos ? 'Ocultar dados de baja' : 'Mostrar dados de baja',
-            onPressed: () {
-              ref.read(_showInactivosProvider.notifier).state = !showInactivos;
-            },
-          ),
-          PopupMenuButton<AssetCategory?>(
-            icon: Icon(
-              Icons.filter_list,
-              color: categoriaFilter != null ? AppColors.primary : null,
-            ),
-            tooltip: 'Filtrar por categoría',
-            onSelected: (value) {
-              ref.read(_assetCategoryFilterProvider.notifier).state = value;
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: null,
-                child: Text('Todas las categorías'),
-              ),
-              const PopupMenuDivider(),
-              ...AssetCategory.values.map(
-                (cat) => PopupMenuItem(
-                  value: cat,
-                  child: Row(
-                    children: [
-                      Icon(cat.icono, size: 18, color: AppColors.textSecondary),
-                      const SizedBox(width: 8),
-                      Text(cat.label),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
       body: assetsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Error: $e')),
@@ -84,38 +46,57 @@ class AssetsScreen extends ConsumerWidget {
             }
             return true;
           }).toList();
-
-          if (filtered.isEmpty) {
-            return const EmptyState(
-              icon: Icons.inventory_2_outlined,
-              message: 'Sin inversiones. Añade la primera con el botón +',
-            );
-          }
+          _sortAssets(filtered, sortOption);
 
           return Column(
             children: [
+              const _CompactHeader(title: 'Inversiones'),
               _ResumenBanner(
                 assets: assets.where((a) => a.activo).toList(),
                 amortizacionTrimestreAsync: amortizacionAsync,
                 year: now.year,
                 quarter: quarter,
               ),
-              const SizedBox(height: 8),
-              Expanded(
-                child: ListView.separated(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 8),
-                  itemCount: filtered.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
-                  itemBuilder: (context, index) {
-                    return _AssetCard(
-                      asset: filtered[index],
-                      onTap: () =>
-                          context.push('/asset/${filtered[index].id}'),
-                    );
-                  },
-                ),
+              _AssetActions(
+                category: categoriaFilter,
+                showInactive: showInactivos,
+                sortOption: sortOption,
+                onCategoryChanged: (value) {
+                  ref.read(_assetCategoryFilterProvider.notifier).state = value;
+                },
+                onShowInactiveChanged: () {
+                  ref.read(_showInactivosProvider.notifier).state =
+                      !showInactivos;
+                },
+                onSortChanged: (value) {
+                  ref.read(_assetSortProvider.notifier).state = value;
+                },
               ),
+              if (filtered.isEmpty)
+                const Expanded(
+                  child: EmptyState(
+                    icon: Icons.inventory_2_outlined,
+                    message: 'Sin inversiones para este filtro',
+                  ),
+                )
+              else
+                Expanded(
+                  child: ListView.separated(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    itemCount: filtered.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    itemBuilder: (context, index) {
+                      return _AssetCard(
+                        asset: filtered[index],
+                        onTap: () =>
+                            context.push('/asset/${filtered[index].id}'),
+                      );
+                    },
+                  ),
+                ),
             ],
           );
         },
@@ -123,6 +104,163 @@ class AssetsScreen extends ConsumerWidget {
       floatingActionButton: FloatingActionButton(
         onPressed: () => context.push('/asset/new'),
         child: const Icon(Icons.add),
+      ),
+    );
+  }
+
+  void _sortAssets(List<Asset> assets, AssetSortOption option) {
+    assets.sort((a, b) {
+      switch (option) {
+        case AssetSortOption.fechaDesc:
+          return b.fechaCompra.compareTo(a.fechaCompra);
+        case AssetSortOption.fechaAsc:
+          return a.fechaCompra.compareTo(b.fechaCompra);
+        case AssetSortOption.importeDesc:
+          return b.importeTotal.compareTo(a.importeTotal);
+        case AssetSortOption.importeAsc:
+          return a.importeTotal.compareTo(b.importeTotal);
+        case AssetSortOption.nombreAsc:
+          return a.descripcion.toLowerCase().compareTo(
+            b.descripcion.toLowerCase(),
+          );
+      }
+    });
+  }
+}
+
+class _CompactHeader extends StatelessWidget {
+  final String title;
+
+  const _CompactHeader({required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      alignment: Alignment.centerLeft,
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        border: Border(
+          bottom: BorderSide(color: AppColors.cardBorder, width: 0.5),
+        ),
+      ),
+      child: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.w500,
+          color: AppColors.textPrimary,
+        ),
+      ),
+    );
+  }
+}
+
+class _AssetActions extends StatelessWidget {
+  final AssetCategory? category;
+  final bool showInactive;
+  final AssetSortOption sortOption;
+  final ValueChanged<AssetCategory?> onCategoryChanged;
+  final VoidCallback onShowInactiveChanged;
+  final ValueChanged<AssetSortOption> onSortChanged;
+
+  const _AssetActions({
+    required this.category,
+    required this.showInactive,
+    required this.sortOption,
+    required this.onCategoryChanged,
+    required this.onShowInactiveChanged,
+    required this.onSortChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: PopupMenuButton<AssetCategory?>(
+              onSelected: onCategoryChanged,
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: null,
+                  child: Text('Todas las categorías'),
+                ),
+                const PopupMenuDivider(),
+                ...AssetCategory.values.map(
+                  (cat) => PopupMenuItem(
+                    value: cat,
+                    child: Row(
+                      children: [
+                        Icon(
+                          cat.icono,
+                          size: 18,
+                          color: AppColors.textSecondary,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(cat.label),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+              child: _ActionPill(
+                icon: Icons.filter_list,
+                label: category?.label ?? 'Categoría',
+                active: category != null,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: PopupMenuButton<AssetSortOption>(
+              onSelected: onSortChanged,
+              itemBuilder: (context) => const [
+                PopupMenuItem(
+                  value: AssetSortOption.fechaDesc,
+                  child: Text('Fecha reciente'),
+                ),
+                PopupMenuItem(
+                  value: AssetSortOption.fechaAsc,
+                  child: Text('Fecha antigua'),
+                ),
+                PopupMenuDivider(),
+                PopupMenuItem(
+                  value: AssetSortOption.importeDesc,
+                  child: Text('Importe mayor'),
+                ),
+                PopupMenuItem(
+                  value: AssetSortOption.importeAsc,
+                  child: Text('Importe menor'),
+                ),
+                PopupMenuItem(
+                  value: AssetSortOption.nombreAsc,
+                  child: Text('Nombre A-Z'),
+                ),
+              ],
+              child: const _ActionPill(icon: Icons.sort, label: 'Ordenar'),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: onShowInactiveChanged,
+                borderRadius: BorderRadius.circular(10),
+                child: _ActionPill(
+                  icon: showInactive
+                      ? Icons.visibility_off_outlined
+                      : Icons.visibility_outlined,
+                  label: showInactive ? 'Bajas' : 'Activas',
+                  active: showInactive,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -144,10 +282,14 @@ class _ResumenBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fmt = NumberFormat.currency(locale: 'es_ES', symbol: '€');
-    final totalInversion =
-        assets.fold<double>(0.0, (s, a) => s + a.importeTotal);
-    final valorContableTotal =
-        assets.fold<double>(0.0, (s, a) => s + a.valorContable);
+    final totalInversion = assets.fold<double>(
+      0.0,
+      (s, a) => s + a.importeTotal,
+    );
+    final valorContableTotal = assets.fold<double>(
+      0.0,
+      (s, a) => s + a.valorContable,
+    );
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
@@ -179,26 +321,33 @@ class _ResumenBanner extends StatelessWidget {
           const SizedBox(height: 8),
           Row(
             children: [
-              const Icon(Icons.trending_down,
-                  size: 14, color: AppColors.textSecondary),
+              const Icon(
+                Icons.trending_down,
+                size: 14,
+                color: AppColors.textSecondary,
+              ),
               const SizedBox(width: 4),
               Text(
                 'Amortización T$quarter $year: ',
                 style: const TextStyle(
-                    fontSize: 12, color: AppColors.textSecondary),
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                ),
               ),
               amortizacionTrimestreAsync.when(
                 loading: () => const SizedBox(
-                    width: 12,
-                    height: 12,
-                    child: CircularProgressIndicator(strokeWidth: 2)),
+                  width: 12,
+                  height: 12,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
                 error: (_, __) => const Text('-'),
                 data: (v) => Text(
                   fmt.format(v),
                   style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primary),
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primary,
+                  ),
                 ),
               ),
             ],
@@ -233,6 +382,58 @@ class _Stat extends StatelessWidget {
           style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
         ),
       ],
+    );
+  }
+}
+
+class _ActionPill extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool active;
+
+  const _ActionPill({
+    required this.icon,
+    required this.label,
+    this.active = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = active ? AppColors.primary : AppColors.textPrimary;
+    return Container(
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: active ? AppColors.primary : AppColors.cardBorder,
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 6),
+          Flexible(
+            child: MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.noScaling),
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: color,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -299,8 +500,9 @@ class _AssetCard extends StatelessWidget {
                         Text(
                           asset.categoria.label,
                           style: const TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textSecondary),
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                          ),
                         ),
                       ],
                     ),
@@ -318,8 +520,9 @@ class _AssetCard extends StatelessWidget {
                       Text(
                         'Valor contable',
                         style: const TextStyle(
-                            fontSize: 10,
-                            color: AppColors.textSecondary),
+                          fontSize: 10,
+                          color: AppColors.textSecondary,
+                        ),
                       ),
                     ],
                   ),
@@ -345,8 +548,9 @@ class _AssetCard extends StatelessWidget {
                   Text(
                     '${(pct * 100).toStringAsFixed(0)}%',
                     style: const TextStyle(
-                        fontSize: 11,
-                        color: AppColors.textSecondary),
+                      fontSize: 11,
+                      color: AppColors.textSecondary,
+                    ),
                   ),
                 ],
               ),
@@ -357,13 +561,16 @@ class _AssetCard extends StatelessWidget {
                   Text(
                     '${fmt.format(asset.cuotaAnual)}/año',
                     style: const TextStyle(
-                        fontSize: 11,
-                        color: AppColors.textSecondary),
+                      fontSize: 11,
+                      color: AppColors.textSecondary,
+                    ),
                   ),
                   if (asset.estaAmortizado)
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: AppColors.successBg,
                         borderRadius: BorderRadius.circular(10),
@@ -371,13 +578,17 @@ class _AssetCard extends StatelessWidget {
                       child: const Text(
                         'Amortizado',
                         style: TextStyle(
-                            fontSize: 10, color: AppColors.success),
+                          fontSize: 10,
+                          color: AppColors.success,
+                        ),
                       ),
                     )
                   else if (!asset.activo)
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.grey.shade100,
                         borderRadius: BorderRadius.circular(10),
@@ -385,8 +596,9 @@ class _AssetCard extends StatelessWidget {
                       child: const Text(
                         'Dado de baja',
                         style: TextStyle(
-                            fontSize: 10,
-                            color: AppColors.textSecondary),
+                          fontSize: 10,
+                          color: AppColors.textSecondary,
+                        ),
                       ),
                     ),
                 ],

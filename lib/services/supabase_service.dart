@@ -23,7 +23,7 @@ class SupabaseService {
   bool get isAuthenticated => _client?.auth.currentUser != null;
   String? get userId => _client?.auth.currentUser?.id;
   String? get userEmail => _client?.auth.currentUser?.email;
-  
+
   /// Stream de cambios de estado de autenticación
   Stream<AuthState>? get authStateChanges => _client?.auth.onAuthStateChange;
 
@@ -32,22 +32,24 @@ class SupabaseService {
     required String anonKey,
   }) async {
     if (_initialized) return;
-    
+
     await Supabase.initialize(url: url, anonKey: anonKey);
     _client = Supabase.instance.client;
     _initialized = true;
     debugPrint('[Supabase] Initialized');
-    
+
     // Escuchar cambios de auth para debug
     _client?.auth.onAuthStateChange.listen((data) {
-      debugPrint('[Supabase] Auth state changed: ${data.event} - ${data.session?.user.email}');
+      debugPrint(
+        '[Supabase] Auth state changed: ${data.event} - ${data.session?.user.email}',
+      );
     });
   }
 
   /// Autenticar con Google ID token (para iOS/Android)
   Future<bool> signInWithGoogle(String idToken, String accessToken) async {
     if (_client == null) return false;
-    
+
     try {
       final response = await _client!.auth.signInWithIdToken(
         provider: OAuthProvider.google,
@@ -66,18 +68,18 @@ class SupabaseService {
   /// Abre el navegador y espera el callback
   Future<bool> signInWithOAuth() async {
     if (_client == null) return false;
-    
+
     try {
       debugPrint('[Supabase] Starting OAuth flow...');
-      
+
       final response = await _client!.auth.signInWithOAuth(
         OAuthProvider.google,
         redirectTo: Platform.isMacOS ? 'misbolos://login-callback' : null,
         authScreenLaunchMode: LaunchMode.externalApplication,
       );
-      
+
       debugPrint('[Supabase] OAuth response: $response');
-      
+
       // En desktop, el usuario completa el flujo en el navegador
       // y Supabase maneja el callback automáticamente
       return response;
@@ -96,7 +98,7 @@ class SupabaseService {
 
   Future<void> uploadClients(List<Client> clients) async {
     if (!isAuthenticated) return;
-    
+
     for (final client in clients) {
       final map = _clientToSupabase(client);
       await _client!.from('clients').upsert(map, onConflict: 'id');
@@ -110,7 +112,7 @@ class SupabaseService {
   /// Sincroniza todos los bolos (incluidos los "en B")
   Future<void> uploadGigs(List<Gig> gigs) async {
     if (!isAuthenticated) return;
-    
+
     for (final gig in gigs) {
       final map = _gigToSupabase(gig);
       // Si el invoice_id no existe en las facturas válidas, lo ponemos a null
@@ -124,11 +126,12 @@ class SupabaseService {
 
   Future<void> uploadInvoices(List<Invoice> invoices) async {
     if (!isAuthenticated) return;
-    
+
     for (final invoice in invoices) {
       final map = _invoiceToSupabase(invoice);
       // Eliminar factura en la nube con mismo numero pero distinto id (renumeración)
-      await _client!.from('invoices')
+      await _client!
+          .from('invoices')
           .delete()
           .eq('user_id', userId!)
           .eq('numero', invoice.numero.toString())
@@ -145,26 +148,31 @@ class SupabaseService {
   }) async {
     // Hay dependencia circular: gigs.invoice_id → invoices, invoices.gig_id → gigs
     // Solución: subir en 3 fases
-    
+
     // Fase 1: Subir clientes
     await uploadClients(clients);
-    
+
     // Fase 2: Subir gigs SIN invoice_id (para que invoices pueda referenciarlos)
     for (final gig in gigs) {
       final map = _gigToSupabase(gig);
       map['invoice_id'] = null; // Temporalmente sin invoice
       await _client!.from('gigs').upsert(map, onConflict: 'id');
     }
-    debugPrint('[Supabase] Uploaded ${gigs.length} gigs (phase 1, without invoice_id)');
-    
+    debugPrint(
+      '[Supabase] Uploaded ${gigs.length} gigs (phase 1, without invoice_id)',
+    );
+
     // Fase 3: Subir invoices (ahora gigs existen)
     await uploadInvoices(invoices);
-    
+
     // Fase 4: Actualizar gigs con invoice_id correcto
     _validInvoiceIds = invoices.map((i) => i.id).toSet();
     for (final gig in gigs) {
       if (gig.invoiceId != null && _validInvoiceIds.contains(gig.invoiceId)) {
-        await _client!.from('gigs').update({'invoice_id': gig.invoiceId}).eq('id', gig.id);
+        await _client!
+            .from('gigs')
+            .update({'invoice_id': gig.invoiceId})
+            .eq('id', gig.id);
       }
     }
     debugPrint('[Supabase] Updated gigs with invoice_id (phase 2)');
@@ -174,7 +182,12 @@ class SupabaseService {
 
   Future<void> uploadSettings(AppSettings settings) async {
     if (!isAuthenticated) return;
-    
+
+    if (_billingFieldsAreEmpty(settings)) {
+      debugPrint('[Supabase] Skipping empty local settings upload');
+      return;
+    }
+
     // Subir logo si existe
     String? logoUrl;
     debugPrint('[Supabase] Logo path: "${settings.logoPath}"');
@@ -186,7 +199,7 @@ class SupabaseService {
         debugPrint('[Supabase] Logo uploaded: $logoUrl');
       }
     }
-    
+
     final map = {
       'user_id': userId,
       'emisor_nombre': settings.emisorNombre,
@@ -201,34 +214,46 @@ class SupabaseService {
       'iva_default': settings.ivaDefault,
       if (logoUrl != null) 'logo_url': logoUrl,
     };
-    
+
     debugPrint('[Supabase] Uploading settings: $map');
     await _client!.from('user_settings').upsert(map, onConflict: 'user_id');
     debugPrint('[Supabase] Uploaded settings');
   }
 
+  bool _billingFieldsAreEmpty(AppSettings settings) {
+    return settings.emisorNombre.trim().isEmpty &&
+        settings.emisorNIF.trim().isEmpty &&
+        settings.emisorDireccion.trim().isEmpty &&
+        settings.emisorCiudad.trim().isEmpty &&
+        settings.emisorProvincia.trim().isEmpty &&
+        settings.emisorCodigoPostal.trim().isEmpty &&
+        settings.emisorEmail.trim().isEmpty &&
+        settings.emisorTelefono.trim().isEmpty &&
+        settings.iban.trim().isEmpty;
+  }
+
   Future<AppSettings?> downloadSettings() async {
     if (!isAuthenticated) return null;
-    
+
     try {
       final data = await _client!
           .from('user_settings')
           .select()
           .eq('user_id', userId!)
           .maybeSingle();
-      
+
       if (data == null) {
         debugPrint('[Supabase] No settings found');
         return null;
       }
-      
+
       // Descargar logo si existe en la nube
       String localLogoPath = '';
       final cloudLogoUrl = data['logo_url'] as String?;
       if (cloudLogoUrl != null && cloudLogoUrl.isNotEmpty) {
         localLogoPath = await downloadLogo(cloudLogoUrl) ?? '';
       }
-      
+
       final settings = AppSettings(
         emisorNombre: data['emisor_nombre'] ?? '',
         emisorNIF: data['emisor_nif'] ?? '',
@@ -254,20 +279,18 @@ class SupabaseService {
 
   Future<String?> uploadLogo(String localPath) async {
     if (!isAuthenticated) return null;
-    
+
     try {
       final file = File(localPath);
       if (!file.existsSync()) return null;
-      
+
       final ext = p.extension(localPath);
       final fileName = '$userId/logo$ext';
-      
-      await _client!.storage.from('logos').upload(
-        fileName,
-        file,
-        fileOptions: const FileOptions(upsert: true),
-      );
-      
+
+      await _client!.storage
+          .from('logos')
+          .upload(fileName, file, fileOptions: const FileOptions(upsert: true));
+
       debugPrint('[Supabase] Uploaded logo: $fileName');
       return fileName;
     } catch (e) {
@@ -278,17 +301,17 @@ class SupabaseService {
 
   Future<String?> downloadLogo(String cloudPath) async {
     if (!isAuthenticated) return null;
-    
+
     try {
       final bytes = await _client!.storage.from('logos').download(cloudPath);
-      
+
       final dir = await getApplicationDocumentsDirectory();
       final ext = p.extension(cloudPath);
       final localPath = '${dir.path}/logo$ext';
-      
+
       final file = File(localPath);
       await file.writeAsBytes(bytes);
-      
+
       debugPrint('[Supabase] Downloaded logo to: $localPath');
       return localPath;
     } catch (e) {
@@ -340,7 +363,7 @@ class SupabaseService {
 
   Future<List<Client>> downloadClients() async {
     if (!isAuthenticated) return [];
-    
+
     final data = await _client!.from('clients').select();
     final clients = (data as List).map((e) => _clientFromSupabase(e)).toList();
     debugPrint('[Supabase] Downloaded ${clients.length} clients');
@@ -349,7 +372,7 @@ class SupabaseService {
 
   Future<List<Gig>> downloadGigs() async {
     if (!isAuthenticated) return [];
-    
+
     final data = await _client!.from('gigs').select();
     final gigs = (data as List).map((e) => _gigFromSupabase(e)).toList();
     debugPrint('[Supabase] Downloaded ${gigs.length} gigs');
@@ -358,9 +381,11 @@ class SupabaseService {
 
   Future<List<Invoice>> downloadInvoices() async {
     if (!isAuthenticated) return [];
-    
+
     final data = await _client!.from('invoices').select();
-    final invoices = (data as List).map((e) => _invoiceFromSupabase(e)).toList();
+    final invoices = (data as List)
+        .map((e) => _invoiceFromSupabase(e))
+        .toList();
     debugPrint('[Supabase] Downloaded ${invoices.length} invoices');
     return invoices;
   }
@@ -445,10 +470,14 @@ class SupabaseService {
     final itemsRaw = m['items'];
     List<InvoiceLineItem> items = [];
     if (itemsRaw is List) {
-      items = itemsRaw.map((e) => InvoiceLineItem.fromMap(e as Map<String, dynamic>)).toList();
+      items = itemsRaw
+          .map((e) => InvoiceLineItem.fromMap(e as Map<String, dynamic>))
+          .toList();
     } else if (itemsRaw is String) {
       final decoded = jsonDecode(itemsRaw) as List;
-      items = decoded.map((e) => InvoiceLineItem.fromMap(e as Map<String, dynamic>)).toList();
+      items = decoded
+          .map((e) => InvoiceLineItem.fromMap(e as Map<String, dynamic>))
+          .toList();
     }
 
     return Invoice(
@@ -473,10 +502,9 @@ class SupabaseService {
     if (!isAuthenticated) return;
     for (final expense in expenses) {
       final cloudId = expense.cloudId!;
-      await _client!.from('expenses').upsert(
-        _expenseToSupabase(expense, cloudId),
-        onConflict: 'id',
-      );
+      await _client!
+          .from('expenses')
+          .upsert(_expenseToSupabase(expense, cloudId), onConflict: 'id');
     }
     debugPrint('[Supabase] Uploaded ${expenses.length} expenses');
   }
@@ -527,9 +555,12 @@ class SupabaseService {
     ivaRate: (m['iva_rate'] as num).toDouble(),
     ivaAmount: (m['iva_amount'] as num).toDouble(),
     total: (m['total'] as num).toDouble(),
-    categoria: ExpenseCategoryExtension.fromDb(m['categoria'] as String? ?? 'otros'),
+    categoria: ExpenseCategoryExtension.fromDb(
+      m['categoria'] as String? ?? 'otros',
+    ),
     esDeducible: m['es_deducible'] as bool? ?? true,
-    porcentajeDeduccion: (m['porcentaje_deduccion'] as num?)?.toDouble() ?? 100.0,
+    porcentajeDeduccion:
+        (m['porcentaje_deduccion'] as num?)?.toDouble() ?? 100.0,
     documentoPath: m['documento_path'] as String?,
     notas: m['notas'] as String?,
     synced: true,
@@ -542,10 +573,9 @@ class SupabaseService {
     if (!isAuthenticated) return;
     for (final asset in assets) {
       final cloudId = asset.cloudId!;
-      await _client!.from('assets').upsert(
-        _assetToSupabase(asset, cloudId),
-        onConflict: 'id',
-      );
+      await _client!
+          .from('assets')
+          .upsert(_assetToSupabase(asset, cloudId), onConflict: 'id');
     }
     debugPrint('[Supabase] Uploaded ${assets.length} assets');
   }
