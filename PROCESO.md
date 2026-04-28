@@ -1,5 +1,11 @@
 # MisBolos — Registro de desarrollo
 
+Este documento funciona como bitácora técnica del proyecto: stack, rutas,
+migraciones, integraciones, incidencias resueltas y estructura interna.
+
+La descripción funcional completa del producto está en
+[PROYECTO.md](PROYECTO.md).
+
 ## Descripción
 App de gestión de bolos (actuaciones de DJ), clientes y facturas. Desarrollada en Flutter para macOS con soporte futuro para móvil.
 

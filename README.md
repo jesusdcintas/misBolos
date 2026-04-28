@@ -3,6 +3,13 @@
 App de gestión de bolos (actuaciones DJ), clientes y facturación para autónomos.
 Preparada para **multi-usuario**: cada DJ tiene sus propios datos aislados.
 
+## Documentación
+
+- [PROYECTO.md](PROYECTO.md): descripción completa del proyecto, sus módulos y
+  su lógica de negocio.
+- [PROCESO.md](PROCESO.md): registro técnico de desarrollo, migraciones y
+  decisiones internas.
+
 ## Funcionalidades
 
 - **Dashboard** con resumen de ingresos oficiales y "en B"
