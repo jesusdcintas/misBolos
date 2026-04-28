@@ -1,4 +1,5 @@
 import 'package:sqflite/sqflite.dart';
+import '../core/utils/period_utils.dart';
 import '../database/database_helper.dart';
 import '../models/expense.dart';
 
@@ -66,8 +67,10 @@ class ExpenseRepository {
   }
 
   Future<Map<String, double>> getTotalesPorCategoria(
-      int year, int quarter) async {
-    final range = _quarterRange(year, quarter);
+    int year,
+    int quarter,
+  ) async {
+    final range = PeriodUtils.quarterRange(year, quarter);
     final db = await DatabaseHelper.instance.database;
     final maps = await db.query(
       'expenses',
@@ -84,7 +87,7 @@ class ExpenseRepository {
   }
 
   Future<double> getTotalDeducibleTrimestre(int year, int quarter) async {
-    final range = _quarterRange(year, quarter);
+    final range = PeriodUtils.quarterRange(year, quarter);
     final db = await DatabaseHelper.instance.database;
     final maps = await db.query(
       'expenses',
@@ -99,7 +102,7 @@ class ExpenseRepository {
   }
 
   Future<double> getTotalIvaSoportadoTrimestre(int year, int quarter) async {
-    final range = _quarterRange(year, quarter);
+    final range = PeriodUtils.quarterRange(year, quarter);
     final db = await DatabaseHelper.instance.database;
     final maps = await db.query(
       'expenses',
@@ -111,13 +114,6 @@ class ExpenseRepository {
       final pct = (m['porcentaje_deduccion'] as num).toDouble();
       return sum + iva * (pct / 100);
     });
-  }
-
-  (DateTime, DateTime) _quarterRange(int year, int quarter) {
-    final startMonth = (quarter - 1) * 3 + 1;
-    final from = DateTime(year, startMonth, 1);
-    final to = DateTime(year, startMonth + 3, 0, 23, 59, 59);
-    return (from, to);
   }
 
   /// Guarda el cloud_id generado al subir por primera vez
@@ -140,8 +136,11 @@ class ExpenseRepository {
       whereArgs: [expense.cloudId],
     );
     if (existing.isEmpty) {
-      await db.insert('expenses', expense.toMap(),
-          conflictAlgorithm: ConflictAlgorithm.replace);
+      await db.insert(
+        'expenses',
+        expense.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
     } else {
       final localId = existing.first['id'] as int;
       await db.update(

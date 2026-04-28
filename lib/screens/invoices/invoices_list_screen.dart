@@ -8,6 +8,7 @@ import '../../core/utils/currency_formatter.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../models/invoice.dart';
 import '../../models/gig.dart';
+import '../../providers/invoice_email_log_provider.dart';
 import '../../providers/invoice_provider.dart';
 import '../../providers/client_provider.dart';
 import '../../providers/gig_provider.dart';
@@ -658,9 +659,25 @@ class InvoicesListScreen extends ConsumerWidget {
                         selectedInvoices,
                         InvoiceStatus.enviada,
                       );
+                    } else if (value == 'sendEmail') {
+                      await _bulkEmailInvoices(
+                        actionContext,
+                        ref,
+                        selectedInvoices,
+                      );
                     }
                   },
                   itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'sendEmail',
+                      child: Row(
+                        children: [
+                          Icon(Icons.mark_email_read_outlined, size: 20),
+                          SizedBox(width: 12),
+                          Text('Enviar por email'),
+                        ],
+                      ),
+                    ),
                     const PopupMenuItem(
                       value: 'markPending',
                       child: Row(
@@ -769,6 +786,82 @@ class InvoicesListScreen extends ConsumerWidget {
           context,
         ).showSnackBar(SnackBar(content: Text('Error enviando facturas: $e')));
       }
+    }
+  }
+
+  Future<void> _bulkEmailInvoices(
+    BuildContext context,
+    WidgetRef ref,
+    Set<String> ids,
+  ) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('¿Enviar ${ids.length} facturas por email?'),
+        content: const Text(
+          'Se enviará cada factura al email configurado en su cliente.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Enviar'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !context.mounted) return;
+
+    final invoices = ref.read(invoicesProvider).valueOrNull ?? [];
+    final selected =
+        invoices.where((invoice) => ids.contains(invoice.id)).toList()
+          ..sort((a, b) => a.numero.compareTo(b.numero));
+    var sent = 0;
+    var failed = 0;
+
+    for (final invoice in selected) {
+      try {
+        await ref.read(invoiceEmailSendProvider.notifier).send(invoice);
+        sent++;
+
+        final client = await ref.read(
+          clientByIdProvider(invoice.clientId).future,
+        );
+        final settings = await ref.read(settingsProvider.future);
+        if (client != null && settings.notificacionesActivas) {
+          await NotificationService.instance.schedulePaymentReminder(
+            id: invoice.numero,
+            clientName: client.nombre,
+            total: invoice.total,
+            invoiceNumber: invoice.numero,
+            scheduledDate: DateTime.now().add(
+              Duration(days: settings.diasRecordatorio),
+            ),
+          );
+        }
+
+        final gig = await ref.read(gigByIdProvider(invoice.gigId).future);
+        if (gig != null) {
+          await _syncGigToCalendar(
+            ref,
+            gig.copyWith(status: GigStatus.facturaEnviada),
+          );
+        }
+      } catch (_) {
+        failed++;
+      }
+    }
+
+    ref.read(_selectionModeProvider.notifier).state = false;
+    ref.read(_selectedInvoicesProvider.notifier).state = {};
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Emails enviados: $sent · fallidos: $failed')),
+      );
     }
   }
 

@@ -22,8 +22,8 @@ centraliza ese flujo para que cada bolo pueda convertirse en un registro útil
 para la operación, la facturación y el seguimiento financiero.
 
 La app permite distinguir entre actividad oficial y actividad no facturable
-"en B", sin mezclar ambas cosas en la sincronización cloud ni en los resúmenes
-que no correspondan.
+"en B", manteniendo ambos flujos también en la nube cuando corresponde para
+sus resúmenes y sincronización.
 
 ## Objetivos del proyecto
 
@@ -111,15 +111,9 @@ La configuración personal del emisor forma parte del núcleo del producto:
 
 ## Enfoque de datos
 
-MisBolos sigue una estrategia "local first":
-
-- La base principal es SQLite.
-- La app puede funcionar offline.
-- La sincronización cloud es opcional.
-- Los datos no facturables no se suben a Supabase.
-
-Esto permite trabajar con seguridad incluso sin conexión, manteniendo la nube
-como apoyo y no como dependencia total.
+MisBolos combina una base local en SQLite con sincronización cloud para que la
+app pueda trabajar incluso sin conexión y, cuando hay red, mantener los datos
+alineados entre dispositivo y nube.
 
 ## Distinción entre oficial y B
 
@@ -128,8 +122,8 @@ actividad en B.
 
 - Los bolos facturables pueden generar factura, estados de cobro y resúmenes
   oficiales.
-- Los bolos en B quedan en el dispositivo y forman parte de sus propios
-  resúmenes.
+- Los bolos en B también pueden sincronizarse en la nube y forman parte de sus
+  propios resúmenes.
 - El dashboard y las vistas financieras pueden mostrar oficial, B y total
   combinado.
 
@@ -144,7 +138,7 @@ El proyecto está estructurado en capas sencillas y bastante claras:
 - `database/`: inicialización y migraciones SQLite.
 - `repositories/`: acceso a datos.
 - `providers/`: estado y lógica reactiva con Riverpod.
-- `services/`: PDF, Supabase, Google, notificaciones, importación.
+- `services/`: PDF, Supabase, Google Calendar, notificaciones, importación.
 - `screens/`: pantallas de la app.
 - `widgets/`: piezas reutilizables de UI.
 

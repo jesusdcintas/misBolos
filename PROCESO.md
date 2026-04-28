@@ -15,7 +15,7 @@ App de gestión de bolos (actuaciones de DJ), clientes y facturas. Desarrollada 
 - **Navegación:** GoRouter con ShellRoute (**5 pestañas**)
 - **BD local:** SQLite (sqflite + sqflite_common_ffi para desktop)
 - **Cloud:** Supabase (sincronización de datos)
-- **Google APIs:** googleapis + googleapis_auth (Calendar v3, Drive v3)
+- **Google APIs:** googleapis + googleapis_auth (Calendar v3)
 - **PDF:** pdf + printing
 - **Gráficas:** fl_chart
 - **Calendario:** table_calendar
@@ -102,6 +102,16 @@ App de gestión de bolos (actuaciones de DJ), clientes y facturas. Desarrollada 
 - El campo `importe_total` pasa a representar la **base imponible sin IVA** (amortizable)
 - El IVA se deduce en el trimestre de compra (modelo 303); la base se amortiza por años (modelo 130)
 
+### v14
+- Nueva tabla `app_events` para trazabilidad local de acciones relevantes
+- Índices por entidad (`entity_type`, `entity_id`) y fecha de creación
+- Primeros eventos registrados: creación/edición/borrado de bolos y facturas,
+  cambios de estado, enlace bolo-factura y generación de PDF de factura
+
+### v15
+- Nueva tabla `invoice_email_logs` para registrar intentos de envío de factura
+  por email: destinatario, proveedor, asunto, estado, error y fecha de envío
+
 ## Integración Google / Auth
 
 ### Estrategia dual por plataforma
@@ -125,7 +135,7 @@ App de gestión de bolos (actuaciones de DJ), clientes y facturas. Desarrollada 
 - **Servicio:** `lib/services/supabase_service.dart` (singleton)
 - Inicializado con URL + anon key desde `AppSettings`
 - RLS: `auth.uid() = user_id` — cada usuario solo ve sus datos
-- Sincronización de clients, gigs, invoices (solo datos oficiales)
+- Sincronización de clients, gigs, invoices, gastos e inversiones
 - Cola `pending_deletions` para borrados offline
 
 ### Configuración OAuth (macOS)
@@ -133,7 +143,7 @@ App de gestión de bolos (actuaciones de DJ), clientes y facturas. Desarrollada 
 - **Tipo de credencial:** Desktop (OAuth 2.0)
 - **Client ID:** `744196169382-knr1najrpc3muiim38k3epg6rdmdpuhj.apps.googleusercontent.com`
 - **Client Secret:** almacenado en `.env` y hardcodeado en el servicio
-- **Scopes:** Calendar, Drive, email, profile
+- **Scopes:** Calendar, email, profile
 - **Test user:** `jesus.cintasmu@gmail.com` (añadido en OAuth consent screen)
 
 ### Google Calendar
@@ -143,10 +153,9 @@ App de gestión de bolos (actuaciones de DJ), clientes y facturas. Desarrollada 
 - Eventos coloreados por estado
 - Lookup por `extendedProperties` (gig ID)
 
-### Google Drive (macOS)
-- Upload de PDFs de facturas a `MisBolos/Facturas`
-- Backup de base de datos a `MisBolos/Backups`
-- (**Nota:** `google_drive_service.dart` eliminado; la funcionalidad de Drive se gestiona a través del `SupabaseService` en el flujo multiplataforma)
+### Sincronización cloud
+- La sincronización y el almacenamiento cloud se apoyan en Supabase y Google
+  Calendar.
 
 ## Configuración macOS
 
@@ -210,7 +219,7 @@ lib/
 │   ├── asset.dart                     # Inversión/inmovilizado + amortización + IVA
 │   └── pdf_theme.dart                 # Temas de color para PDF (6 temas)
 ├── database/
-│   ├── database_helper.dart           # SQLite init + migraciones (versión 13)
+│   ├── database_helper.dart           # SQLite init + migraciones (versión 14)
 │   └── migrations/
 │       ├── v1_initial.dart
 │       ├── v2_add_provincia_cp.dart
@@ -224,7 +233,8 @@ lib/
 │       ├── v10_expenses.dart          # tabla expenses
 │       ├── v11_assets.dart            # tabla assets
 │       ├── v12_cloud_ids.dart         # cloud_id en expenses y assets
-│       └── v13_assets_iva.dart        # importe_con_iva, iva_rate, iva_amount en assets
+│       ├── v13_assets_iva.dart        # importe_con_iva, iva_rate, iva_amount en assets
+│       └── v14_app_events.dart        # tabla app_events para trazabilidad local
 ├── services/
 │   ├── google_auth_service.dart       # Auth macOS (googleapis_auth)
 │   ├── platform_auth_service.dart     # Auth iOS/Android (google_sign_in + Supabase)
@@ -266,43 +276,438 @@ lib/
 └── widgets/                           # Widgets compartidos
 ```
 
-## Pendientes prioritarios
+## Pendientes técnicos TFG
 
-### 1) ✅ Módulo de gastos (implementado — v10)
-- Migración `v10` con tabla `expenses`
-- Pantallas: lista con filtros, formulario (nuevo/editar), detalle
-- Adjuntar justificante (PDF/foto) con `file_picker` + `image_picker`
-- Conectado al resumen financiero: desglose por categoría e IVA soportado
-- Rutas: `/expense/new`, `/expense/edit/:id`, `/expense/:id`
+Hoja de ruta pendiente tras la revisión arquitectónica del 2026-04-28.
+No está implementada todavía. El objetivo es añadir funcionalidades avanzadas
+sin romper la arquitectura actual: `models`, `repositories`, `providers`,
+`services` y `screens`.
 
-### 2) ✅ Módulo de inversiones/inmovilizado (implementado — v11)
-- Migración `v11` con tabla `assets`
-- Pantallas: lista, formulario, detalle con tabla de amortización trimestral
-- Separación IVA / base imponible (v13): `importe_con_iva`, `iva_rate`, `iva_amount`
-- Dropdown IVA 21/10/4/0%; preview amortización con base sin IVA
-- Cálculo de cuota anual/trimestral/mensual y valor contable
-- Rutas: `/asset/new`, `/asset/edit/:id`, `/asset/:id`
+### Observaciones previas
+- `stats_provider.dart` concentra demasiada lógica de dashboard, periodos,
+  IVA y resumen financiero. Antes de ampliar cálculos fiscales conviene
+  extraer un servicio de dominio.
+- `FinancialSummaryScreen` ya usa facturas, gastos e inversiones, pero aún no
+  existe un modelo fiscal completo que unifique IVA repercutido, IVA soportado,
+  amortización y beneficio estimado.
+- `Asset` guarda `ivaAmount`, pero también calcula `ivaDeducible` como
+  `importeConIva - importeTotal`; hay que definir una fuente canónica.
+- `InvoiceStatus.enviada` se usa en la práctica como factura pendiente de
+  cobro. Hay que mantenerlo documentado para evitar confusión en UI y lógica.
+- No existen logs de envío de factura ni eventos inalterables. Son necesarios
+  para email, trazabilidad, asistente IA y preparación Verifactu.
+- `supabase/schema.sql` debe revisarse: aún conserva comentarios/campos antiguos
+  sobre bolos en B y nombres históricos.
+- No se deben exponer claves de IA/email en cliente Flutter. Deben ir en `.env`
+  local o, preferiblemente, en Supabase Edge Functions/secrets.
 
-### 3) ✅ Sincronización Supabase para gastos e inversiones (implementado — v12)
-- Columnas `cloud_id` en `expenses` y `assets`
-- `SyncProvider`: `uploadToCloud()` genera UUID y lo guarda, `downloadFromCloud()` hace upsert por `cloud_id`
-- RLS en Supabase: cada usuario solo ve sus datos
+### Fase 0 — Preparación técnica y trazabilidad (completada)
+**Objetivo:** preparar la app para nuevas funcionalidades sin cambiar el
+comportamiento visible.
+**Estado:** implementada y verificada en código.
 
-### 4) ✅ Reorganización NavBar 7 → 5 tabs (commit 482b173)
-- ANTES: Inicio | Calendario | Clientes | Facturas | Gastos | Inversiones | Perfil
-- DESPUÉS: Inicio | Agenda | **Finanzas** | Clientes | Perfil
-- `FinanzasScreen`: `DefaultTabController(3)` con TabBar interno Facturas/Gastos/Inversiones
-- FAB del Dashboard expandido a 4 acciones: bolo / cliente / gasto / inversión
+**Avance implementado**
+- Añadido `PeriodUtils` para rangos de mes/trimestre/año.
+- Añadida migración local `v14_app_events`.
+- Añadidos `AppEvent` y `AppEventRepository`.
+- Registrados eventos básicos en bolos, facturas y generación de PDF.
+- Actualizado `supabase/schema.sql` para reflejar bolos en B sincronizables y
+  reservar `app_events`.
 
-### 5) Asistente IA
-- Integrar asistente sobre la arquitectura actual de repositorios
-- Enviar contexto real de negocio a Claude API
-- Enfocar como diferencial académico del proyecto
+**Archivos afectados**
+- `lib/database/database_helper.dart`
+- `lib/providers/stats_provider.dart`
+- `supabase/schema.sql`
+- `README.md`
+- `PROYECTO.md`
 
-### 6) Envío de facturas por email
-- Reutilizar el PDF de factura ya generado
-- Implementar envío por correo con Brevo
-- Completar el flujo final post-generación de factura
+**Nuevos archivos**
+- `lib/core/utils/period_utils.dart`
+- `lib/models/app_event.dart`
+- `lib/repositories/app_event_repository.dart`
+
+**Migración**
+- `v14_app_events.dart`
+- Tabla `app_events`: `id`, `entity_type`, `entity_id`, `event_type`,
+  `payload_json`, `created_at`.
+
+**Riesgos**
+- Cambios de periodo pueden afectar dashboard y resumen financiero.
+- Si se registra demasiado evento, puede crecer la BD local.
+
+**Pruebas**
+- Migración desde versión 13.
+- Dashboard mes/trimestre/año.
+- Sincronización básica Supabase.
+
+**Orden**
+1. Extraer utilidades de periodo.
+2. Crear tabla local de eventos.
+3. Crear repositorio de eventos.
+4. Registrar eventos mínimos sin cambiar UI.
+5. Actualizar documentación y schema.
+
+### Fase 1 — Resumen financiero mejorado
+**Objetivo:** integrar facturas, gastos e inversiones en un cálculo fiscal
+coherente.
+**Estado:** implementada y verificada en código.
+
+**Avance implementado**
+- Añadido modelo `FinancialSummary` con desglose fiscal agregado y por trimestre.
+- Añadido `FinancialSummaryService` como lógica pura sin dependencia de UI/BD.
+- Añadido `financialSummaryProvider` para combinar facturas, gastos,
+  inversiones y bolos en el periodo seleccionado.
+- Añadida tarjeta "Fiscalidad estimada" al resumen financiero.
+- Exportación PDF ampliada con resumen fiscal estimado.
+- Añadidos tests unitarios de cálculo fiscal.
+
+**Cálculos requeridos**
+- IVA repercutido.
+- IVA soportado en gastos.
+- IVA soportado en inversiones.
+- IVA a pagar.
+- Ingresos oficiales.
+- Gastos deducibles.
+- Amortización trimestral.
+- Beneficio estimado.
+
+**Archivos afectados**
+- `lib/models/invoice.dart`
+- `lib/models/expense.dart`
+- `lib/models/asset.dart`
+- `lib/providers/stats_provider.dart`
+- `lib/screens/dashboard/financial_summary_screen.dart`
+- `lib/services/pdf_service.dart`
+
+**Nuevos archivos**
+- `lib/models/financial_summary.dart`
+- `lib/services/financial_summary_service.dart`
+- `lib/providers/financial_summary_provider.dart`
+- `test/financial_summary_service_test.dart`
+
+**Migración**
+- No obligatoria inicialmente; se pueden usar campos actuales.
+
+**Riesgos**
+- Confundir base imponible, IVA y total con IVA.
+- Cambiar importes visibles en dashboard si se modifica el criterio actual.
+
+**Pruebas**
+- Facturas borrador/enviadas/pagadas.
+- Gastos deducibles, no deducibles y deducibles parcialmente.
+- Inversiones dentro/fuera del trimestre.
+- Exportación PDF del resumen.
+- `flutter analyze`
+- `flutter test`
+
+**Orden**
+1. Definir modelo `FinancialSummary`. [x]
+2. Implementar `FinancialSummaryService` como lógica pura. [x]
+3. Crear provider Riverpod. [x]
+4. Sustituir cálculos de pantalla por provider. [x]
+5. Actualizar PDF. [x]
+6. Añadir tests unitarios de cálculo. [x]
+
+### Fase 2 — Envío de facturas por email
+**Objetivo:** reutilizar el PDF existente, enviarlo al cliente, registrar log y
+cambiar factura a enviada.
+**Estado:** implementada en cliente y Edge Function base. Pendiente desplegar
+la función y configurar secretos del proveedor en Supabase.
+
+**Avance implementado**
+- Añadido log local `invoice_email_logs` con migración v15.
+- Añadidos `InvoiceEmailLog`, repositorio y provider.
+- Añadido `InvoiceEmailService`, que genera el PDF y llama a una Supabase Edge
+  Function sin exponer claves privadas en Flutter.
+- Añadida Edge Function `send-invoice-email` preparada para Resend.
+- Añadido envío individual desde detalle de factura.
+- Añadido envío múltiple desde selección de facturas.
+- En envío correcto: registra evento, marca factura como pendiente, repara
+  estado del bolo, programa recordatorio y sincroniza Calendar si aplica.
+- En fallo: registra log local y evento de error.
+
+**Archivos afectados**
+- `lib/services/pdf_service.dart`
+- `lib/providers/invoice_provider.dart`
+- `lib/screens/invoices/invoice_detail_screen.dart`
+- `lib/screens/invoices/invoices_list_screen.dart`
+- `lib/services/supabase_service.dart`
+
+**Nuevos archivos**
+- `lib/models/invoice_email_log.dart`
+- `lib/repositories/invoice_email_log_repository.dart`
+- `lib/providers/invoice_email_log_provider.dart`
+- `lib/services/invoice_email_service.dart`
+- `lib/database/migrations/v15_invoice_email_logs.dart`
+- `supabase/functions/send-invoice-email/index.ts`
+
+**Migración**
+- `v15_invoice_email_logs.dart`
+- Tabla `invoice_email_logs`: `id`, `invoice_id`, `client_id`,
+  `recipient_email`, `provider`, `subject`, `status`, `error_message`,
+  `sent_at`, `created_at`.
+
+**Proveedor recomendado**
+- Resend: opción simple y limpia si hay dominio propio.
+- Brevo: buena alternativa con panel completo y enfoque europeo.
+- SMTP: solo desde backend seguro, nunca directo desde Flutter.
+- Decisión pendiente: elegir Resend o Brevo antes de desplegar la función.
+
+**Arquitectura segura**
+- Flutter genera o solicita el PDF.
+- Flutter llama a una Supabase Edge Function.
+- La Edge Function guarda las claves del proveedor en secrets.
+- El cliente Flutter nunca contiene API keys privadas.
+- Secrets esperados si se usa Resend: `RESEND_API_KEY` e
+  `INVOICE_FROM_EMAIL`.
+- Si se usa Brevo, adaptar la Edge Function y usar secrets equivalentes:
+  `BREVO_API_KEY` e `INVOICE_FROM_EMAIL`.
+
+**Tareas manuales pendientes**
+1. Elegir proveedor de email: Resend o Brevo.
+2. Crear/verificar dominio o remitente en el proveedor elegido.
+3. Configurar DNS del dominio si el proveedor lo pide:
+   SPF, DKIM y, si aplica, DMARC.
+4. Crear API key del proveedor.
+5. Configurar secrets en Supabase:
+   - Resend: `RESEND_API_KEY`, `INVOICE_FROM_EMAIL`.
+   - Brevo: `BREVO_API_KEY`, `INVOICE_FROM_EMAIL`.
+6. Si se elige Brevo, adaptar
+   `supabase/functions/send-invoice-email/index.ts` al endpoint de Brevo.
+7. Desplegar la Edge Function `send-invoice-email`.
+8. Probar con una factura real y un cliente con email propio/controlado.
+9. Revisar que el email llega con PDF adjunto y que no cae en spam.
+10. Confirmar en la app que la factura pasa a pendiente y se crea log local.
+
+**Riesgos**
+- Cliente sin email.
+- PDF demasiado grande.
+- Error parcial: email enviado pero estado no actualizado, o viceversa.
+- La función no enviará nada hasta estar desplegada y con secrets configurados.
+
+**Pruebas**
+- Envío individual.
+- Envío múltiple.
+- Cliente sin email.
+- Log correcto.
+- Estado `InvoiceStatus.enviada` y bolo `facturaEnviada`.
+- `flutter analyze`
+- `flutter test`
+
+**Orden**
+1. Crear log local. [x]
+2. Crear servicio abstracto de email. [x]
+3. Crear Edge Function de envío. [x]
+4. Integrar acción individual. [x]
+5. Integrar envío múltiple. [x]
+6. Actualizar estado y registrar evento. [x]
+
+### Fase 3 — WhatsApp
+**Objetivo:** abrir WhatsApp con mensaje prellenado para cliente usando
+`url_launcher`.
+
+**Archivos afectados**
+- `lib/screens/invoices/invoice_detail_screen.dart`
+- `lib/screens/gigs/gig_detail_screen.dart`
+- `lib/models/client.dart`
+
+**Nuevos archivos**
+- `lib/services/whatsapp_service.dart`
+- `lib/core/utils/phone_formatter.dart`
+
+**Migración**
+- No necesaria.
+
+**Regla importante**
+- No asumir que se puede adjuntar PDF directamente. Solo se puede incluir enlace
+  si existe URL pública o URL firmada.
+
+**Riesgos**
+- Teléfonos mal formateados.
+- WhatsApp no instalado.
+- Diferencias iOS/Android.
+
+**Pruebas**
+- Cliente con teléfono válido.
+- Cliente sin teléfono.
+- Mensaje con datos de bolo/factura.
+- Apertura en iOS y Android.
+
+**Orden**
+1. Normalizar teléfonos.
+2. Construir mensajes prellenados.
+3. Abrir `https://wa.me/...`.
+4. Añadir fallback si no se puede abrir.
+5. Integrar botones en factura/bolo.
+
+### Fase 4 — Extracción automática de gastos con IA
+**Objetivo:** subir PDF/foto de factura, extraer datos y prellenar el formulario
+de gasto con revisión manual obligatoria.
+
+**Campos a extraer**
+- Proveedor.
+- Fecha.
+- Base imponible.
+- IVA.
+- Total.
+- Categoría sugerida.
+
+**Archivos afectados**
+- `lib/screens/expenses/expense_form_screen.dart`
+- `lib/providers/expenses_provider.dart`
+- `lib/services/supabase_service.dart`
+
+**Nuevos archivos**
+- `lib/models/expense_draft.dart`
+- `lib/models/expense_extraction_result.dart`
+- `lib/services/expense_extraction_service.dart`
+- `lib/providers/expense_extraction_provider.dart`
+
+**Migración opcional**
+- `v16_expense_extraction_logs.dart`
+- Tabla `expense_extraction_logs`: `id`, `source_type`, `document_path`,
+  `status`, `extracted_json`, `error_message`, `created_at`.
+
+**Arquitectura segura**
+- Flutter selecciona PDF/foto.
+- Se sube a Supabase Storage o se manda a una Edge Function.
+- La Edge Function llama a la API de IA/OCR con clave secreta.
+- La app recibe JSON validado y muestra formulario editable.
+- El usuario revisa antes de guardar.
+
+**Riesgos**
+- OCR incorrecto.
+- Facturas con varios tipos de IVA.
+- Documentos sensibles.
+
+**Pruebas**
+- PDF simple.
+- Foto borrosa.
+- IVA 21%, 10%, 0%.
+- Corrección manual antes de guardar.
+
+**Orden**
+1. Crear modelo draft.
+2. Crear Edge Function de extracción.
+3. Crear servicio Flutter.
+4. Integrar UI de revisión.
+5. Guardar como `Expense`.
+6. Registrar log de extracción.
+
+### Fase 5 — Asistente IA
+**Objetivo:** chat dentro de la app que responda solo con datos reales de
+SQLite/Supabase mediante tools internas.
+
+**Casos requeridos**
+- "¿Cuánto llevo facturado este trimestre?"
+- "¿Quién me debe dinero?"
+- "Resume mis ingresos del mes"
+- "Qué clientes son más rentables"
+- "Prepara una factura para este bolo"
+
+**Archivos afectados**
+- `lib/app.dart`
+- `lib/providers/*`
+- `lib/repositories/*`
+- `lib/screens/dashboard/*`
+- `lib/screens/invoices/*`
+
+**Nuevos archivos**
+- `lib/screens/assistant/assistant_screen.dart`
+- `lib/models/assistant_message.dart`
+- `lib/models/assistant_action.dart`
+- `lib/services/assistant_service.dart`
+- `lib/services/assistant_tools.dart`
+- `lib/providers/assistant_provider.dart`
+
+**Migración opcional**
+- `v17_assistant_logs.dart`
+- Tablas `assistant_messages` y `assistant_action_logs`.
+
+**Arquitectura**
+- El asistente no debe ser un chatbot genérico.
+- Las respuestas se basan en tools deterministas contra repositorios.
+- La IA puede redactar, pero no inventar datos.
+- Toda acción que modifique datos requiere confirmación explícita.
+
+**Tools internas iniciales**
+- `getQuarterRevenue`
+- `getDebtors`
+- `getMonthlyIncomeSummary`
+- `getClientProfitability`
+- `prepareInvoiceDraftForGig`
+
+**Riesgos**
+- Alucinaciones si se deja responder sin tools.
+- Acciones no confirmadas.
+- Exposición innecesaria de datos personales.
+
+**Pruebas**
+- Preguntas de resumen financiero.
+- Listado de deudores.
+- Ranking de clientes.
+- Preparar factura sin guardarla.
+- Confirmación antes de crear/modificar datos.
+
+**Orden**
+1. Definir contrato de tools.
+2. Implementar tools deterministas.
+3. Crear servicio IA con backend seguro.
+4. Crear pantalla de chat.
+5. Añadir confirmaciones.
+6. Tests de tools sin IA.
+
+### Fase 6 — Preparación Verifactu
+**Objetivo:** reservar compatibilidad futura sin implementar todavía el envío
+AEAT completo.
+
+**Capacidades futuras**
+- QR tributario.
+- Hash/huella de factura.
+- Registro inalterable.
+- Trazabilidad de eventos.
+- Posible envío AEAT/API externa.
+
+**Archivos afectados**
+- `lib/models/invoice.dart`
+- `lib/repositories/invoice_repository.dart`
+- `lib/services/pdf_service.dart`
+- `lib/screens/invoices/*`
+
+**Nuevos archivos**
+- `lib/models/invoice_fiscal_record.dart`
+- `lib/models/invoice_event.dart`
+- `lib/repositories/invoice_fiscal_record_repository.dart`
+- `lib/services/verifactu_service.dart`
+
+**Migración**
+- `v18_invoice_fiscal_fields.dart`
+- Campos reservados en `invoices`: `fiscal_status`, `fiscal_hash`,
+  `fiscal_qr_payload`, `fiscal_registered_at`, `fiscal_version`,
+  `rectifies_invoice_id`.
+- Tabla `invoice_fiscal_records`: `id`, `invoice_id`, `event_type`,
+  `sequence`, `previous_hash`, `current_hash`, `payload_json`, `qr_payload`,
+  `aeat_status`, `aeat_response_json`, `created_at`.
+
+**Riesgos**
+- Cambios normativos.
+- Edición de facturas ya emitidas.
+- Cadena de hash incorrecta.
+- Diferencias entre factura ordinaria y rectificativa.
+
+**Pruebas**
+- Generación de hash estable.
+- Cadena `previous_hash`.
+- Evento fiscal por creación/envío/cobro.
+- Reserva de QR en PDF sin enviar aún a AEAT.
+
+**Orden**
+1. Añadir campos y tabla fiscal.
+2. Registrar eventos de factura.
+3. Crear servicio de hash local.
+4. Preparar payload QR.
+5. Añadir advertencias/bloqueos de edición.
+6. Documentar que no es implementación Verifactu completa.
 
 ## Variables de entorno (.env)
 ```

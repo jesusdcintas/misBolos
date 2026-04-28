@@ -94,6 +94,17 @@ class SupabaseService {
     debugPrint('[Supabase] Signed out');
   }
 
+  Future<dynamic> invokeFunction(
+    String functionName, {
+    required Map<String, dynamic> body,
+  }) async {
+    if (!isAuthenticated) {
+      throw Exception('Supabase no está autenticado');
+    }
+    final response = await _client!.functions.invoke(functionName, body: body);
+    return response.data;
+  }
+
   // ================== UPLOAD (Local → Cloud) ==================
 
   Future<void> uploadClients(List<Client> clients) async {
@@ -461,6 +472,8 @@ class SupabaseService {
     'subtotal': i.subtotal,
     'iva_porcentaje': i.ivaRate * 100,
     'iva_importe': i.ivaAmount,
+    'irpf_porcentaje': i.irpfRate * 100,
+    'irpf_importe': i.irpfAmount,
     'total': i.total,
     'status': i.status.dbValue,
     'created_at': i.createdAt.toUtc().toIso8601String(),
@@ -490,6 +503,8 @@ class SupabaseService {
       subtotal: (m['subtotal'] as num?)?.toDouble() ?? 0,
       ivaRate: ((m['iva_porcentaje'] as num?)?.toDouble() ?? 21) / 100,
       ivaAmount: (m['iva_importe'] as num?)?.toDouble() ?? 0,
+      irpfRate: ((m['irpf_porcentaje'] as num?)?.toDouble() ?? 0) / 100,
+      irpfAmount: (m['irpf_importe'] as num?)?.toDouble() ?? 0,
       total: (m['total'] as num?)?.toDouble() ?? 0,
       status: InvoiceStatusExtension.fromDb(m['status'] ?? 'borrador'),
       createdAt: DateTime.parse(m['created_at']),

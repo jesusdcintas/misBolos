@@ -19,7 +19,7 @@ Preparada para **multi-usuario**: cada DJ tiene sus propios datos aislados.
 - **Estadísticas** con gráficos mensuales y exportación CSV
 - **Resumen financiero** con declaración trimestral de IVA
 - **Importación** de bolos desde CSV o Excel
-- **Sincronización opcional** con Supabase (solo datos oficiales)
+- **Sincronización opcional** con Supabase para datos oficiales y bolos en B
 - **Notificaciones** de cobro pendiente
 
 ## Privacidad y seguridad
@@ -27,9 +27,8 @@ Preparada para **multi-usuario**: cada DJ tiene sus propios datos aislados.
 - **Multi-usuario**: cada DJ solo ve y modifica sus propios datos (Row Level Security con `auth.uid() = user_id`)
 - El `user_id` se asigna automáticamente por trigger al insertar — no se puede falsificar desde el cliente
 - Los números de factura son únicos **por usuario**, no globales
-- Los bolos marcados como **"No Facturable" (en B)** nunca salen del dispositivo:
-- No se sincronizan con Supabase
-  - No se incluyen en backups
+- Los bolos marcados como **"No Facturable" (en B)** también se sincronizan
+  en la nube
 
 ## Requisitos
 
@@ -56,7 +55,7 @@ flutter pub get
 
 **macOS:**
 1. Ve a [Google Cloud Console](https://console.cloud.google.com)
-2. Crea un proyecto y habilita Calendar API y Drive API
+2. Crea un proyecto y habilita Calendar API
 3. Crea credenciales OAuth 2.0 de tipo **Desktop**
 4. El flujo usa `googleapis_auth` con `clientViaUserConsent` (abre el navegador)
 
@@ -105,7 +104,7 @@ lib/
 │   └── migrations/           # SQL de creación de tablas
 ├── repositories/             # CRUD para cada modelo
 ├── providers/                # Riverpod state management
-├── services/                 # PDF, Supabase, Google Drive, Notificaciones
+├── services/                 # PDF, Supabase, Google Calendar, Notificaciones
 ├── screens/                  # Todas las pantallas
 └── widgets/                  # Widgets reutilizables
 ```

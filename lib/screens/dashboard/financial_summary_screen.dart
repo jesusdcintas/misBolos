@@ -6,9 +6,11 @@ import 'package:share_plus/share_plus.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../models/expense.dart';
+import '../../models/financial_summary.dart';
 import '../../models/gig.dart';
 import '../../providers/expenses_provider.dart';
 import '../../providers/assets_provider.dart';
+import '../../providers/financial_summary_provider.dart';
 import '../../providers/stats_provider.dart';
 import '../../services/pdf_service.dart';
 import '../../widgets/common/dj_refresh_indicator.dart';
@@ -20,6 +22,7 @@ class FinancialSummaryScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final period = ref.watch(financialPeriodProvider);
     final summaryAsync = ref.watch(financialPeriodSummaryProvider(period));
+    final fiscalAsync = ref.watch(financialSummaryProvider(period));
 
     return Scaffold(
       appBar: AppBar(
@@ -31,7 +34,12 @@ class FinancialSummaryScreen extends ConsumerWidget {
             onPressed: () {
               final summary = summaryAsync.valueOrNull;
               if (summary != null) {
-                _exportSummary(context, summary, period);
+                _exportSummary(
+                  context,
+                  summary,
+                  period,
+                  fiscalAsync.valueOrNull,
+                );
               }
             },
           ),
@@ -54,6 +62,23 @@ class FinancialSummaryScreen extends ConsumerWidget {
                   children: [
                     // Main summary card
                     _SummaryCard(summary: summary),
+                    const SizedBox(height: 16),
+
+                    fiscalAsync.when(
+                      data: (fiscal) => _FiscalSection(summary: fiscal),
+                      loading: () => const Card(
+                        child: Padding(
+                          padding: EdgeInsets.all(20),
+                          child: Center(child: CircularProgressIndicator()),
+                        ),
+                      ),
+                      error: (e, _) => Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Text('Error fiscal: $e'),
+                        ),
+                      ),
+                    ),
                     const SizedBox(height: 16),
 
                     // IVA section (quarter + year modes)
@@ -104,9 +129,13 @@ class FinancialSummaryScreen extends ConsumerWidget {
     BuildContext context,
     FinancialPeriodSummary summary,
     DashboardPeriod period,
+    FinancialSummary? fiscalSummary,
   ) async {
     try {
-      final file = await PdfService().generateSummaryPdf(summary: summary);
+      final file = await PdfService().generateSummaryPdf(
+        summary: summary,
+        fiscalSummary: fiscalSummary,
+      );
       await Share.shareXFiles([XFile(file.path)]);
     } catch (e) {
       if (context.mounted) {
@@ -115,6 +144,135 @@ class FinancialSummaryScreen extends ConsumerWidget {
         ).showSnackBar(SnackBar(content: Text('Error al generar PDF: $e')));
       }
     }
+  }
+}
+
+// ==================== FISCAL SECTION ====================
+
+class _FiscalSection extends StatelessWidget {
+  final FinancialSummary summary;
+
+  const _FiscalSection({required this.summary});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Fiscalidad estimada',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              summary.hasEstimatedHistoricalData
+                  ? 'Incluye histórico estimado desde bolos facturables sin factura'
+                  : 'Calculado con facturas cobradas, gastos e inversiones',
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const Divider(height: 24),
+            _row(
+              icon: Icons.receipt_long,
+              color: AppColors.primary,
+              label: 'Ingresos oficiales',
+              value: summary.ingresosOficiales,
+            ),
+            const SizedBox(height: 12),
+            _row(
+              icon: Icons.account_balance,
+              color: AppColors.warning,
+              label: 'IVA repercutido',
+              value: summary.ivaRepercutido,
+            ),
+            const SizedBox(height: 12),
+            _row(
+              icon: Icons.savings,
+              color: AppColors.success,
+              label: 'IVA soportado deducible',
+              value: summary.ivaSoportado,
+            ),
+            const SizedBox(height: 12),
+            _row(
+              icon: Icons.payments,
+              color: summary.ivaAPagar >= 0
+                  ? AppColors.warning
+                  : AppColors.success,
+              label: summary.ivaAPagar >= 0 ? 'IVA a pagar' : 'IVA a compensar',
+              value: summary.ivaAPagar.abs(),
+            ),
+            const Divider(height: 24),
+            _row(
+              icon: Icons.category,
+              color: AppColors.textSecondary,
+              label: 'Gastos deducibles',
+              value: summary.gastosDeducibles,
+            ),
+            const SizedBox(height: 12),
+            _row(
+              icon: Icons.trending_down,
+              color: AppColors.textSecondary,
+              label: 'Amortización',
+              value: summary.amortizacion,
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.primaryLight,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: _row(
+                icon: Icons.insights,
+                color: AppColors.primary,
+                label: 'Beneficio estimado',
+                value: summary.beneficioEstimado,
+                large: true,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _row({
+    required IconData icon,
+    required Color color,
+    required String label,
+    required double value,
+    bool large = false,
+  }) {
+    return Row(
+      children: [
+        Icon(icon, color: color, size: large ? 24 : 20),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontWeight: large ? FontWeight.bold : FontWeight.w500,
+            ),
+          ),
+        ),
+        Text(
+          CurrencyFormatter.format(value),
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: large ? 18 : 15,
+            color: color,
+          ),
+        ),
+      ],
+    );
   }
 }
 

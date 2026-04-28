@@ -13,6 +13,8 @@ import 'migrations/v10_expenses.dart';
 import 'migrations/v11_assets.dart';
 import 'migrations/v12_cloud_ids.dart';
 import 'migrations/v13_assets_iva.dart';
+import 'migrations/v14_app_events.dart';
+import 'migrations/v15_invoice_email_logs.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._internal();
@@ -32,7 +34,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 13,
+      version: 15,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       onConfigure: (db) async {
@@ -86,6 +88,12 @@ class DatabaseHelper {
     if (version >= 13) {
       await _applyMigration(db, v13AssetsIva);
     }
+    if (version >= 14) {
+      await _applyMigration(db, v14AppEvents);
+    }
+    if (version >= 15) {
+      await _applyMigration(db, v15InvoiceEmailLogs);
+    }
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -124,6 +132,12 @@ class DatabaseHelper {
     }
     if (oldVersion < 13) {
       await _applyMigration(db, v13AssetsIva);
+    }
+    if (oldVersion < 14) {
+      await _applyMigration(db, v14AppEvents);
+    }
+    if (oldVersion < 15) {
+      await _applyMigration(db, v15InvoiceEmailLogs);
     }
   }
 

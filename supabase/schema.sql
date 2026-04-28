@@ -1,8 +1,8 @@
 -- =============================================================
 -- MisBolos - Schema SQL para Supabase
 -- Multi-usuario: cada DJ solo ve sus propios datos.
--- Solo se sincronizan datos "facturables" (oficiales).
--- Los datos "en B" NUNCA salen del dispositivo.
+-- Se sincronizan clientes, bolos oficiales, bolos en B, facturas,
+-- gastos e inversiones.
 -- =============================================================
 
 -- Tabla de clientes
@@ -12,27 +12,36 @@ CREATE TABLE IF NOT EXISTS clients (
   nombre TEXT NOT NULL,
   alias TEXT DEFAULT '',
   aliases JSONB DEFAULT '[]'::jsonb,
+  cif_nif TEXT,
+  direccion TEXT,
+  ciudad TEXT,
+  provincia TEXT,
+  codigo_postal TEXT,
   email TEXT,
   telefono TEXT,
-  direccion TEXT,
-  nif_cif TEXT,
   notas TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Tabla de bolos (solo facturables se sincronizan)
+-- Tabla de bolos (facturables y en B)
 CREATE TABLE IF NOT EXISTS gigs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   client_id UUID REFERENCES clients(id) ON DELETE SET NULL,
   fecha DATE NOT NULL,
-  lugar TEXT,
-  cache REAL NOT NULL DEFAULT 0,
   notas TEXT,
-  facturable BOOLEAN NOT NULL DEFAULT TRUE CHECK (facturable = TRUE),
+  cachet REAL,
+  facturable BOOLEAN NOT NULL DEFAULT TRUE,
   status TEXT NOT NULL DEFAULT 'pendiente'
-    CHECK (status IN ('pendiente', 'factura_generada', 'factura_enviada', 'pagado', 'cancelado')),
+    CHECK (status IN (
+      'pendiente',
+      'factura_generada',
+      'factura_enviada',
+      'pagado',
+      'cancelado',
+      'cobrado_en_b'
+    )),
   invoice_id UUID,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -49,6 +58,8 @@ CREATE TABLE IF NOT EXISTS invoices (
   subtotal REAL NOT NULL DEFAULT 0,
   iva_porcentaje REAL NOT NULL DEFAULT 21,
   iva_importe REAL NOT NULL DEFAULT 0,
+  irpf_porcentaje REAL NOT NULL DEFAULT 0,
+  irpf_importe REAL NOT NULL DEFAULT 0,
   total REAL NOT NULL DEFAULT 0,
   items JSONB NOT NULL DEFAULT '[]',
   status TEXT NOT NULL DEFAULT 'borrador'
@@ -305,3 +316,69 @@ CREATE TRIGGER assets_set_user_id
 CREATE TRIGGER assets_updated_at
   BEFORE UPDATE ON assets
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+-- =============================================================
+-- Tabla de eventos de aplicación (trazabilidad futura)
+-- =============================================================
+CREATE TABLE IF NOT EXISTS app_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  payload_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_app_events_user_id ON app_events(user_id);
+CREATE INDEX idx_app_events_entity ON app_events(entity_type, entity_id);
+CREATE INDEX idx_app_events_created_at ON app_events(created_at);
+
+ALTER TABLE app_events ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view their own app events"
+  ON app_events FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert their own app events"
+  ON app_events FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE TRIGGER app_events_set_user_id
+  BEFORE INSERT ON app_events
+  FOR EACH ROW EXECUTE FUNCTION set_user_id();
+
+-- =============================================================
+-- Logs de envío de facturas por email
+-- =============================================================
+CREATE TABLE IF NOT EXISTS invoice_email_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  invoice_id UUID REFERENCES invoices(id) ON DELETE CASCADE,
+  client_id UUID REFERENCES clients(id) ON DELETE SET NULL,
+  recipient_email TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('pending', 'sent', 'failed')),
+  error_message TEXT,
+  sent_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_invoice_email_logs_user_id ON invoice_email_logs(user_id);
+CREATE INDEX idx_invoice_email_logs_invoice ON invoice_email_logs(invoice_id);
+CREATE INDEX idx_invoice_email_logs_created_at
+  ON invoice_email_logs(created_at);
+
+ALTER TABLE invoice_email_logs ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view their own invoice email logs"
+  ON invoice_email_logs FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert their own invoice email logs"
+  ON invoice_email_logs FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update their own invoice email logs"
+  ON invoice_email_logs FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE TRIGGER invoice_email_logs_set_user_id
+  BEFORE INSERT ON invoice_email_logs
+  FOR EACH ROW EXECUTE FUNCTION set_user_id();

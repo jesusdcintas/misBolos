@@ -6,8 +6,10 @@ import '../../core/constants/app_strings.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../models/invoice.dart';
+import '../../models/invoice_email_log.dart';
 import '../../models/gig.dart';
 import '../../providers/invoice_provider.dart';
+import '../../providers/invoice_email_log_provider.dart';
 import '../../providers/client_provider.dart';
 import '../../providers/gig_provider.dart';
 import '../../providers/settings_provider.dart';
@@ -56,6 +58,8 @@ class _InvoiceDetailContent extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final clientAsync = ref.watch(clientByIdProvider(invoice.clientId));
     final settingsAsync = ref.watch(settingsProvider);
+    final emailSendState = ref.watch(invoiceEmailSendProvider);
+    final emailLogsAsync = ref.watch(invoiceEmailLogsProvider(invoice.id));
 
     return Scaffold(
       appBar: AppBar(
@@ -85,17 +89,21 @@ class _InvoiceDetailContent extends ConsumerWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('FACTURA',
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.primary,
-                          )),
-                      Text('#${invoice.numero}',
-                          style: const TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                          )),
+                      Text(
+                        'FACTURA',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      Text(
+                        '#${invoice.numero}',
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ],
                   ),
                   const Divider(),
@@ -109,35 +117,61 @@ class _InvoiceDetailContent extends ConsumerWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(AppStrings.emisor,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.primary,
-                                  fontSize: 12,
-                                )),
+                            Text(
+                              AppStrings.emisor,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.primary,
+                                fontSize: 12,
+                              ),
+                            ),
                             const SizedBox(height: 4),
                             settingsAsync.when(
                               data: (s) => Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(s.emisorNombre, style: const TextStyle(fontSize: 12)),
+                                  Text(
+                                    s.emisorNombre,
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
                                   if (s.emisorNIF.isNotEmpty)
-                                    Text(s.emisorNIF, style: const TextStyle(fontSize: 12)),
+                                    Text(
+                                      s.emisorNIF,
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
                                   if (s.emisorDireccion.isNotEmpty)
-                                    Text(s.emisorDireccion, style: const TextStyle(fontSize: 12)),
-                                  if (s.emisorCiudad.isNotEmpty || s.emisorProvincia.isNotEmpty || s.emisorCodigoPostal.isNotEmpty)
+                                    Text(
+                                      s.emisorDireccion,
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
+                                  if (s.emisorCiudad.isNotEmpty ||
+                                      s.emisorProvincia.isNotEmpty ||
+                                      s.emisorCodigoPostal.isNotEmpty)
                                     Text(
                                       [
-                                        s.emisorCiudad,
-                                        if (s.emisorProvincia.isNotEmpty) s.emisorProvincia,
-                                        if (s.emisorCodigoPostal.isNotEmpty) s.emisorCodigoPostal,
-                                      ].where((str) => str.isNotEmpty).join(', '),
+                                            s.emisorCiudad,
+                                            if (s.emisorProvincia.isNotEmpty)
+                                              s.emisorProvincia,
+                                            if (s.emisorCodigoPostal.isNotEmpty)
+                                              s.emisorCodigoPostal,
+                                          ]
+                                          .where((str) => str.isNotEmpty)
+                                          .join(', '),
                                       style: const TextStyle(fontSize: 12),
                                     ),
                                   if (s.emisorEmail.isNotEmpty)
-                                    Text(s.emisorEmail, style: const TextStyle(fontSize: 12, color: Colors.blue)),
+                                    Text(
+                                      s.emisorEmail,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.blue,
+                                      ),
+                                    ),
                                   if (s.emisorTelefono.isNotEmpty)
-                                    Text(s.emisorTelefono, style: const TextStyle(fontSize: 12)),
+                                    Text(
+                                      s.emisorTelefono,
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
                                 ],
                               ),
                               loading: () => const SizedBox(),
@@ -150,35 +184,60 @@ class _InvoiceDetailContent extends ConsumerWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(AppStrings.facturarA,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.primary,
-                                  fontSize: 12,
-                                )),
+                            Text(
+                              AppStrings.facturarA,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.primary,
+                                fontSize: 12,
+                              ),
+                            ),
                             const SizedBox(height: 4),
                             clientAsync.when(
                               data: (c) => Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(c?.nombre ?? '', style: const TextStyle(fontSize: 12)),
+                                  Text(
+                                    c?.nombre ?? '',
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
                                   if (c?.cifNif.isNotEmpty == true)
-                                    Text(c!.cifNif, style: const TextStyle(fontSize: 12)),
+                                    Text(
+                                      c!.cifNif,
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
                                   if (c?.direccion.isNotEmpty == true)
-                                    Text(c!.direccion, style: const TextStyle(fontSize: 12)),
-                                  if (c?.ciudad.isNotEmpty == true || c?.codigoPostal.isNotEmpty == true || c?.provincia.isNotEmpty == true)
+                                    Text(
+                                      c!.direccion,
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
+                                  if (c?.ciudad.isNotEmpty == true ||
+                                      c?.codigoPostal.isNotEmpty == true ||
+                                      c?.provincia.isNotEmpty == true)
                                     Text(
                                       [
                                         c?.ciudad ?? '',
-                                        if (c?.provincia.isNotEmpty == true) c!.provincia,
-                                        if (c?.codigoPostal.isNotEmpty == true) c!.codigoPostal,
+                                        if (c?.provincia.isNotEmpty == true)
+                                          c!.provincia,
+                                        if (c?.codigoPostal.isNotEmpty == true)
+                                          c!.codigoPostal,
                                       ].where((s) => s.isNotEmpty).join(', '),
                                       style: const TextStyle(fontSize: 12),
                                     ),
                                   if (c?.email != null && c!.email!.isNotEmpty)
-                                    Text(c.email!, style: const TextStyle(fontSize: 12, color: Colors.blue)),
-                                  if (c?.telefono != null && c!.telefono!.isNotEmpty)
-                                    Text(c.telefono!, style: const TextStyle(fontSize: 12)),
+                                    Text(
+                                      c.email!,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.blue,
+                                      ),
+                                    ),
+                                  if (c?.telefono != null &&
+                                      c!.telefono!.isNotEmpty)
+                                    Text(
+                                      c.telefono!,
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
                                 ],
                               ),
                               loading: () => const SizedBox(),
@@ -191,8 +250,10 @@ class _InvoiceDetailContent extends ConsumerWidget {
                   ),
                   const SizedBox(height: 12),
 
-                  Text('Fecha: ${DateFormatter.display(invoice.fecha)}',
-                      style: const TextStyle(fontSize: 12)),
+                  Text(
+                    'Fecha: ${DateFormatter.display(invoice.fecha)}',
+                    style: const TextStyle(fontSize: 12),
+                  ),
                   const SizedBox(height: 16),
 
                   // Items table
@@ -220,11 +281,13 @@ class _InvoiceDetailContent extends ConsumerWidget {
                             _tableCell('${item.cantidad}', TextAlign.center),
                             _tableCell(item.descripcion, TextAlign.left),
                             _tableCell(
-                                CurrencyFormatter.format(item.precioUnitario),
-                                TextAlign.right),
+                              CurrencyFormatter.format(item.precioUnitario),
+                              TextAlign.right,
+                            ),
                             _tableCell(
-                                CurrencyFormatter.format(item.totalLinea),
-                                TextAlign.right),
+                              CurrencyFormatter.format(item.totalLinea),
+                              TextAlign.right,
+                            ),
                           ],
                         ),
                     ],
@@ -248,12 +311,17 @@ class _InvoiceDetailContent extends ConsumerWidget {
                         if (invoice.irpfRate > 0)
                           Text(
                             'Retención IRPF (${(invoice.irpfRate * 100).toStringAsFixed(0)}%): -${CurrencyFormatter.format(invoice.irpfAmount)}',
-                            style: const TextStyle(fontSize: 13, color: AppColors.accentRed),
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: AppColors.accentRed,
+                            ),
                           ),
                         const SizedBox(height: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 10),
+                            horizontal: 16,
+                            vertical: 10,
+                          ),
                           decoration: BoxDecoration(
                             color: AppColors.primary,
                             borderRadius: BorderRadius.circular(6),
@@ -328,14 +396,15 @@ class _InvoiceDetailContent extends ConsumerWidget {
               child: OutlinedButton.icon(
                 onPressed: () => _revertStatus(context, ref),
                 icon: const Icon(Icons.undo),
-                label: Text(invoice.status == InvoiceStatus.pagada 
-                    ? 'Revertir a pendiente' 
-                    : 'Revertir a borrador'),
+                label: Text(
+                  invoice.status == InvoiceStatus.pagada
+                      ? 'Revertir a pendiente'
+                      : 'Revertir a borrador',
+                ),
               ),
             ),
           ],
-          if (invoice.status != InvoiceStatus.pagada)
-            const SizedBox(height: 8),
+          if (invoice.status != InvoiceStatus.pagada) const SizedBox(height: 8),
 
           // Editar (solo en borrador)
           if (invoice.status == InvoiceStatus.borrador)
@@ -360,7 +429,36 @@ class _InvoiceDetailContent extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 8),
-          
+
+          // Enviar por email
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: emailSendState.isLoading
+                  ? null
+                  : () => _sendByEmail(context, ref),
+              icon: emailSendState.isLoading
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.mark_email_read_outlined),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+              ),
+              label: const Text('Enviar por email'),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          emailLogsAsync.when(
+            data: (logs) => _EmailLogSection(logs: logs),
+            loading: () => const SizedBox.shrink(),
+            error: (_, __) => const SizedBox.shrink(),
+          ),
+          const SizedBox(height: 8),
+
           // Cambiar número de factura
           SizedBox(
             width: double.infinity,
@@ -371,7 +469,7 @@ class _InvoiceDetailContent extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 8),
-          
+
           // Eliminar factura
           SizedBox(
             width: double.infinity,
@@ -415,13 +513,15 @@ class _InvoiceDetailContent extends ConsumerWidget {
   Widget _tableHeader(String text) {
     return Padding(
       padding: const EdgeInsets.all(8),
-      child: Text(text,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-            fontSize: 11,
-          ),
-          textAlign: TextAlign.center),
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
+          fontSize: 11,
+        ),
+        textAlign: TextAlign.center,
+      ),
     );
   }
 
@@ -438,8 +538,9 @@ class _InvoiceDetailContent extends ConsumerWidget {
         ? box.localToGlobal(Offset.zero) & box.size
         : const Rect.fromLTWH(0, 0, 100, 100);
     try {
-      final client =
-          await ref.read(clientByIdProvider(invoice.clientId).future);
+      final client = await ref.read(
+        clientByIdProvider(invoice.clientId).future,
+      );
       final settings = await ref.read(settingsProvider.future);
 
       if (client == null) return;
@@ -450,22 +551,90 @@ class _InvoiceDetailContent extends ConsumerWidget {
         settings: settings,
       );
 
-      await Share.shareXFiles(
-        [XFile(file.path)],
-        sharePositionOrigin: shareOrigin,
-      );
+      await Share.shareXFiles([
+        XFile(file.path),
+      ], sharePositionOrigin: shareOrigin);
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
+  }
+
+  Future<void> _sendByEmail(BuildContext context, WidgetRef ref) async {
+    final client = await ref.read(clientByIdProvider(invoice.clientId).future);
+    if (client == null) return;
+    if (!context.mounted) return;
+    if (client.email == null || client.email!.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('El cliente no tiene email configurado')),
+      );
+      return;
+    }
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Enviar factura por email'),
+        content: Text(
+          'Se enviará la factura #${invoice.numero} a ${client.email}.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Enviar'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !context.mounted) return;
+
+    try {
+      await ref.read(invoiceEmailSendProvider.notifier).send(invoice);
+
+      final gig = await ref.read(gigByIdProvider(invoice.gigId).future);
+      if (!context.mounted) return;
+      if (gig != null) {
+        final newGig = gig.copyWith(status: GigStatus.facturaEnviada);
+        await _syncGigToCalendar(context, ref, newGig);
+      }
+
+      final settings = await ref.read(settingsProvider.future);
+      if (settings.notificacionesActivas) {
+        await NotificationService.instance.schedulePaymentReminder(
+          id: invoice.numero,
+          clientName: client.nombre,
+          total: invoice.total,
+          invoiceNumber: invoice.numero,
+          scheduledDate: DateTime.now().add(
+            Duration(days: settings.diasRecordatorio),
+          ),
         );
+      }
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Factura enviada a ${client.email}')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error enviando email: $e')));
       }
     }
   }
 
   Future<void> _changeNumber(BuildContext context, WidgetRef ref) async {
     final controller = TextEditingController(text: invoice.numero.toString());
-    
+
     final newNumber = await showDialog<int>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -485,10 +654,7 @@ class _InvoiceDetailContent extends ConsumerWidget {
             const SizedBox(height: 12),
             Text(
               'Asegúrate de que el número no esté en uso por otra factura.',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[600],
-              ),
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
             ),
           ],
         ),
@@ -512,14 +678,17 @@ class _InvoiceDetailContent extends ConsumerWidget {
 
     if (newNumber != null && newNumber != invoice.numero && context.mounted) {
       // Verificar si el número ya está en uso
-      final isTaken = await ref.read(invoicesProvider.notifier)
+      final isTaken = await ref
+          .read(invoicesProvider.notifier)
           .isNumberTaken(newNumber, excludeId: invoice.id);
-      
+
       if (isTaken) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('El número $newNumber ya está en uso por otra factura'),
+              content: Text(
+                'El número $newNumber ya está en uso por otra factura',
+              ),
               backgroundColor: Colors.red,
             ),
           );
@@ -527,8 +696,10 @@ class _InvoiceDetailContent extends ConsumerWidget {
         return;
       }
 
-      await ref.read(invoicesProvider.notifier).updateNumber(invoice.id, newNumber);
-      
+      await ref
+          .read(invoicesProvider.notifier)
+          .updateNumber(invoice.id, newNumber);
+
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Número de factura cambiado a #$newNumber')),
@@ -539,12 +710,16 @@ class _InvoiceDetailContent extends ConsumerWidget {
     }
   }
 
-  Future<void> _markAs(BuildContext context, WidgetRef ref, InvoiceStatus status) async {
+  Future<void> _markAs(
+    BuildContext context,
+    WidgetRef ref,
+    InvoiceStatus status,
+  ) async {
     final statusLabel = status == InvoiceStatus.enviada ? 'enviada' : 'pagada';
-    
+
     // Actualizar factura
     await ref.read(invoicesProvider.notifier).updateStatus(invoice.id, status);
-    
+
     // Actualizar gig asociado
     final gig = await ref.read(gigByIdProvider(invoice.gigId).future);
     if (gig != null) {
@@ -554,14 +729,18 @@ class _InvoiceDetailContent extends ConsumerWidget {
         // Programar recordatorio
         final settings = await ref.read(settingsProvider.future);
         if (settings.notificacionesActivas) {
-          final client = await ref.read(clientByIdProvider(invoice.clientId).future);
+          final client = await ref.read(
+            clientByIdProvider(invoice.clientId).future,
+          );
           if (client != null) {
             await NotificationService.instance.schedulePaymentReminder(
               id: invoice.numero,
               clientName: client.nombre,
               total: invoice.total,
               invoiceNumber: invoice.numero,
-              scheduledDate: DateTime.now().add(Duration(days: settings.diasRecordatorio)),
+              scheduledDate: DateTime.now().add(
+                Duration(days: settings.diasRecordatorio),
+              ),
             );
           }
         }
@@ -570,14 +749,18 @@ class _InvoiceDetailContent extends ConsumerWidget {
         // Cancelar recordatorio
         await NotificationService.instance.cancelNotification(invoice.numero);
       }
-      
+
       await ref.read(gigsProvider.notifier).updateStatus(gig.id, newGigStatus);
-      
+
       // Sincronizar con Google Calendar
       if (!context.mounted) return;
-      await _syncGigToCalendar(context, ref, gig.copyWith(status: newGigStatus));
+      await _syncGigToCalendar(
+        context,
+        ref,
+        gig.copyWith(status: newGigStatus),
+      );
     }
-    
+
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Factura marcada como $statusLabel')),
@@ -589,7 +772,7 @@ class _InvoiceDetailContent extends ConsumerWidget {
     InvoiceStatus newStatus;
     GigStatus newGigStatus;
     String statusLabel;
-    
+
     if (invoice.status == InvoiceStatus.pagada) {
       newStatus = InvoiceStatus.enviada;
       newGigStatus = GigStatus.facturaEnviada;
@@ -599,18 +782,24 @@ class _InvoiceDetailContent extends ConsumerWidget {
       newGigStatus = GigStatus.facturaGenerada;
       statusLabel = 'borrador';
     }
-    
+
     // Actualizar factura
-    await ref.read(invoicesProvider.notifier).updateStatus(invoice.id, newStatus);
-    
+    await ref
+        .read(invoicesProvider.notifier)
+        .updateStatus(invoice.id, newStatus);
+
     // Actualizar gig asociado
     final gig = await ref.read(gigByIdProvider(invoice.gigId).future);
     if (gig != null) {
       await ref.read(gigsProvider.notifier).updateStatus(gig.id, newGigStatus);
       if (!context.mounted) return;
-      await _syncGigToCalendar(context, ref, gig.copyWith(status: newGigStatus));
+      await _syncGigToCalendar(
+        context,
+        ref,
+        gig.copyWith(status: newGigStatus),
+      );
     }
-    
+
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Factura revertida a $statusLabel')),
@@ -618,7 +807,11 @@ class _InvoiceDetailContent extends ConsumerWidget {
     }
   }
 
-  Future<void> _syncGigToCalendar(BuildContext context, WidgetRef ref, Gig gig) async {
+  Future<void> _syncGigToCalendar(
+    BuildContext context,
+    WidgetRef ref,
+    Gig gig,
+  ) async {
     if (!context.mounted) return;
     final authState = ref.read(googleAuthProvider);
     if (!authState.isSignedIn) return;
@@ -647,9 +840,7 @@ class _InvoiceDetailContent extends ConsumerWidget {
             child: const Text('Cancelar'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Eliminar'),
           ),
@@ -659,13 +850,57 @@ class _InvoiceDetailContent extends ConsumerWidget {
 
     if (confirm == true && context.mounted) {
       await ref.read(invoicesProvider.notifier).remove(invoice.id);
-      
+
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Factura eliminada')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Factura eliminada')));
         context.pop();
       }
     }
+  }
+}
+
+class _EmailLogSection extends StatelessWidget {
+  final List<InvoiceEmailLog> logs;
+
+  const _EmailLogSection({required this.logs});
+
+  @override
+  Widget build(BuildContext context) {
+    if (logs.isEmpty) return const SizedBox.shrink();
+    final latest = logs.first;
+    final color = switch (latest.status) {
+      InvoiceEmailStatus.sent => AppColors.success,
+      InvoiceEmailStatus.failed => AppColors.error,
+      InvoiceEmailStatus.pending => AppColors.warning,
+    };
+    final label = switch (latest.status) {
+      InvoiceEmailStatus.sent => 'Enviada por email',
+      InvoiceEmailStatus.failed => 'Email fallido',
+      InvoiceEmailStatus.pending => 'Email pendiente',
+    };
+
+    return Card(
+      child: ListTile(
+        leading: Icon(Icons.email_outlined, color: color),
+        title: Text(label),
+        subtitle: Text(
+          latest.status == InvoiceEmailStatus.failed &&
+                  latest.errorMessage != null
+              ? latest.errorMessage!
+              : latest.recipientEmail,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        trailing: Text(
+          '${logs.length}',
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            color: AppColors.textSecondary,
+          ),
+        ),
+      ),
+    );
   }
 }

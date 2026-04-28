@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
@@ -6,10 +7,13 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:path_provider/path_provider.dart';
 import '../models/invoice.dart';
 import '../models/client.dart';
+import '../models/app_event.dart';
 import '../models/app_settings.dart';
+import '../models/financial_summary.dart';
 import '../models/gig.dart';
 import '../models/pdf_theme.dart';
 import '../providers/stats_provider.dart';
+import '../repositories/app_event_repository.dart';
 
 class PdfService {
   static const _white = PdfColors.white;
@@ -400,6 +404,18 @@ class PdfService {
     final dir = await getApplicationDocumentsDirectory();
     final file = File('${dir.path}/factura_${invoice.numero}.pdf');
     await file.writeAsBytes(await pdf.save());
+    try {
+      await AppEventRepository.instance.insert(
+        AppEvent(
+          entityType: 'invoice',
+          entityId: invoice.id,
+          eventType: 'invoice_pdf_generated',
+          payload: {'numero': invoice.numero, 'path': file.path},
+        ),
+      );
+    } catch (e) {
+      debugPrint('[PdfService] Could not record PDF event: $e');
+    }
     return file;
   }
 
@@ -485,6 +501,7 @@ class PdfService {
 
   Future<File> generateSummaryPdf({
     required FinancialPeriodSummary summary,
+    FinancialSummary? fiscalSummary,
   }) async {
     await _loadFonts();
 
@@ -620,6 +637,66 @@ class PdfService {
           );
 
           widgets.add(pw.SizedBox(height: 16));
+
+          // === RESUMEN FISCAL ===
+          if (fiscalSummary != null) {
+            widgets.add(_sectionTitle('Resumen Fiscal Estimado', primary));
+            widgets.add(pw.SizedBox(height: 8));
+            widgets.add(
+              pw.Container(
+                padding: const pw.EdgeInsets.all(14),
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(color: PdfColors.grey300),
+                  borderRadius: pw.BorderRadius.circular(6),
+                ),
+                child: pw.Column(
+                  children: [
+                    _summaryRow(
+                      'Ingresos oficiales',
+                      _formatCurrency(fiscalSummary.ingresosOficiales),
+                      color: primary,
+                    ),
+                    _summaryRow(
+                      'IVA repercutido',
+                      _formatCurrency(fiscalSummary.ivaRepercutido),
+                      color: warning,
+                    ),
+                    _summaryRow(
+                      'IVA soportado deducible',
+                      _formatCurrency(fiscalSummary.ivaSoportado),
+                      color: success,
+                    ),
+                    _summaryRow(
+                      fiscalSummary.ivaAPagar >= 0
+                          ? 'IVA a pagar'
+                          : 'IVA a compensar',
+                      _formatCurrency(fiscalSummary.ivaAPagar.abs()),
+                      color: fiscalSummary.ivaAPagar >= 0 ? warning : success,
+                      bold: true,
+                    ),
+                    pw.Divider(color: PdfColors.grey300),
+                    _summaryRow(
+                      'Gastos deducibles',
+                      _formatCurrency(fiscalSummary.gastosDeducibles),
+                      color: grey,
+                    ),
+                    _summaryRow(
+                      'Amortización',
+                      _formatCurrency(fiscalSummary.amortizacion),
+                      color: grey,
+                    ),
+                    _summaryRow(
+                      'Beneficio estimado',
+                      _formatCurrency(fiscalSummary.beneficioEstimado),
+                      color: primary,
+                      bold: true,
+                    ),
+                  ],
+                ),
+              ),
+            );
+            widgets.add(pw.SizedBox(height: 16));
+          }
 
           // === IVA TRIMESTRAL ===
           if (summary.ivaQuarters.isNotEmpty) {

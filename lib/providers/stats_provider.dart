@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../core/utils/period_utils.dart';
 import '../database/database_helper.dart';
 import '../models/gig.dart';
 import '../models/invoice.dart';
@@ -143,7 +144,7 @@ class DashboardPeriod {
       case DashboardPeriodMode.mes:
         return year > now.year || (year == now.year && month > now.month);
       case DashboardPeriodMode.trimestre:
-        final currentQ = ((now.month - 1) ~/ 3) + 1;
+        final currentQ = PeriodUtils.currentQuarter(now);
         return year > now.year || (year == now.year && quarter > currentQ);
       case DashboardPeriodMode.anio:
         return year > now.year;
@@ -169,7 +170,7 @@ final dashboardPeriodProvider = StateProvider<DashboardPeriod>((ref) {
     mode: DashboardPeriodMode.mes,
     year: now.year,
     month: now.month,
-    quarter: ((now.month - 1) ~/ 3) + 1,
+    quarter: PeriodUtils.currentQuarter(now),
   );
 });
 
@@ -239,16 +240,11 @@ class PeriodDashboardStats {
 (DateTime, DateTime) _periodRange(DashboardPeriod period) {
   switch (period.mode) {
     case DashboardPeriodMode.mes:
-      final start = DateTime(period.year, period.month, 1);
-      final end = DateTime(period.year, period.month + 1, 0);
-      return (start, end);
+      return PeriodUtils.monthRange(period.year, period.month);
     case DashboardPeriodMode.trimestre:
-      final startM = (period.quarter - 1) * 3 + 1;
-      final start = DateTime(period.year, startM, 1);
-      final end = DateTime(period.year, startM + 3, 0);
-      return (start, end);
+      return PeriodUtils.quarterRange(period.year, period.quarter);
     case DashboardPeriodMode.anio:
-      return (DateTime(period.year, 1, 1), DateTime(period.year, 12, 31));
+      return PeriodUtils.yearRange(period.year);
   }
 }
 
@@ -696,7 +692,7 @@ final yearlyVatDetailProvider =
       final allGigs = await ref.watch(gigsProvider.future);
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day);
-      final currentQuarter = ((now.month - 1) ~/ 3) + 1;
+      final currentQuarter = PeriodUtils.currentQuarter(now);
       final declaredSet = await ref.watch(declaredQuartersProvider.future);
 
       final result = <QuarterVatDetail>[];
@@ -1150,7 +1146,7 @@ const _monthNames = [
 
 final quarterlyVatProvider = FutureProvider<QuarterlyVat>((ref) async {
   final now = DateTime.now();
-  final quarter = ((now.month - 1) ~/ 3) + 1;
+  final quarter = PeriodUtils.currentQuarter(now);
   final startMonth = (quarter - 1) * 3 + 1;
   final endMonth = quarter * 3;
 
@@ -1285,7 +1281,7 @@ final financialPeriodProvider = StateProvider<DashboardPeriod>((ref) {
     mode: DashboardPeriodMode.anio,
     year: now.year,
     month: now.month,
-    quarter: ((now.month - 1) ~/ 3) + 1,
+    quarter: PeriodUtils.currentQuarter(now),
   );
 });
 
@@ -1434,7 +1430,7 @@ final financialPeriodSummaryProvider =
           period.mode == DashboardPeriodMode.anio) {
         final now = DateTime.now();
         final today = DateTime(now.year, now.month, now.day);
-        final currentQuarter = ((now.month - 1) ~/ 3) + 1;
+        final currentQuarter = PeriodUtils.currentQuarter(now);
 
         // Load declared quarters
         final declaredSet = await ref.watch(declaredQuartersProvider.future);

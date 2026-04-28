@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/app_event.dart';
 import '../models/gig.dart';
+import '../repositories/app_event_repository.dart';
 import '../repositories/gig_repository.dart';
 import '../database/database_helper.dart';
 import '../services/supabase_service.dart';
@@ -20,31 +22,95 @@ class GigsNotifier extends AsyncNotifier<List<Gig>> {
 
   Future<void> add(Gig gig) async {
     await ref.read(gigRepositoryProvider).insert(gig);
+    await AppEventRepository.instance.insert(
+      AppEvent(
+        entityType: 'gig',
+        entityId: gig.id,
+        eventType: 'gig_created',
+        payload: {
+          'client_id': gig.clientId,
+          'fecha': gig.fecha.toIso8601String(),
+          'cachet': gig.cachet,
+          'facturable': gig.facturable,
+          'status': gig.status.dbValue,
+        },
+      ),
+    );
     ref.invalidate(gigByIdProvider(gig.id));
     ref.invalidateSelf();
   }
 
   Future<void> updateGig(Gig gig) async {
     await ref.read(gigRepositoryProvider).update(gig);
+    await AppEventRepository.instance.insert(
+      AppEvent(
+        entityType: 'gig',
+        entityId: gig.id,
+        eventType: 'gig_updated',
+        payload: {
+          'client_id': gig.clientId,
+          'fecha': gig.fecha.toIso8601String(),
+          'cachet': gig.cachet,
+          'facturable': gig.facturable,
+          'status': gig.status.dbValue,
+          'invoice_id': gig.invoiceId,
+        },
+      ),
+    );
     ref.invalidate(gigByIdProvider(gig.id));
     ref.invalidateSelf();
   }
 
   Future<void> updateStatus(String id, GigStatus status) async {
-    await ref.read(gigRepositoryProvider).updateStatus(id, status);
+    final repository = ref.read(gigRepositoryProvider);
+    final previous = await repository.getById(id);
+    await repository.updateStatus(id, status);
+    await AppEventRepository.instance.insert(
+      AppEvent(
+        entityType: 'gig',
+        entityId: id,
+        eventType: 'gig_status_changed',
+        payload: {
+          'from': previous?.status.dbValue,
+          'to': status.dbValue,
+          'invoice_id': previous?.invoiceId,
+        },
+      ),
+    );
     ref.invalidate(gigByIdProvider(id));
     ref.invalidateSelf();
   }
 
   Future<void> linkInvoice(String gigId, String invoiceId) async {
     await ref.read(gigRepositoryProvider).linkInvoice(gigId, invoiceId);
+    await AppEventRepository.instance.insert(
+      AppEvent(
+        entityType: 'gig',
+        entityId: gigId,
+        eventType: 'gig_invoice_linked',
+        payload: {'invoice_id': invoiceId},
+      ),
+    );
     ref.invalidate(gigByIdProvider(gigId));
     ref.invalidateSelf();
   }
 
   Future<void> remove(String id) async {
+    final gig = await ref.read(gigRepositoryProvider).getById(id);
     // 1. Borrar de SQLite local (fuente de verdad)
     await ref.read(gigRepositoryProvider).delete(id);
+    await AppEventRepository.instance.insert(
+      AppEvent(
+        entityType: 'gig',
+        entityId: id,
+        eventType: 'gig_deleted',
+        payload: {
+          'client_id': gig?.clientId,
+          'fecha': gig?.fecha.toIso8601String(),
+          'status': gig?.status.dbValue,
+        },
+      ),
+    );
 
     // 2. Borrar de Supabase (await + queue si falla)
     try {

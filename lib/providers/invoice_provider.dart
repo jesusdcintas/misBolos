@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/app_event.dart';
 import '../models/invoice.dart';
+import '../repositories/app_event_repository.dart';
 import '../repositories/gig_repository.dart';
 import '../repositories/invoice_repository.dart';
 import '../database/database_helper.dart';
@@ -21,19 +23,61 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
 
   Future<void> add(Invoice invoice) async {
     await ref.read(invoiceRepositoryProvider).insert(invoice);
+    await AppEventRepository.instance.insert(
+      AppEvent(
+        entityType: 'invoice',
+        entityId: invoice.id,
+        eventType: 'invoice_created',
+        payload: {
+          'numero': invoice.numero,
+          'client_id': invoice.clientId,
+          'gig_id': invoice.gigId,
+          'total': invoice.total,
+          'status': invoice.status.dbValue,
+        },
+      ),
+    );
     ref.invalidateSelf();
   }
 
   Future<void> updateInvoice(Invoice invoice) async {
     await ref.read(invoiceRepositoryProvider).update(invoice);
+    await AppEventRepository.instance.insert(
+      AppEvent(
+        entityType: 'invoice',
+        entityId: invoice.id,
+        eventType: 'invoice_updated',
+        payload: {
+          'numero': invoice.numero,
+          'client_id': invoice.clientId,
+          'gig_id': invoice.gigId,
+          'total': invoice.total,
+          'status': invoice.status.dbValue,
+        },
+      ),
+    );
     ref.invalidateSelf();
   }
 
   Future<void> updateStatus(String id, InvoiceStatus status) async {
     final repository = ref.read(invoiceRepositoryProvider);
+    final previous = await repository.getById(id);
     await repository.updateStatus(id, status);
     final invoice = await repository.getById(id);
     if (invoice != null) {
+      await AppEventRepository.instance.insert(
+        AppEvent(
+          entityType: 'invoice',
+          entityId: invoice.id,
+          eventType: 'invoice_status_changed',
+          payload: {
+            'from': previous?.status.dbValue,
+            'to': status.dbValue,
+            'numero': invoice.numero,
+            'gig_id': invoice.gigId,
+          },
+        ),
+      );
       await GigRepository.instance.repairStatusesFromInvoices([invoice]);
       ref.invalidate(gigByIdProvider(invoice.gigId));
       ref.invalidate(gigsProvider);
@@ -42,7 +86,20 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
   }
 
   Future<void> remove(String id) async {
+    final invoice = await ref.read(invoiceRepositoryProvider).getById(id);
     await ref.read(invoiceRepositoryProvider).delete(id);
+    await AppEventRepository.instance.insert(
+      AppEvent(
+        entityType: 'invoice',
+        entityId: id,
+        eventType: 'invoice_deleted',
+        payload: {
+          'numero': invoice?.numero,
+          'client_id': invoice?.clientId,
+          'gig_id': invoice?.gigId,
+        },
+      ),
+    );
     try {
       await SupabaseService.instance.deleteInvoice(id);
     } catch (e) {
@@ -53,7 +110,17 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
   }
 
   Future<void> updateNumber(String id, int newNumber) async {
-    await ref.read(invoiceRepositoryProvider).updateNumber(id, newNumber);
+    final repository = ref.read(invoiceRepositoryProvider);
+    final previous = await repository.getById(id);
+    await repository.updateNumber(id, newNumber);
+    await AppEventRepository.instance.insert(
+      AppEvent(
+        entityType: 'invoice',
+        entityId: id,
+        eventType: 'invoice_number_changed',
+        payload: {'from': previous?.numero, 'to': newNumber},
+      ),
+    );
     ref.invalidateSelf();
   }
 
