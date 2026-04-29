@@ -4,6 +4,7 @@ import '../models/app_event.dart';
 import '../models/gig.dart';
 import '../repositories/app_event_repository.dart';
 import '../repositories/gig_repository.dart';
+import 'invoice_provider.dart';
 import '../database/database_helper.dart';
 import '../services/supabase_service.dart';
 import '../services/google_calendar_service.dart';
@@ -38,6 +39,8 @@ class GigsNotifier extends AsyncNotifier<List<Gig>> {
     );
     ref.invalidate(gigByIdProvider(gig.id));
     ref.invalidateSelf();
+    // En caso de reparaciones automáticas (gig↔invoice), refrescar facturas.
+    ref.invalidate(invoicesProvider);
   }
 
   Future<void> updateGig(Gig gig) async {
@@ -59,6 +62,7 @@ class GigsNotifier extends AsyncNotifier<List<Gig>> {
     );
     ref.invalidate(gigByIdProvider(gig.id));
     ref.invalidateSelf();
+    ref.invalidate(invoicesProvider);
   }
 
   Future<void> updateStatus(String id, GigStatus status) async {
@@ -79,6 +83,8 @@ class GigsNotifier extends AsyncNotifier<List<Gig>> {
     );
     ref.invalidate(gigByIdProvider(id));
     ref.invalidateSelf();
+    // Si el status implica factura, el repositorio puede haber creado una.
+    ref.invalidate(invoicesProvider);
   }
 
   Future<void> linkInvoice(String gigId, String invoiceId) async {
@@ -93,6 +99,7 @@ class GigsNotifier extends AsyncNotifier<List<Gig>> {
     );
     ref.invalidate(gigByIdProvider(gigId));
     ref.invalidateSelf();
+    ref.invalidate(invoicesProvider);
   }
 
   Future<void> remove(String id) async {

@@ -625,9 +625,15 @@ class _InvoiceDetailContent extends ConsumerWidget {
       }
     } catch (e) {
       if (context.mounted) {
+        String message;
+        try {
+          message = e.toString();
+        } catch (_) {
+          message = 'Error desconocido';
+        }
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Error enviando email: $e')));
+        ).showSnackBar(SnackBar(content: Text('Error enviando email: $message')));
       }
     }
   }

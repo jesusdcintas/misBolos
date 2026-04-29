@@ -20,34 +20,43 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const resendApiKey = Deno.env.get("RESEND_API_KEY");
-    const fromEmail = Deno.env.get("INVOICE_FROM_EMAIL");
+    const brevoApiKey = Deno.env.get("BREVO_API_KEY");
+    const fromEmail =
+      Deno.env.get("INVOICE_FROM_EMAIL") ?? Deno.env.get("EMAIL_FROM");
 
-    if (!resendApiKey || !fromEmail) {
+    if (!brevoApiKey || !fromEmail) {
       return json({ ok: false, error: "Email provider is not configured" }, 500);
     }
 
     const body = (await req.json()) as SendInvoiceRequest;
     validate(body);
 
-    const response = await fetch("https://api.resend.com/emails", {
+    if (!body.pdfBase64 || body.pdfBase64.trim().isEmpty) {
+      return json({ ok: false, error: "PDF is empty" }, 400);
+    }
+
+    const sender = parseSender(fromEmail);
+
+    const response = await fetch("https://api.brevo.com/v3/smtp/email", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${resendApiKey}`,
+        "api-key": brevoApiKey,
+        accept: "application/json",
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: fromEmail,
-        to: [body.recipientEmail],
+        sender,
+        to: [{ email: body.recipientEmail }],
         subject: body.subject,
-        html: `
+        htmlContent: `
           <p>Hola,</p>
           <p>Adjunto la factura #${body.invoiceNumber}.</p>
           <p>Gracias.</p>
         `,
-        attachments: [
+        // Brevo expects `attachment` (singular), not `attachments`.
+        attachment: [
           {
-            filename: body.fileName,
+            name: body.fileName,
             content: body.pdfBase64,
           },
         ],
@@ -57,12 +66,12 @@ Deno.serve(async (req) => {
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       return json(
-        { ok: false, error: data?.message ?? "Email provider failed" },
+        { ok: false, error: data?.message ?? data?.code ?? "Email provider failed" },
         response.status,
       );
     }
 
-    return json({ ok: true, provider: "resend", id: data?.id ?? null });
+    return json({ ok: true, provider: "brevo", id: data?.messageId ?? null });
   } catch (error) {
     return json({ ok: false, error: error.message ?? String(error) }, 400);
   }
@@ -75,6 +84,15 @@ function validate(body: SendInvoiceRequest) {
   if (!body.subject) throw new Error("subject is required");
   if (!body.fileName) throw new Error("fileName is required");
   if (!body.pdfBase64) throw new Error("pdfBase64 is required");
+}
+
+function parseSender(value: string) {
+  const match = value.match(/^\s*(.*?)\s*<([^>]+)>\s*$/);
+  if (match) {
+    return { name: match[1].trim(), email: match[2].trim() };
+  }
+
+  return { email: value.trim() };
 }
 
 function json(payload: unknown, status = 200) {

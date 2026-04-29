@@ -139,17 +139,114 @@ class SupabaseService {
     if (!isAuthenticated) return;
 
     for (final invoice in invoices) {
-      final map = _invoiceToSupabase(invoice);
-      // Eliminar factura en la nube con mismo numero pero distinto id (renumeración)
-      await _client!
-          .from('invoices')
-          .delete()
-          .eq('user_id', userId!)
-          .eq('numero', invoice.numero.toString())
-          .neq('id', invoice.id);
-      await _client!.from('invoices').upsert(map, onConflict: 'id');
+      await _uploadInvoiceWithFallback(invoice);
     }
     debugPrint('[Supabase] Uploaded ${invoices.length} invoices');
+  }
+
+  Future<void> _uploadInvoiceWithFallback(Invoice invoice) async {
+    // Eliminar factura en la nube con mismo numero pero distinto id (renumeración)
+    await _client!
+        .from('invoices')
+        .delete()
+        .eq('user_id', userId!)
+        .eq('numero', invoice.numero.toString())
+        .neq('id', invoice.id);
+
+    final map = _invoiceToSupabaseEs(invoice);
+    await _upsertInvoiceWithSchemaFallback(invoice, map);
+  }
+
+  Future<void> _upsertInvoiceWithSchemaFallback(
+    Invoice invoice,
+    Map<String, dynamic> initialMap,
+  ) async {
+    Map<String, dynamic> map = Map<String, dynamic>.from(initialMap);
+
+    // Esquemas posibles detectados en proyectos antiguos:
+    // - Campos en castellano (iva_porcentaje/irpf_importe/fecha_emision)
+    // - Campos en ingles (iva_rate/irpf_amount/fecha)
+    //
+    // En vez de adivinar, reintentamos cambiando solo el campo que falte.
+    for (var attempt = 0; attempt < 4; attempt++) {
+      try {
+        await _client!.from('invoices').upsert(map, onConflict: 'id');
+        return;
+      } on PostgrestException catch (e) {
+        final missing = _extractMissingColumn(e);
+        if (missing == null) rethrow;
+
+        final updated = _applyInvoiceColumnFallback(invoice, map, missing);
+        if (!updated) rethrow;
+      }
+    }
+
+    // Si seguimos aqui, re-lanzar para que quede registrado en logs.
+    await _client!.from('invoices').upsert(map, onConflict: 'id');
+  }
+
+  String? _extractMissingColumn(PostgrestException e) {
+    final msg = e.message;
+    final isMissingColumn = e.code == 'PGRST204' ||
+        msg.toLowerCase().contains('could not find the') ||
+        (msg.toLowerCase().contains('schema cache') &&
+            msg.toLowerCase().contains('column'));
+    if (!isMissingColumn) return null;
+
+    final match = RegExp(r"Could not find the '([^']+)' column of")
+        .firstMatch(msg);
+    return match?.group(1);
+  }
+
+  bool _applyInvoiceColumnFallback(
+    Invoice invoice,
+    Map<String, dynamic> map,
+    String missingColumn,
+  ) {
+    switch (missingColumn) {
+      case 'irpf_importe':
+        map.remove('irpf_importe');
+        map['irpf_amount'] = invoice.irpfAmount;
+        return true;
+      case 'irpf_amount':
+        map.remove('irpf_amount');
+        map['irpf_importe'] = invoice.irpfAmount;
+        return true;
+      case 'irpf_porcentaje':
+        map.remove('irpf_porcentaje');
+        map['irpf_rate'] = invoice.irpfRate;
+        return true;
+      case 'irpf_rate':
+        map.remove('irpf_rate');
+        map['irpf_porcentaje'] = invoice.irpfRate * 100;
+        return true;
+      case 'iva_importe':
+        map.remove('iva_importe');
+        map['iva_amount'] = invoice.ivaAmount;
+        return true;
+      case 'iva_amount':
+        map.remove('iva_amount');
+        map['iva_importe'] = invoice.ivaAmount;
+        return true;
+      case 'iva_porcentaje':
+        map.remove('iva_porcentaje');
+        map['iva_rate'] = invoice.ivaRate;
+        return true;
+      case 'iva_rate':
+        map.remove('iva_rate');
+        map['iva_porcentaje'] = invoice.ivaRate * 100;
+        return true;
+      case 'fecha_emision':
+        map.remove('fecha_emision');
+        map['fecha'] = invoice.fecha.toIso8601String().split('T').first;
+        return true;
+      case 'fecha':
+        map.remove('fecha');
+        map['fecha_emision'] = invoice.fecha.toIso8601String().split('T').first;
+        return true;
+      default:
+        return false;
+    }
   }
 
   Future<void> uploadAll({
@@ -461,7 +558,7 @@ class SupabaseService {
     createdAt: DateTime.parse(m['created_at']),
   );
 
-  Map<String, dynamic> _invoiceToSupabase(Invoice i) => {
+  Map<String, dynamic> _invoiceToSupabaseEs(Invoice i) => {
     'id': i.id,
     'user_id': userId,
     'numero': i.numero.toString(),
@@ -493,22 +590,50 @@ class SupabaseService {
           .toList();
     }
 
+    final fechaEmisionRaw = m['fecha_emision'] ?? m['fecha'] ?? m['created_at'];
+    final parsedFecha = DateTime.tryParse(fechaEmisionRaw?.toString() ?? '');
+    final ivaRate = _readRate(
+      porcentaje: m['iva_porcentaje'],
+      rate: m['iva_rate'],
+      defaultRate: 0.21,
+    );
+    final irpfRate = _readRate(
+      porcentaje: m['irpf_porcentaje'],
+      rate: m['irpf_rate'],
+      defaultRate: 0.0,
+    );
+
     return Invoice(
       id: m['id'],
       numero: int.tryParse(m['numero']?.toString() ?? '0') ?? 0,
-      fecha: DateTime.parse(m['fecha_emision']),
+      fecha: parsedFecha ?? DateTime.now(),
       clientId: m['client_id'] ?? '',
       gigId: m['gig_id'] ?? '',
       items: items,
       subtotal: (m['subtotal'] as num?)?.toDouble() ?? 0,
-      ivaRate: ((m['iva_porcentaje'] as num?)?.toDouble() ?? 21) / 100,
-      ivaAmount: (m['iva_importe'] as num?)?.toDouble() ?? 0,
-      irpfRate: ((m['irpf_porcentaje'] as num?)?.toDouble() ?? 0) / 100,
-      irpfAmount: (m['irpf_importe'] as num?)?.toDouble() ?? 0,
+      ivaRate: ivaRate,
+      ivaAmount: (m['iva_importe'] as num?)?.toDouble() ??
+          (m['iva_amount'] as num?)?.toDouble() ??
+          0,
+      irpfRate: irpfRate,
+      irpfAmount: (m['irpf_importe'] as num?)?.toDouble() ??
+          (m['irpf_amount'] as num?)?.toDouble() ??
+          0,
       total: (m['total'] as num?)?.toDouble() ?? 0,
       status: InvoiceStatusExtension.fromDb(m['status'] ?? 'borrador'),
       createdAt: DateTime.parse(m['created_at']),
     );
+  }
+
+  double _readRate({
+    required dynamic porcentaje,
+    required dynamic rate,
+    required double defaultRate,
+  }) {
+    // En algunos esquemas se guarda en porcentaje (21) y en otros como ratio (0.21).
+    if (porcentaje is num) return porcentaje.toDouble() / 100;
+    if (rate is num) return rate.toDouble();
+    return defaultRate;
   }
 
   // ================== EXPENSES ==================
