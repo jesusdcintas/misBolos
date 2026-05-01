@@ -1,17 +1,24 @@
 import 'dart:typed_data';
+import 'dart:convert';
 import 'package:csv/csv.dart';
 import 'package:excel/excel.dart';
 import 'package:intl/intl.dart';
+import 'package:sqflite/sqflite.dart';
 import '../database/database_helper.dart';
 import '../models/client.dart';
 import '../models/gig.dart';
+import '../models/invoice.dart';
 
 class ImportColumn {
   final int index;
   final String header;
   final List<String> sampleValues;
 
-  ImportColumn({required this.index, required this.header, required this.sampleValues});
+  ImportColumn({
+    required this.index,
+    required this.header,
+    required this.sampleValues,
+  });
 }
 
 enum ColumnRole {
@@ -83,6 +90,40 @@ class ImportResult {
   });
 }
 
+class XlsxRepairPreview {
+  final int year;
+  final int candidates;
+  final double totalActual;
+  final double totalCorregido;
+  final double totalBase;
+  final double totalIva;
+
+  XlsxRepairPreview({
+    required this.year,
+    required this.candidates,
+    required this.totalActual,
+    required this.totalCorregido,
+    required this.totalBase,
+    required this.totalIva,
+  });
+}
+
+class ExcelInvoiceNumberingPreviewItem {
+  final String invoiceId;
+  final DateTime fecha;
+  final String clientName;
+  final int currentNumber;
+  final int excelNumber;
+
+  ExcelInvoiceNumberingPreviewItem({
+    required this.invoiceId,
+    required this.fecha,
+    required this.clientName,
+    required this.currentNumber,
+    required this.excelNumber,
+  });
+}
+
 class _ParsedRow {
   final DateTime fecha;
   final String clienteName;
@@ -101,6 +142,7 @@ class _ParsedRow {
 
 class ImportService {
   ImportService._();
+  static const double _ivaRate = 0.21;
 
   /// Parse an Excel file and return rows as `List<List<String>>`
   static List<List<String>> parseExcel(Uint8List bytes) {
@@ -127,20 +169,26 @@ class ImportService {
 
     // Use first row as headers
     final headerRow = rows.first;
-    final dataRows = rows.length > 1 ? rows.sublist(1, (rows.length).clamp(0, 6)) : <List<String>>[];
+    final dataRows = rows.length > 1
+        ? rows.sublist(1, (rows.length).clamp(0, 6))
+        : <List<String>>[];
 
     final columns = <ImportColumn>[];
     for (int i = 0; i < headerRow.length; i++) {
-      columns.add(ImportColumn(
-        index: i,
-        header: headerRow[i].trim().isEmpty ? 'Col ${String.fromCharCode(65 + i)}' : headerRow[i].trim(),
-        sampleValues: dataRows
-            .where((r) => i < r.length)
-            .map((r) => r[i].trim())
-            .where((v) => v.isNotEmpty)
-            .take(4)
-            .toList(),
-      ));
+      columns.add(
+        ImportColumn(
+          index: i,
+          header: headerRow[i].trim().isEmpty
+              ? 'Col ${String.fromCharCode(65 + i)}'
+              : headerRow[i].trim(),
+          sampleValues: dataRows
+              .where((r) => i < r.length)
+              .map((r) => r[i].trim())
+              .where((v) => v.isNotEmpty)
+              .take(4)
+              .toList(),
+        ),
+      );
     }
     return columns;
   }
@@ -149,13 +197,19 @@ class ImportService {
   static Map<int, ColumnRole>? autoDetectJesusFormat(List<List<String>> rows) {
     if (rows.isEmpty || rows.first.length < 7) return null;
 
-    final dataRows = rows.length > 1 ? rows.sublist(1, (rows.length).clamp(0, 10)) : <List<String>>[];
+    final dataRows = rows.length > 1
+        ? rows.sublist(1, (rows.length).clamp(0, 10))
+        : <List<String>>[];
     if (dataRows.isEmpty) return null;
 
     // Jesús format: Col C(2)=nº factura, D(3)=fecha, E(4)=venue, F(5)=importe A, G(6)=importe B
     bool colCNumeric = dataRows.any((r) => r.length > 2 && _isNumeric(r[2]));
-    bool colDDate = dataRows.any((r) => r.length > 3 && _tryParseDate(r[3]) != null);
-    bool colEText = dataRows.any((r) => r.length > 4 && r[4].trim().isNotEmpty && !_isNumeric(r[4]));
+    bool colDDate = dataRows.any(
+      (r) => r.length > 3 && _tryParseDate(r[3]) != null,
+    );
+    bool colEText = dataRows.any(
+      (r) => r.length > 4 && r[4].trim().isNotEmpty && !_isNumeric(r[4]),
+    );
     bool colFNumeric = dataRows.any((r) => r.length > 5 && _isNumeric(r[5]));
 
     if (colDDate && colEText && (colCNumeric || colFNumeric)) {
@@ -194,7 +248,9 @@ class ImportService {
     final newClientNames = <String>{};
 
     for (final row in parsed) {
-      if (row.importeEnB != null && row.importeEnB! > 0 && (row.importeFacturable == null || row.importeFacturable == 0)) {
+      if (row.importeEnB != null &&
+          row.importeEnB! > 0 &&
+          (row.importeFacturable == null || row.importeFacturable == 0)) {
         enB++;
         total += row.importeEnB!;
       } else {
@@ -225,12 +281,17 @@ class ImportService {
   static Future<ImportResult> executeImport(
     List<List<String>> rows,
     ImportMapping mapping,
-    List<Client> existingClients,
-    {void Function(int current, int total)? onProgress}
-  ) async {
+    List<Client> existingClients, {
+    void Function(int current, int total)? onProgress,
+  }) async {
     final parsed = _parseRows(rows, mapping);
     if (parsed.isEmpty) {
-      return ImportResult(imported: 0, skipped: 0, clientsCreated: 0, error: 'No se encontraron filas válidas');
+      return ImportResult(
+        imported: 0,
+        skipped: 0,
+        clientsCreated: 0,
+        error: 'No se encontraron filas válidas',
+      );
     }
 
     final db = await DatabaseHelper.instance.database;
@@ -252,6 +313,19 @@ class ImportService {
 
     try {
       await db.transaction((txn) async {
+        Future<int> nextInvoiceNumberForYear(int year) async {
+          final result = await txn.rawQuery(
+            '''
+            SELECT MAX(numero) as max_num
+            FROM invoices
+            WHERE CAST(strftime('%Y', fecha) AS INTEGER) = ?
+            ''',
+            [year],
+          );
+          final maxNum = result.first['max_num'] as int?;
+          return (maxNum ?? 0) + 1;
+        }
+
         for (int i = 0; i < parsed.length; i++) {
           final row = parsed[i];
           onProgress?.call(i + 1, parsed.length);
@@ -275,10 +349,15 @@ class ImportService {
           }
 
           // Determine if this is a B-type gig
-          final isEnB = row.importeEnB != null && row.importeEnB! > 0 &&
+          final isEnB =
+              row.importeEnB != null &&
+              row.importeEnB! > 0 &&
               (row.importeFacturable == null || row.importeFacturable == 0);
 
-          final cachet = isEnB ? row.importeEnB! : (row.importeFacturable ?? 0);
+          final totalA = row.importeFacturable ?? 0;
+          final totalB = row.importeEnB ?? 0;
+          final importesA = _calculateOfficialAmountsFromTotal(totalA);
+          final cachet = isEnB ? totalB : importesA.base;
 
           // Determine status
           GigStatus status;
@@ -314,9 +393,64 @@ class ImportService {
             cachet: cachet,
             facturable: !isEnB,
             status: status,
+            notas: isEnB ? 'XLSX_IMPORT:B' : 'XLSX_IMPORT:A',
           );
 
           await txn.insert('gigs', gig.toMap());
+
+          if (!isEnB) {
+            final desiredInvoiceStatus = switch (status) {
+              GigStatus.facturaGenerada => InvoiceStatus.borrador,
+              GigStatus.facturaEnviada => InvoiceStatus.enviada,
+              GigStatus.pagado => InvoiceStatus.pagada,
+              _ => InvoiceStatus.borrador,
+            };
+
+            var invoiceNumber = row.numeroFactura;
+            if (invoiceNumber != null) {
+              final existingInvoiceNumber = await txn.query(
+                'invoices',
+                columns: ['id'],
+                where:
+                    "numero = ? AND CAST(strftime('%Y', fecha) AS INTEGER) = ?",
+                whereArgs: [invoiceNumber, row.fecha.year],
+                limit: 1,
+              );
+              if (existingInvoiceNumber.isNotEmpty) {
+                skipped++;
+                continue;
+              }
+            }
+            invoiceNumber ??= await nextInvoiceNumberForYear(row.fecha.year);
+
+            final invoice = Invoice(
+              numero: invoiceNumber,
+              fecha: row.fecha,
+              clientId: clientId,
+              gigId: gig.id,
+              items: [
+                InvoiceLineItem(
+                  cantidad: 1,
+                  descripcion: venueName.toUpperCase(),
+                  precioUnitario: importesA.base,
+                ),
+              ],
+              subtotal: importesA.base,
+              ivaRate: _ivaRate,
+              ivaAmount: importesA.iva,
+              total: importesA.total,
+              status: desiredInvoiceStatus,
+            );
+
+            await txn.insert('invoices', invoice.toMap());
+            await txn.update(
+              'gigs',
+              {'invoice_id': invoice.id},
+              where: 'id = ?',
+              whereArgs: [gig.id],
+            );
+          }
+
           imported++;
         }
       });
@@ -338,7 +472,10 @@ class ImportService {
 
   // --- Private helpers ---
 
-  static List<_ParsedRow> _parseRows(List<List<String>> rows, ImportMapping mapping) {
+  static List<_ParsedRow> _parseRows(
+    List<List<String>> rows,
+    ImportMapping mapping,
+  ) {
     // Determine column indices from mapping
     int? fechaCol, clienteCol, importeACol, importeBCol, numFacturaCol;
     for (final entry in mapping.columnRoles.entries) {
@@ -389,20 +526,25 @@ class ImportService {
       }
 
       // Skip rows with no amounts at all
-      if ((importeA == null || importeA == 0) && (importeB == null || importeB == 0)) continue;
+      if ((importeA == null || importeA == 0) &&
+          (importeB == null || importeB == 0)) {
+        continue;
+      }
 
       int? numFactura;
       if (numFacturaCol != null && numFacturaCol < row.length) {
         numFactura = int.tryParse(row[numFacturaCol].trim());
       }
 
-      parsed.add(_ParsedRow(
-        fecha: fecha,
-        clienteName: clienteStr,
-        importeFacturable: importeA,
-        importeEnB: importeB,
-        numeroFactura: numFactura,
-      ));
+      parsed.add(
+        _ParsedRow(
+          fecha: fecha,
+          clienteName: clienteStr,
+          importeFacturable: importeA,
+          importeEnB: importeB,
+          numeroFactura: numFactura,
+        ),
+      );
     }
 
     return parsed;
@@ -453,12 +595,268 @@ class ImportService {
     if (name.isEmpty) return name;
     // If all uppercase, capitalize properly
     if (name == name.toUpperCase() && name.length > 2) {
-      return name.split(' ').map((word) {
-        if (word.isEmpty) return word;
-        return word[0].toUpperCase() + word.substring(1).toLowerCase();
-      }).join(' ');
+      return name
+          .split(' ')
+          .map((word) {
+            if (word.isEmpty) return word;
+            return word[0].toUpperCase() + word.substring(1).toLowerCase();
+          })
+          .join(' ');
     }
     // Otherwise just capitalize first letter
     return name[0].toUpperCase() + name.substring(1);
   }
+
+  static Future<XlsxRepairPreview> previewXlsxOfficialRepair({
+    required int year,
+  }) async {
+    final db = await DatabaseHelper.instance.database;
+    final rows = await _xlsxOfficialRows(db, year);
+    var totalActual = 0.0;
+    var totalCorregido = 0.0;
+    var totalBase = 0.0;
+    var totalIva = 0.0;
+    for (final row in rows) {
+      final totalActualFila = (row['total'] as num?)?.toDouble() ?? 0;
+      if (totalActualFila <= 0) continue;
+      final fixed = _calculateXlsxRepairAmounts(totalActualFila);
+      totalActual += totalActualFila;
+      totalCorregido += fixed.totalCorregido;
+      totalBase += fixed.base;
+      totalIva += fixed.iva;
+    }
+    return XlsxRepairPreview(
+      year: year,
+      candidates: rows.length,
+      totalActual: _round2(totalActual),
+      totalCorregido: _round2(totalCorregido),
+      totalBase: _round2(totalBase),
+      totalIva: _round2(totalIva),
+    );
+  }
+
+  static Future<int> applyXlsxOfficialRepair({required int year}) async {
+    final db = await DatabaseHelper.instance.database;
+    return db.transaction((txn) async {
+      final rows = await _xlsxOfficialRows(txn, year);
+      var updated = 0;
+      for (final row in rows) {
+        final invoiceId = row['id']?.toString();
+        final totalActual = (row['total'] as num?)?.toDouble();
+        if (invoiceId == null || totalActual == null || totalActual <= 0) {
+          continue;
+        }
+
+        final fixed = _calculateXlsxRepairAmounts(totalActual);
+        final itemsRaw = row['items']?.toString();
+        final patchedItems = _patchItemsBase(itemsRaw, fixed.base);
+
+        await txn.update(
+          'invoices',
+          {
+            'subtotal': fixed.base,
+            'iva_rate': _ivaRate,
+            'iva_amount': fixed.iva,
+            'total': fixed.totalCorregido,
+            if (patchedItems != null) 'items': patchedItems,
+          },
+          where: 'id = ?',
+          whereArgs: [invoiceId],
+        );
+
+        await txn.update(
+          'gigs',
+          {'cachet': fixed.base},
+          where: 'id = ?',
+          whereArgs: [row['gig_id']],
+        );
+        updated++;
+      }
+      return updated;
+    });
+  }
+
+  static Future<List<Map<String, Object?>>> _xlsxOfficialRows(
+    DatabaseExecutor db,
+    int year,
+  ) {
+    return db.rawQuery(
+      '''
+      SELECT i.id, i.gig_id, i.total, i.items
+      FROM invoices i
+      JOIN gigs g ON g.id = i.gig_id
+      WHERE g.facturable = 1
+        AND g.notas LIKE 'XLSX_IMPORT:%'
+        AND CAST(strftime('%Y', i.fecha) AS INTEGER) = ?
+      ''',
+      [year],
+    );
+  }
+
+  static ({double totalCorregido, double base, double iva})
+  _calculateXlsxRepairAmounts(double totalActual) {
+    final totalCorregido = _round2(totalActual / (1 + _ivaRate));
+    final base = _round2(totalCorregido / (1 + _ivaRate));
+    final iva = _round2(totalCorregido - base);
+    return (totalCorregido: totalCorregido, base: base, iva: iva);
+  }
+
+  static String? _patchItemsBase(String? raw, double base) {
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List || decoded.isEmpty) return null;
+      final first = Map<String, dynamic>.from(decoded.first as Map);
+      first['precio_unitario'] = base;
+      first['total_linea'] = base;
+      decoded[0] = first;
+      return jsonEncode(decoded);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static ({double base, double iva, double total})
+  _calculateOfficialAmountsFromTotal(double total) {
+    final base = _round2(total / (1 + _ivaRate));
+    final iva = _round2(total - base);
+    final fixedTotal = _round2(total);
+    return (base: base, iva: iva, total: fixedTotal);
+  }
+
+  static double _round2(double value) => (value * 100).round() / 100.0;
+
+  static Future<List<ExcelInvoiceNumberingPreviewItem>>
+  previewApplyNumberingFromExcel({
+    required Uint8List bytes,
+    required int year,
+  }) async {
+    final rows = parseExcel(bytes);
+    final auto = autoDetectJesusFormat(rows);
+    if (auto == null) return [];
+
+    final parsed = _parseRows(
+      rows,
+      ImportMapping(columnRoles: auto, year: year),
+    ).where((r) => r.numeroFactura != null).toList();
+    if (parsed.isEmpty) return [];
+
+    final excelNumbers = parsed
+        .map((r) => r.numeroFactura!)
+        .toSet()
+        .toList()
+      ..sort();
+    int? firstGap;
+    if (excelNumbers.length > 1) {
+      var prev = excelNumbers.first;
+      for (var i = 1; i < excelNumbers.length; i++) {
+        final n = excelNumbers[i];
+        if (n > prev + 1) {
+          firstGap = prev + 1;
+          break;
+        }
+        prev = n;
+      }
+    }
+    if (firstGap == null) return [];
+    final firstAfterGap = excelNumbers.firstWhere((n) => n > firstGap!);
+    final shift = firstAfterGap - firstGap;
+    if (shift <= 0) return [];
+
+    final db = await DatabaseHelper.instance.database;
+    final localRows = await db.rawQuery(
+      '''
+      SELECT i.id, i.numero, i.fecha, c.nombre as client_name
+      FROM invoices i
+      JOIN clients c ON c.id = i.client_id
+      WHERE CAST(strftime('%Y', i.fecha) AS INTEGER) = ?
+        AND i.status != ?
+        AND i.numero >= ?
+      ORDER BY i.numero ASC
+      ''',
+      [year, InvoiceStatus.borrador.dbValue, firstGap],
+    );
+
+    final preview = <ExcelInvoiceNumberingPreviewItem>[];
+    for (final row in localRows) {
+      final current = row['numero'] as int;
+      final excelNum = current + shift;
+      if (!excelNumbers.contains(excelNum)) continue;
+      preview.add(
+        ExcelInvoiceNumberingPreviewItem(
+          invoiceId: row['id'] as String,
+          fecha: DateTime.parse(row['fecha'] as String),
+          clientName: (row['client_name'] ?? '').toString(),
+          currentNumber: current,
+          excelNumber: excelNum,
+        ),
+      );
+    }
+    return preview;
+  }
+
+  static Future<int> applyNumberingFromExcelPreview({
+    required int year,
+    required List<ExcelInvoiceNumberingPreviewItem> preview,
+  }) async {
+    if (preview.isEmpty) return 0;
+
+    final targetPerId = <String, int>{};
+    final targetNumbers = <int>{};
+    for (final p in preview) {
+      if (targetNumbers.contains(p.excelNumber)) {
+        throw Exception('Excel contiene números duplicados en $year');
+      }
+      targetNumbers.add(p.excelNumber);
+      targetPerId[p.invoiceId] = p.excelNumber;
+    }
+
+    final db = await DatabaseHelper.instance.database;
+    return db.transaction((txn) async {
+      final affectedIds = targetPerId.keys.toList();
+      final ph = List.filled(affectedIds.length, '?').join(',');
+
+      final collisions = await txn.rawQuery(
+        '''
+        SELECT id, numero
+        FROM invoices
+        WHERE CAST(strftime('%Y', fecha) AS INTEGER) = ?
+          AND numero IN (${List.filled(targetNumbers.length, '?').join(',')})
+        ''',
+        [year, ...targetNumbers],
+      );
+      for (final c in collisions) {
+        final id = c['id'] as String;
+        if (!targetPerId.containsKey(id)) {
+          throw Exception('Conflicto: número ${c['numero']} ya existe');
+        }
+      }
+
+      final currentRows = await txn.query(
+        'invoices',
+        columns: ['id'],
+        where: 'id IN ($ph)',
+        whereArgs: affectedIds,
+      );
+      for (var i = 0; i < currentRows.length; i++) {
+        await txn.update(
+          'invoices',
+          {'numero': -2000000 - i},
+          where: 'id = ?',
+          whereArgs: [currentRows[i]['id']],
+        );
+      }
+
+      for (final entry in targetPerId.entries) {
+        await txn.update(
+          'invoices',
+          {'numero': entry.value},
+          where: 'id = ?',
+          whereArgs: [entry.key],
+        );
+      }
+      return targetPerId.length;
+    });
+  }
+
 }

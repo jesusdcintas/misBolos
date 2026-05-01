@@ -74,8 +74,9 @@ ALTER TABLE gigs
   ADD CONSTRAINT fk_gigs_invoice
   FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE SET NULL;
 
--- El número de factura es único por usuario, no global
-CREATE UNIQUE INDEX idx_invoices_numero_user ON invoices(user_id, numero);
+-- El número de factura es único por usuario y año fiscal, no global
+CREATE UNIQUE INDEX idx_invoices_numero_user_year
+  ON invoices(user_id, (EXTRACT(YEAR FROM fecha_emision)), numero);
 
 -- Índices
 CREATE INDEX idx_clients_user_id ON clients(user_id);

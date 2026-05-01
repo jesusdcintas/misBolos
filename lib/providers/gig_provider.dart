@@ -21,6 +21,10 @@ class GigsNotifier extends AsyncNotifier<List<Gig>> {
     return ref.read(gigRepositoryProvider).getAll();
   }
 
+  Future<void> _reloadInvoicesLocal() async {
+    await ref.read(invoicesProvider.notifier).reloadLocal();
+  }
+
   Future<void> add(Gig gig) async {
     await ref.read(gigRepositoryProvider).insert(gig);
     await AppEventRepository.instance.insert(
@@ -37,10 +41,15 @@ class GigsNotifier extends AsyncNotifier<List<Gig>> {
         },
       ),
     );
+    try {
+      await SupabaseService.instance.uploadGigDirect(gig);
+    } catch (e) {
+      debugPrint('[GigProvider] Supabase gig upload failed: $e');
+    }
     ref.invalidate(gigByIdProvider(gig.id));
     ref.invalidateSelf();
     // En caso de reparaciones automáticas (gig↔invoice), refrescar facturas.
-    ref.invalidate(invoicesProvider);
+    await _reloadInvoicesLocal();
   }
 
   Future<void> updateGig(Gig gig) async {
@@ -60,15 +69,38 @@ class GigsNotifier extends AsyncNotifier<List<Gig>> {
         },
       ),
     );
+    try {
+      final updated = await ref.read(gigRepositoryProvider).getById(gig.id);
+      if (updated != null) {
+        await SupabaseService.instance.uploadGigDirect(updated);
+      }
+    } catch (e) {
+      debugPrint('[GigProvider] Supabase gig update failed: $e');
+    }
     ref.invalidate(gigByIdProvider(gig.id));
     ref.invalidateSelf();
-    ref.invalidate(invoicesProvider);
+    await _reloadInvoicesLocal();
   }
 
   Future<void> updateStatus(String id, GigStatus status) async {
     final repository = ref.read(gigRepositoryProvider);
     final previous = await repository.getById(id);
+    final previousInvoice = await ref
+        .read(invoiceRepositoryProvider)
+        .getByGigId(id);
     await repository.updateStatus(id, status);
+    final updatedGig = await repository.getById(id);
+    final invoice = await ref.read(invoiceRepositoryProvider).getByGigId(id);
+    try {
+      if (invoice != null && previousInvoice == null) {
+        await SupabaseService.instance.uploadInvoices([invoice]);
+      }
+      if (updatedGig != null) {
+        await SupabaseService.instance.uploadGigDirect(updatedGig);
+      }
+    } catch (e) {
+      debugPrint('[GigProvider] Supabase status sync failed: $e');
+    }
     await AppEventRepository.instance.insert(
       AppEvent(
         entityType: 'gig',
@@ -84,11 +116,19 @@ class GigsNotifier extends AsyncNotifier<List<Gig>> {
     ref.invalidate(gigByIdProvider(id));
     ref.invalidateSelf();
     // Si el status implica factura, el repositorio puede haber creado una.
-    ref.invalidate(invoicesProvider);
+    await _reloadInvoicesLocal();
   }
 
   Future<void> linkInvoice(String gigId, String invoiceId) async {
     await ref.read(gigRepositoryProvider).linkInvoice(gigId, invoiceId);
+    final gig = await ref.read(gigRepositoryProvider).getById(gigId);
+    try {
+      if (gig != null) {
+        await SupabaseService.instance.uploadGigDirect(gig);
+      }
+    } catch (e) {
+      debugPrint('[GigProvider] Supabase link invoice failed: $e');
+    }
     await AppEventRepository.instance.insert(
       AppEvent(
         entityType: 'gig',
@@ -99,13 +139,13 @@ class GigsNotifier extends AsyncNotifier<List<Gig>> {
     );
     ref.invalidate(gigByIdProvider(gigId));
     ref.invalidateSelf();
-    ref.invalidate(invoicesProvider);
+    await _reloadInvoicesLocal();
   }
 
   Future<void> remove(String id) async {
     final gig = await ref.read(gigRepositoryProvider).getById(id);
     // 1. Borrar de SQLite local (fuente de verdad)
-    await ref.read(gigRepositoryProvider).delete(id);
+    final result = await ref.read(gigRepositoryProvider).deleteBatch({id});
     await AppEventRepository.instance.insert(
       AppEvent(
         entityType: 'gig',
@@ -121,10 +161,18 @@ class GigsNotifier extends AsyncNotifier<List<Gig>> {
 
     // 2. Borrar de Supabase (await + queue si falla)
     try {
-      await SupabaseService.instance.deleteGig(id);
+      await SupabaseService.instance.deleteGigsBatch(
+        gigIds: result.deletedGigIds,
+        invoiceIds: result.deletedInvoiceIds,
+      );
     } catch (e) {
       debugPrint('[GigProvider] Supabase delete failed, queuing: $e');
-      await DatabaseHelper.instance.addPendingDeletion('gigs', id);
+      for (final invoiceId in result.deletedInvoiceIds) {
+        await DatabaseHelper.instance.addPendingDeletion('invoices', invoiceId);
+      }
+      for (final gigId in result.deletedGigIds) {
+        await DatabaseHelper.instance.addPendingDeletion('gigs', gigId);
+      }
     }
 
     // 3. Borrar de Google Calendar (best-effort)
@@ -136,6 +184,55 @@ class GigsNotifier extends AsyncNotifier<List<Gig>> {
 
     ref.invalidateSelf();
     ref.invalidate(gigByIdProvider(id));
+    await _reloadInvoicesLocal();
+  }
+
+  Future<void> bulkUpdateStatus(Set<String> ids, GigStatus status) async {
+    if (ids.isEmpty) return;
+    await ref.read(gigRepositoryProvider).updateStatusBatch(ids, status);
+    ref.invalidateSelf();
+    await _reloadInvoicesLocal();
+  }
+
+  Future<void> bulkSetFacturable(Set<String> ids, bool facturable) async {
+    if (ids.isEmpty) return;
+    await ref
+        .read(gigRepositoryProvider)
+        .updateFacturableBatch(ids, facturable);
+    ref.invalidateSelf();
+    await _reloadInvoicesLocal();
+  }
+
+  Future<void> bulkDelete(Set<String> ids) async {
+    if (ids.isEmpty) return;
+    final result = await ref.read(gigRepositoryProvider).deleteBatch(ids);
+
+    try {
+      await SupabaseService.instance.deleteGigsBatch(
+        gigIds: result.deletedGigIds,
+        invoiceIds: result.deletedInvoiceIds,
+      );
+    } catch (e) {
+      debugPrint('[GigProvider] Supabase bulk delete failed, queuing: $e');
+      for (final invoiceId in result.deletedInvoiceIds) {
+        await DatabaseHelper.instance.addPendingDeletion('invoices', invoiceId);
+      }
+      for (final gigId in result.deletedGigIds) {
+        await DatabaseHelper.instance.addPendingDeletion('gigs', gigId);
+      }
+    }
+
+    try {
+      final calendar = GoogleCalendarService();
+      for (final gigId in result.deletedGigIds) {
+        await calendar.deleteGig(gigId);
+      }
+    } catch (e) {
+      debugPrint('[GigProvider] Google Calendar bulk delete failed: $e');
+    }
+
+    ref.invalidateSelf();
+    await _reloadInvoicesLocal();
   }
 }
 

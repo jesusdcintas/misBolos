@@ -1,6 +1,9 @@
+import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_strings.dart';
@@ -17,6 +20,7 @@ import '../../services/pdf_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/google_auth_service.dart';
 import '../../services/google_calendar_service.dart';
+import '../../services/import_service.dart';
 import '../../widgets/common/empty_state.dart';
 import '../../widgets/common/skeleton_loading.dart';
 import '../../core/utils/app_haptics.dart';
@@ -58,11 +62,28 @@ final _clientsCacheProvider = FutureProvider<Map<String, Client>>((ref) async {
   return {for (var c in clients) c.id: c};
 });
 
-class InvoicesListScreen extends ConsumerWidget {
+class InvoicesListScreen extends ConsumerStatefulWidget {
   const InvoicesListScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<InvoicesListScreen> createState() => _InvoicesListScreenState();
+}
+
+class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(
+        ref
+            .read(invoicesProvider.notifier)
+            .refreshFromCloud(reason: 'invoices_screen_open'),
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final invoicesAsync = ref.watch(invoicesProvider);
     final filter = ref.watch(_filterProvider);
     final sortOption = ref.watch(_sortProvider);
@@ -519,9 +540,21 @@ class InvoicesListScreen extends ConsumerWidget {
               onSelected: (value) {
                 if (value == 'renumber') {
                   _showRenumberDialog(context, ref);
+                } else if (value == 'apply_excel_numbering') {
+                  _showApplyExcelNumberingDialog(context, ref);
                 }
               },
               itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'apply_excel_numbering',
+                  child: Row(
+                    children: [
+                      Icon(Icons.upload_file, size: 20),
+                      SizedBox(width: 12),
+                      Text('Aplicar numeración desde Excel'),
+                    ],
+                  ),
+                ),
                 const PopupMenuItem(
                   value: 'renumber',
                   child: Row(
@@ -1577,9 +1610,10 @@ class _InvoiceTile extends ConsumerWidget {
 }
 
 Future<void> _showRenumberDialog(BuildContext context, WidgetRef ref) async {
-  final controller = TextEditingController(text: '1');
+  final selectedYear = ref.read(_invoiceYearFilterProvider);
+  final year = selectedYear ?? DateTime.now().year;
 
-  final startNumber = await showDialog<int>(
+  final shouldRenumber = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
       title: const Text('Reenumerar facturas'),
@@ -1587,18 +1621,13 @@ Future<void> _showRenumberDialog(BuildContext context, WidgetRef ref) async {
         mainAxisSize: MainAxisSize.min,
         children: [
           const Text(
-            'Esto reenumerará todas las facturas en orden cronológico (por fecha de factura).',
+            'Esto reenumerará las facturas del año seleccionado en orden cronológico.',
             style: TextStyle(fontSize: 14),
           ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: controller,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'Empezar desde',
-              hintText: 'Ej: 1',
-            ),
-            autofocus: true,
+          const SizedBox(height: 8),
+          Text(
+            'Año: $year',
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 12),
           Container(
@@ -1617,13 +1646,20 @@ Future<void> _showRenumberDialog(BuildContext context, WidgetRef ref) async {
                 const SizedBox(width: 8),
                 const Expanded(
                   child: Text(
-                    'Esta acción modificará todos los números de factura.',
+                    'Esta acción modificará solo los números de factura de ese año y empezará en 1.',
                     style: TextStyle(fontSize: 12),
                   ),
                 ),
               ],
             ),
           ),
+          if (selectedYear == null) ...[
+            const SizedBox(height: 8),
+            Text(
+              'No hay filtro de año activo, se usará $year.',
+              style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+            ),
+          ],
         ],
       ),
       actions: [
@@ -1632,26 +1668,21 @@ Future<void> _showRenumberDialog(BuildContext context, WidgetRef ref) async {
           child: const Text('Cancelar'),
         ),
         ElevatedButton(
-          onPressed: () {
-            final num = int.tryParse(controller.text.trim());
-            if (num != null && num > 0) {
-              Navigator.pop(ctx, num);
-            }
-          },
+          onPressed: () => Navigator.pop(ctx, true),
           child: const Text('Reenumerar'),
         ),
       ],
     ),
   );
 
-  if (startNumber != null && context.mounted) {
+  if (shouldRenumber == true && context.mounted) {
     // Confirmación adicional
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('¿Confirmar reenumeración?'),
         content: Text(
-          'Las facturas se reenumerarán empezando desde el número $startNumber, ordenadas por fecha.',
+          'Las facturas de $year se reenumerarán del 1 en adelante, ordenadas por fecha.',
         ),
         actions: [
           TextButton(
@@ -1668,15 +1699,109 @@ Future<void> _showRenumberDialog(BuildContext context, WidgetRef ref) async {
     );
 
     if (confirm == true && context.mounted) {
-      await ref.read(invoicesProvider.notifier).renumberAll(startNumber);
+      await ref.read(invoicesProvider.notifier).renumberYear(year);
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Facturas reenumeradas correctamente')),
+          SnackBar(
+            content: Text('Facturas de $year reenumeradas correctamente'),
+          ),
         );
       }
     }
   }
+}
+
+Future<void> _showApplyExcelNumberingDialog(
+  BuildContext context,
+  WidgetRef ref,
+) async {
+  final selectedYear = ref.read(_invoiceYearFilterProvider);
+  final year = selectedYear ?? DateTime.now().year;
+
+  final pick = await FilePicker.platform.pickFiles(
+    type: FileType.custom,
+    allowedExtensions: ['xlsx', 'xls'],
+  );
+  if (pick == null || pick.files.isEmpty) return;
+  final path = pick.files.first.path;
+  if (path == null) return;
+  final bytes = await File(path).readAsBytes();
+
+  final preview = await ImportService.previewApplyNumberingFromExcel(
+    bytes: bytes,
+    year: year,
+  );
+
+  if (!context.mounted) return;
+  if (preview.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Sin cambios de numeración desde Excel en $year')),
+    );
+    return;
+  }
+
+  final confirm = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text('Aplicar numeración Excel ($year)'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Preview:'),
+            const SizedBox(height: 8),
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: preview
+                      .take(30)
+                      .map(
+                        (p) => Text('#${p.currentNumber} → #${p.excelNumber}'),
+                      )
+                      .toList(),
+                ),
+              ),
+            ),
+            if (preview.length > 30)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text('+ ${preview.length - 30} cambios más'),
+              ),
+            const SizedBox(height: 8),
+            const Text(
+              'Se respeta número exacto del Excel. Se permiten huecos.',
+              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Cancelar'),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('Confirmar'),
+        ),
+      ],
+    ),
+  );
+
+  if (confirm != true || !context.mounted) return;
+
+  final updated = await ref
+      .read(invoicesProvider.notifier)
+      .applyExcelNumberingPreview(year, preview);
+
+  if (!context.mounted) return;
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(content: Text('Numeración Excel aplicada: $updated facturas')),
+  );
 }
 
 // ─── Widgets auxiliares para filtros secundarios ───

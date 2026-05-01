@@ -4,6 +4,16 @@ import '../database/database_helper.dart';
 import '../models/gig.dart';
 import '../models/invoice.dart';
 
+class GigBatchDeleteResult {
+  final Set<String> deletedGigIds;
+  final Set<String> deletedInvoiceIds;
+
+  const GigBatchDeleteResult({
+    required this.deletedGigIds,
+    required this.deletedInvoiceIds,
+  });
+}
+
 class GigRepository {
   static final GigRepository instance = GigRepository._();
   GigRepository._();
@@ -168,8 +178,166 @@ class GigRepository {
   }
 
   Future<void> delete(String id) async {
+    await deleteBatch({id});
+  }
+
+  Future<void> updateStatusBatch(Set<String> ids, GigStatus status) async {
+    if (ids.isEmpty) return;
     final db = await DatabaseHelper.instance.database;
-    await db.delete('gigs', where: 'id = ?', whereArgs: [id]);
+    final placeholders = List.filled(ids.length, '?').join(',');
+    await db.update(
+      'gigs',
+      {'status': status.dbValue},
+      where: 'id IN ($placeholders)',
+      whereArgs: ids.toList(),
+    );
+  }
+
+  Future<void> updateFacturableBatch(Set<String> ids, bool facturable) async {
+    if (ids.isEmpty) return;
+    final db = await DatabaseHelper.instance.database;
+    final placeholders = List.filled(ids.length, '?').join(',');
+    await db.update(
+      'gigs',
+      {'facturable': facturable ? 1 : 0},
+      where: 'id IN ($placeholders)',
+      whereArgs: ids.toList(),
+    );
+  }
+
+  Future<GigBatchDeleteResult> deleteBatch(Set<String> ids) async {
+    if (ids.isEmpty) {
+      return const GigBatchDeleteResult(
+        deletedGigIds: <String>{},
+        deletedInvoiceIds: <String>{},
+      );
+    }
+    final db = await DatabaseHelper.instance.database;
+    final placeholders = List.filled(ids.length, '?').join(',');
+    final gigIds = ids.toList();
+
+    return db.transaction((txn) async {
+      final invoicesRows = await txn.query(
+        'invoices',
+        columns: ['id'],
+        where: 'gig_id IN ($placeholders)',
+        whereArgs: gigIds,
+      );
+      final invoiceIds = invoicesRows
+          .map((row) => row['id']?.toString())
+          .whereType<String>()
+          .toSet();
+
+      if (invoiceIds.isNotEmpty) {
+        final invPlaceholders = List.filled(invoiceIds.length, '?').join(',');
+        final invArgs = invoiceIds.toList();
+
+        // Romper referencia circular antes de borrar facturas.
+        await txn.update(
+          'gigs',
+          {'invoice_id': null},
+          where: 'id IN ($placeholders)',
+          whereArgs: gigIds,
+        );
+
+        // Hijos directos conocidos por invoice_id.
+        await _deleteIfTableExists(
+          txn,
+          'invoice_email_logs',
+          'invoice_id IN ($invPlaceholders)',
+          invArgs,
+        );
+        await _deleteIfTableExists(
+          txn,
+          'invoice_items',
+          'invoice_id IN ($invPlaceholders)',
+          invArgs,
+        );
+        await _deleteIfTableExists(
+          txn,
+          'payments',
+          'invoice_id IN ($invPlaceholders)',
+          invArgs,
+        );
+      }
+
+      // Cualquier FK adicional hacia invoices/gigs.
+      await _deleteDynamicChildrenByFk(
+        txn,
+        parentTable: 'invoices',
+        ids: invoiceIds,
+      );
+      await _deleteDynamicChildrenByFk(txn, parentTable: 'gigs', ids: ids);
+
+      if (invoiceIds.isNotEmpty) {
+        final invPlaceholders = List.filled(invoiceIds.length, '?').join(',');
+        await txn.delete(
+          'invoices',
+          where: 'id IN ($invPlaceholders)',
+          whereArgs: invoiceIds.toList(),
+        );
+      }
+
+      await txn.delete(
+        'gigs',
+        where: 'id IN ($placeholders)',
+        whereArgs: gigIds,
+      );
+
+      return GigBatchDeleteResult(
+        deletedGigIds: ids,
+        deletedInvoiceIds: invoiceIds,
+      );
+    });
+  }
+
+  Future<void> _deleteIfTableExists(
+    Transaction txn,
+    String tableName,
+    String where,
+    List<Object?> whereArgs,
+  ) async {
+    final exists = await txn.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1",
+      [tableName],
+    );
+    if (exists.isEmpty) return;
+    await txn.delete(tableName, where: where, whereArgs: whereArgs);
+  }
+
+  Future<void> _deleteDynamicChildrenByFk(
+    Transaction txn, {
+    required String parentTable,
+    required Set<String> ids,
+  }) async {
+    if (ids.isEmpty) return;
+    final placeholders = List.filled(ids.length, '?').join(',');
+    final args = ids.toList();
+    final tables = await txn.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
+    );
+    for (final row in tables) {
+      final table = row['name']?.toString();
+      if (table == null || table.isEmpty) continue;
+      if (table == parentTable) continue;
+      if (table == 'gigs' && parentTable == 'invoices') continue;
+
+      final fkRows = await txn.rawQuery("PRAGMA foreign_key_list('$table')");
+      for (final fk in fkRows) {
+        final refTable = fk['table']?.toString();
+        final fromColumn = fk['from']?.toString();
+        if (refTable != parentTable ||
+            fromColumn == null ||
+            fromColumn.isEmpty) {
+          continue;
+        }
+        await txn.delete(
+          table,
+          where: '$fromColumn IN ($placeholders)',
+          whereArgs: args,
+        );
+      }
+    }
   }
 
   Future<void> _ensureInvoiceConsistency(Database db, Gig gig) async {
@@ -219,7 +387,9 @@ class GigRepository {
     );
     if (byGig.isNotEmpty) {
       final existingId = byGig.first['id']?.toString();
-      if (existingId != null && existingId.isNotEmpty && existingId != invoiceId) {
+      if (existingId != null &&
+          existingId.isNotEmpty &&
+          existingId != invoiceId) {
         await db.update(
           'gigs',
           {'invoice_id': existingId},
@@ -230,8 +400,14 @@ class GigRepository {
       return;
     }
 
-    final nextNumResult =
-        await db.rawQuery('SELECT MAX(numero) as max_num FROM invoices');
+    final nextNumResult = await db.rawQuery(
+      '''
+      SELECT MAX(numero) as max_num
+      FROM invoices
+      WHERE CAST(strftime('%Y', fecha) AS INTEGER) = ?
+      ''',
+      [gig.fecha.year],
+    );
     final maxNum = nextNumResult.first['max_num'] as int?;
     final nextNum = (maxNum ?? 0) + 1;
 

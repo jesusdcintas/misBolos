@@ -80,7 +80,10 @@ class _GigDetailContent extends ConsumerWidget {
             tag: 'gig-${gig.id}',
             child: Card(
               child: ListTile(
-                leading: const Icon(Icons.calendar_today, color: AppColors.primary),
+                leading: const Icon(
+                  Icons.calendar_today,
+                  color: AppColors.primary,
+                ),
                 title: const Text(AppStrings.fecha),
                 subtitle: Text(DateFormatter.dayOfWeek(gig.fecha)),
               ),
@@ -155,12 +158,14 @@ class _GigDetailContent extends ConsumerWidget {
     if (gig.facturable) {
       switch (gig.status) {
         case GigStatus.pendiente:
-          actions.add(_ActionButton(
-            label: AppStrings.generarFactura,
-            icon: Icons.receipt_long,
-            color: AppColors.primary,
-            onPressed: () => _generateInvoice(context, ref, gig),
-          ));
+          actions.add(
+            _ActionButton(
+              label: AppStrings.generarFactura,
+              icon: Icons.receipt_long,
+              color: AppColors.primary,
+              onPressed: () => _generateInvoice(context, ref, gig),
+            ),
+          );
           break;
         case GigStatus.facturaGenerada:
           actions.addAll([
@@ -204,12 +209,14 @@ class _GigDetailContent extends ConsumerWidget {
           ]);
           break;
         case GigStatus.pagado:
-          actions.add(_ActionButton(
-            label: AppStrings.verPDF,
-            icon: Icons.picture_as_pdf,
-            color: AppColors.primary,
-            onPressed: () => _viewPdf(context, ref, gig),
-          ));
+          actions.add(
+            _ActionButton(
+              label: AppStrings.verPDF,
+              icon: Icons.picture_as_pdf,
+              color: AppColors.primary,
+              onPressed: () => _viewPdf(context, ref, gig),
+            ),
+          );
           break;
         default:
           break;
@@ -217,12 +224,14 @@ class _GigDetailContent extends ConsumerWidget {
     } else {
       // No facturable
       if (gig.status == GigStatus.pendiente) {
-        actions.add(CobradoConfettiButton(
-          label: AppStrings.marcarCobradoEnB,
-          icon: Icons.money_off,
-          color: AppColors.accentPurple,
-          onPressed: () => _markAsCobradoEnB(context, ref, gig),
-        ));
+        actions.add(
+          CobradoConfettiButton(
+            label: AppStrings.marcarCobradoEnB,
+            icon: Icons.money_off,
+            color: AppColors.accentPurple,
+            onPressed: () => _markAsCobradoEnB(context, ref, gig),
+          ),
+        );
       }
     }
 
@@ -257,14 +266,45 @@ class _GigDetailContent extends ConsumerWidget {
   }
 
   Future<void> _generateInvoice(
-      BuildContext context, WidgetRef ref, Gig gig) async {
+    BuildContext context,
+    WidgetRef ref,
+    Gig gig,
+  ) async {
     // Navegar al formulario de factura
     context.push('/invoice/new/${gig.id}');
   }
 
   Future<void> _viewPdf(BuildContext context, WidgetRef ref, Gig gig) async {
-    if (gig.invoiceId == null) return;
-    context.push('/invoice/${gig.invoiceId}');
+    debugPrint(
+      '[GigDetail] pdf invoice lookup gig_id=${gig.id} invoice_id=${gig.invoiceId}',
+    );
+    Invoice? invoice;
+    if (gig.invoiceId != null) {
+      invoice = await ref.read(invoiceByIdProvider(gig.invoiceId!).future);
+    }
+    invoice ??= await ref.read(invoiceByGigProvider(gig.id).future);
+    if (!context.mounted) return;
+    if (invoice == null) {
+      await ref
+          .read(invoicesProvider.notifier)
+          .refreshFromCloud(reason: 'pdf_invoice_lookup_missing', force: true);
+      invoice = await ref.read(invoiceByGigProvider(gig.id).future);
+    }
+    if (!context.mounted) return;
+    if (invoice == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Factura no encontrada. Sincroniza e inténtalo de nuevo.',
+          ),
+        ),
+      );
+      return;
+    }
+    debugPrint(
+      '[GigDetail] pdf invoice lookup done invoice_id=${invoice.id} gig_id=${invoice.gigId}',
+    );
+    context.push('/invoice/${invoice.id}');
   }
 
   Future<void> _sharePdf(BuildContext context, WidgetRef ref, Gig gig) async {
@@ -274,7 +314,11 @@ class _GigDetailContent extends ConsumerWidget {
         : const Rect.fromLTWH(0, 0, 100, 100);
     try {
       if (gig.invoiceId == null) return;
-      final invoice = await ref.read(invoiceByIdProvider(gig.invoiceId!).future);
+      debugPrint(
+        '[GigDetail] pdf invoice lookup gig_id=${gig.id} invoice_id=${gig.invoiceId}',
+      );
+      var invoice = await ref.read(invoiceByIdProvider(gig.invoiceId!).future);
+      invoice ??= await ref.read(invoiceByGigProvider(gig.id).future);
       final client = await ref.read(clientByIdProvider(gig.clientId).future);
       final settings = await ref.read(settingsProvider.future);
 
@@ -286,15 +330,14 @@ class _GigDetailContent extends ConsumerWidget {
         settings: settings,
       );
 
-      await Share.shareXFiles(
-        [XFile(file.path)],
-        sharePositionOrigin: shareOrigin,
-      );
+      await Share.shareXFiles([
+        XFile(file.path),
+      ], sharePositionOrigin: shareOrigin);
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
   }
@@ -322,8 +365,9 @@ class _GigDetailContent extends ConsumerWidget {
           clientName: client.nombre,
           total: invoice.total,
           invoiceNumber: invoice.numero,
-          scheduledDate:
-              DateTime.now().add(Duration(days: settings.diasRecordatorio)),
+          scheduledDate: DateTime.now().add(
+            Duration(days: settings.diasRecordatorio),
+          ),
         );
       }
     }
@@ -350,7 +394,9 @@ class _GigDetailContent extends ConsumerWidget {
           .read(invoicesProvider.notifier)
           .updateStatus(gig.invoiceId!, InvoiceStatus.pagada);
 
-      final invoice = await ref.read(invoiceByIdProvider(gig.invoiceId!).future);
+      final invoice = await ref.read(
+        invoiceByIdProvider(gig.invoiceId!).future,
+      );
       if (invoice != null) {
         await NotificationService.instance.cancelNotification(invoice.numero);
       }
@@ -361,14 +407,17 @@ class _GigDetailContent extends ConsumerWidget {
 
     ref.invalidate(gigByIdProvider(gig.id));
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Bolo marcado como pagado')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Bolo marcado como pagado')));
     }
   }
 
   Future<void> _markAsCobradoEnB(
-      BuildContext context, WidgetRef ref, Gig gig) async {
+    BuildContext context,
+    WidgetRef ref,
+    Gig gig,
+  ) async {
     HapticFeedback.heavyImpact();
     await ref
         .read(gigsProvider.notifier)
@@ -394,8 +443,7 @@ class _GigDetailContent extends ConsumerWidget {
     } catch (_) {}
   }
 
-  Future<void> _cancelGig(
-      BuildContext context, WidgetRef ref, Gig gig) async {
+  Future<void> _cancelGig(BuildContext context, WidgetRef ref, Gig gig) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -408,8 +456,10 @@ class _GigDetailContent extends ConsumerWidget {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: Text(AppStrings.cancelarBolo,
-                style: const TextStyle(color: AppColors.accentRed)),
+            child: Text(
+              AppStrings.cancelarBolo,
+              style: const TextStyle(color: AppColors.accentRed),
+            ),
           ),
         ],
       ),
@@ -427,15 +477,14 @@ class _GigDetailContent extends ConsumerWidget {
 
       ref.invalidate(gigByIdProvider(gig.id));
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Bolo cancelado')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Bolo cancelado')));
       }
     }
   }
 
-  Future<void> _deleteGig(
-      BuildContext context, WidgetRef ref, Gig gig) async {
+  Future<void> _deleteGig(BuildContext context, WidgetRef ref, Gig gig) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -450,8 +499,10 @@ class _GigDetailContent extends ConsumerWidget {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Eliminar',
-                style: TextStyle(color: AppColors.error)),
+            child: const Text(
+              'Eliminar',
+              style: TextStyle(color: AppColors.error),
+            ),
           ),
         ],
       ),
@@ -471,9 +522,9 @@ class _GigDetailContent extends ConsumerWidget {
       await ref.read(gigsProvider.notifier).remove(gig.id);
 
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Bolo eliminado')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Bolo eliminado')));
         context.pop();
       }
     }

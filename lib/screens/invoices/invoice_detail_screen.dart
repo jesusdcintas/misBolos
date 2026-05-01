@@ -19,13 +19,19 @@ import '../../services/google_auth_service.dart';
 import '../../services/google_calendar_service.dart';
 import 'package:share_plus/share_plus.dart';
 
-class InvoiceDetailScreen extends ConsumerWidget {
+class InvoiceDetailScreen extends ConsumerStatefulWidget {
   final String invoiceId;
   const InvoiceDetailScreen({super.key, required this.invoiceId});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final invoiceAsync = ref.watch(invoiceByIdProvider(invoiceId));
+  ConsumerState<InvoiceDetailScreen> createState() =>
+      _InvoiceDetailScreenState();
+}
+
+class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
+  @override
+  Widget build(BuildContext context) {
+    final invoiceAsync = ref.watch(invoiceByIdProvider(widget.invoiceId));
 
     return invoiceAsync.when(
       data: (invoice) {
@@ -35,7 +41,10 @@ class InvoiceDetailScreen extends ConsumerWidget {
             body: const Center(child: Text('Factura no encontrada')),
           );
         }
-        return _InvoiceDetailContent(invoiceId: invoiceId, invoice: invoice);
+        return _InvoiceDetailContent(
+          invoiceId: widget.invoiceId,
+          invoice: invoice,
+        );
       },
       loading: () => Scaffold(
         appBar: AppBar(),
@@ -631,9 +640,9 @@ class _InvoiceDetailContent extends ConsumerWidget {
         } catch (_) {
           message = 'Error desconocido';
         }
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error enviando email: $message')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error enviando email: $message')),
+        );
       }
     }
   }
@@ -659,7 +668,7 @@ class _InvoiceDetailContent extends ConsumerWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              'Asegúrate de que el número no esté en uso por otra factura.',
+              'Asegúrate de que el número no esté en uso por otra factura de ${invoice.fecha.year}.',
               style: TextStyle(fontSize: 12, color: Colors.grey[600]),
             ),
           ],
@@ -686,14 +695,18 @@ class _InvoiceDetailContent extends ConsumerWidget {
       // Verificar si el número ya está en uso
       final isTaken = await ref
           .read(invoicesProvider.notifier)
-          .isNumberTaken(newNumber, excludeId: invoice.id);
+          .isNumberTaken(
+            newNumber,
+            year: invoice.fecha.year,
+            excludeId: invoice.id,
+          );
 
       if (isTaken) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                'El número $newNumber ya está en uso por otra factura',
+                'El número $newNumber ya está en uso por otra factura de ${invoice.fecha.year}',
               ),
               backgroundColor: Colors.red,
             ),

@@ -23,6 +23,12 @@ final gigMonthFilterProvider = StateProvider<int?>((ref) => null);
 final gigClientFilterProvider = StateProvider<String?>((ref) => null);
 final gigFacturableFilterProvider = StateProvider<bool?>((ref) => null);
 
+enum GigSortOption { fechaAsc, fechaDesc, precioAsc, precioDesc }
+
+final gigSortProvider = StateProvider<GigSortOption>(
+  (ref) => GigSortOption.fechaAsc,
+);
+
 void _clearAllFilters(WidgetRef ref) {
   ref.read(gigStatusFilterProvider.notifier).state = null;
   ref.read(gigYearFilterProvider.notifier).state = null;
@@ -31,11 +37,97 @@ void _clearAllFilters(WidgetRef ref) {
   ref.read(gigFacturableFilterProvider.notifier).state = null;
 }
 
-class GigsListScreen extends ConsumerWidget {
+class GigsListScreen extends ConsumerStatefulWidget {
   const GigsListScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<GigsListScreen> createState() => _GigsListScreenState();
+}
+
+class _GigsListScreenState extends ConsumerState<GigsListScreen> {
+  bool _selectionMode = false;
+  final Set<String> _selectedIds = <String>{};
+
+  void _enterSelection(String id) {
+    setState(() {
+      _selectionMode = true;
+      _selectedIds.add(id);
+    });
+  }
+
+  void _toggleSelection(String id) {
+    setState(() {
+      if (_selectedIds.contains(id)) {
+        _selectedIds.remove(id);
+      } else {
+        _selectedIds.add(id);
+      }
+      if (_selectedIds.isEmpty) _selectionMode = false;
+    });
+  }
+
+  void _toggleSelectAll(List<Gig> gigs) {
+    setState(() {
+      if (_selectedIds.length == gigs.length) {
+        _selectedIds.clear();
+        _selectionMode = false;
+      } else {
+        _selectedIds
+          ..clear()
+          ..addAll(gigs.map((g) => g.id));
+        _selectionMode = true;
+      }
+    });
+  }
+
+  void _clearSelection() {
+    setState(() {
+      _selectedIds.clear();
+      _selectionMode = false;
+    });
+  }
+
+  Future<void> _applyBulkStatus(GigStatus status) async {
+    await ref
+        .read(gigsProvider.notifier)
+        .bulkUpdateStatus(_selectedIds, status);
+    _clearSelection();
+  }
+
+  Future<void> _applyBulkFacturable(bool facturable) async {
+    await ref
+        .read(gigsProvider.notifier)
+        .bulkSetFacturable(_selectedIds, facturable);
+    _clearSelection();
+  }
+
+  Future<void> _applyBulkDelete(BuildContext context) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Eliminar bolos'),
+        content: Text(
+          'Se eliminarán ${_selectedIds.length} bolos. ¿Confirmas?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    await ref.read(gigsProvider.notifier).bulkDelete(_selectedIds);
+    _clearSelection();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final gigsAsync = ref.watch(gigsProvider);
     final clientsAsync = ref.watch(clientsProvider);
     final statusFilter = ref.watch(gigStatusFilterProvider);
@@ -43,8 +135,10 @@ class GigsListScreen extends ConsumerWidget {
     final selectedMonth = ref.watch(gigMonthFilterProvider);
     final clientFilter = ref.watch(gigClientFilterProvider);
     final facturableFilter = ref.watch(gigFacturableFilterProvider);
+    final sortOption = ref.watch(gigSortProvider);
 
-    final hasActiveFilters = statusFilter != null ||
+    final hasActiveFilters =
+        statusFilter != null ||
         selectedYear != null ||
         selectedMonth != null ||
         clientFilter != null ||
@@ -52,7 +146,29 @@ class GigsListScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Bolos'),
+        title: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 180),
+          child: _selectionMode
+              ? Text(
+                  '${_selectedIds.length} seleccionados',
+                  key: const ValueKey('count'),
+                )
+              : const Text('Bolos', key: ValueKey('title')),
+        ),
+        leading: _selectionMode
+            ? IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: _clearSelection,
+              )
+            : null,
+        actions: _selectionMode
+            ? [
+                TextButton(
+                  onPressed: _clearSelection,
+                  child: const Text('Cancelar'),
+                ),
+              ]
+            : null,
       ),
       body: gigsAsync.when(
         data: (allGigs) {
@@ -64,17 +180,42 @@ class GigsListScreen extends ConsumerWidget {
 
           // Aplicar todos los filtros
           final filteredGigs = allGigs.where((gig) {
-            if (statusFilter != null && gig.status != statusFilter) return false;
-            if (selectedYear != null && gig.fecha.year != selectedYear) return false;
-            if (selectedMonth != null && gig.fecha.month != selectedMonth) return false;
-            if (clientFilter != null && gig.clientId != clientFilter) return false;
-            if (facturableFilter != null && gig.facturable != facturableFilter) return false;
+            if (statusFilter != null && gig.status != statusFilter) {
+              return false;
+            }
+            if (selectedYear != null && gig.fecha.year != selectedYear) {
+              return false;
+            }
+            if (selectedMonth != null && gig.fecha.month != selectedMonth) {
+              return false;
+            }
+            if (clientFilter != null && gig.clientId != clientFilter) {
+              return false;
+            }
+            if (facturableFilter != null &&
+                gig.facturable != facturableFilter) {
+              return false;
+            }
             return true;
-          }).toList()
-            ..sort((a, b) => a.fecha.compareTo(b.fecha));
+          }).toList();
+          filteredGigs.sort((a, b) {
+            switch (sortOption) {
+              case GigSortOption.fechaAsc:
+                return a.fecha.compareTo(b.fecha);
+              case GigSortOption.fechaDesc:
+                return b.fecha.compareTo(a.fecha);
+              case GigSortOption.precioAsc:
+                return (a.cachet ?? 0).compareTo(b.cachet ?? 0);
+              case GigSortOption.precioDesc:
+                return (b.cachet ?? 0).compareTo(a.cachet ?? 0);
+            }
+          });
 
           final filteredCount = filteredGigs.length;
-          final filteredCachet = filteredGigs.fold<double>(0, (sum, g) => sum + (g.cachet ?? 0));
+          final filteredCachet = filteredGigs.fold<double>(
+            0,
+            (sum, g) => sum + (g.cachet ?? 0),
+          );
 
           // Conteos por año (sobre todos los gigs)
           final yearCounts = <int, int>{};
@@ -86,14 +227,16 @@ class GigsListScreen extends ConsumerWidget {
           final monthsWithData = <int, int>{};
           for (final gig in allGigs) {
             if (selectedYear == null || gig.fecha.year == selectedYear) {
-              monthsWithData[gig.fecha.month] = (monthsWithData[gig.fecha.month] ?? 0) + 1;
+              monthsWithData[gig.fecha.month] =
+                  (monthsWithData[gig.fecha.month] ?? 0) + 1;
             }
           }
 
           // Conteo de bolos por cliente
           final clientGigCounts = <String, int>{};
           for (final gig in allGigs) {
-            clientGigCounts[gig.clientId] = (clientGigCounts[gig.clientId] ?? 0) + 1;
+            clientGigCounts[gig.clientId] =
+                (clientGigCounts[gig.clientId] ?? 0) + 1;
           }
 
           // Nombre del cliente filtrado
@@ -105,7 +248,9 @@ class GigsListScreen extends ConsumerWidget {
           // Label de mes filtrado
           String? monthLabel;
           if (selectedMonth != null) {
-            final m = DateFormat.MMM('es').format(DateTime(2024, selectedMonth));
+            final m = DateFormat.MMM(
+              'es',
+            ).format(DateTime(2024, selectedMonth));
             monthLabel = m[0].toUpperCase() + m.substring(1);
           }
 
@@ -113,12 +258,19 @@ class GigsListScreen extends ConsumerWidget {
             children: [
               // ── Resumen dinámico ──
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
                 color: AppColors.primaryLight,
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.music_note, color: AppColors.primary, size: 20),
+                    const Icon(
+                      Icons.music_note,
+                      color: AppColors.primary,
+                      size: 20,
+                    ),
                     const SizedBox(width: 6),
                     Text(
                       '$filteredCount bolos',
@@ -129,7 +281,10 @@ class GigsListScreen extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    const Text('·', style: TextStyle(fontSize: 16, color: AppColors.primary)),
+                    const Text(
+                      '·',
+                      style: TextStyle(fontSize: 16, color: AppColors.primary),
+                    ),
                     const SizedBox(width: 8),
                     Text(
                       CurrencyFormatter.format(filteredCachet),
@@ -143,9 +298,83 @@ class GigsListScreen extends ConsumerWidget {
                       const SizedBox(width: 8),
                       Text(
                         '[de $totalCount]',
-                        style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: AppColors.textSecondary,
+                        ),
                       ),
                     ],
+                  ],
+                ),
+              ),
+
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                child: Row(
+                  children: [
+                    _InlineActionButton(
+                      icon: Icons.checklist,
+                      label: _selectionMode ? 'Cancelar' : 'Seleccionar',
+                      onTap: _selectionMode
+                          ? _clearSelection
+                          : () {
+                              setState(() {
+                                _selectionMode = true;
+                                _selectedIds.clear();
+                              });
+                            },
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: PopupMenuButton<GigSortOption>(
+                        onSelected: (value) {
+                          ref.read(gigSortProvider.notifier).state = value;
+                        },
+                        itemBuilder: (context) => [
+                          const PopupMenuItem(
+                            value: GigSortOption.fechaAsc,
+                            child: Text('Fecha (antigua)'),
+                          ),
+                          const PopupMenuItem(
+                            value: GigSortOption.fechaDesc,
+                            child: Text('Fecha (reciente)'),
+                          ),
+                          const PopupMenuDivider(),
+                          const PopupMenuItem(
+                            value: GigSortOption.precioAsc,
+                            child: Text('Precio (menor)'),
+                          ),
+                          const PopupMenuItem(
+                            value: GigSortOption.precioDesc,
+                            child: Text('Precio (mayor)'),
+                          ),
+                        ],
+                        child: const _InlineActionButtonContent(
+                          icon: Icons.sort,
+                          label: 'Ordenar',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: PopupMenuButton<String>(
+                        onSelected: (value) {
+                          if (value == 'select_all') {
+                            _toggleSelectAll(filteredGigs);
+                          }
+                        },
+                        itemBuilder: (context) => const [
+                          PopupMenuItem(
+                            value: 'select_all',
+                            child: Text('Seleccionar todo'),
+                          ),
+                        ],
+                        child: const _InlineActionButtonContent(
+                          icon: Icons.more_horiz,
+                          label: 'Más',
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -161,32 +390,44 @@ class GigsListScreen extends ConsumerWidget {
                       _StatusChip(
                         label: 'Todos',
                         selected: statusFilter == null,
-                        onTap: () => ref.read(gigStatusFilterProvider.notifier).state = null,
+                        onTap: () =>
+                            ref.read(gigStatusFilterProvider.notifier).state =
+                                null,
                       ),
                       _StatusChip(
                         label: GigStatus.pendiente.label,
                         selected: statusFilter == GigStatus.pendiente,
-                        onTap: () => ref.read(gigStatusFilterProvider.notifier).state = GigStatus.pendiente,
+                        onTap: () =>
+                            ref.read(gigStatusFilterProvider.notifier).state =
+                                GigStatus.pendiente,
                       ),
                       _StatusChip(
                         label: GigStatus.facturaEnviada.label,
                         selected: statusFilter == GigStatus.facturaEnviada,
-                        onTap: () => ref.read(gigStatusFilterProvider.notifier).state = GigStatus.facturaEnviada,
+                        onTap: () =>
+                            ref.read(gigStatusFilterProvider.notifier).state =
+                                GigStatus.facturaEnviada,
                       ),
                       _StatusChip(
                         label: GigStatus.pagado.label,
                         selected: statusFilter == GigStatus.pagado,
-                        onTap: () => ref.read(gigStatusFilterProvider.notifier).state = GigStatus.pagado,
+                        onTap: () =>
+                            ref.read(gigStatusFilterProvider.notifier).state =
+                                GigStatus.pagado,
                       ),
                       _StatusChip(
                         label: GigStatus.cobradoEnB.label,
                         selected: statusFilter == GigStatus.cobradoEnB,
-                        onTap: () => ref.read(gigStatusFilterProvider.notifier).state = GigStatus.cobradoEnB,
+                        onTap: () =>
+                            ref.read(gigStatusFilterProvider.notifier).state =
+                                GigStatus.cobradoEnB,
                       ),
                       _StatusChip(
                         label: GigStatus.cancelado.label,
                         selected: statusFilter == GigStatus.cancelado,
-                        onTap: () => ref.read(gigStatusFilterProvider.notifier).state = GigStatus.cancelado,
+                        onTap: () =>
+                            ref.read(gigStatusFilterProvider.notifier).state =
+                                GigStatus.cancelado,
                       ),
                     ],
                   ),
@@ -212,14 +453,20 @@ class GigsListScreen extends ConsumerWidget {
                         icon: Icons.date_range,
                         label: monthLabel ?? 'Mes',
                         active: selectedMonth != null,
-                        onTap: () => _showMonthSheet(context, ref, monthsWithData),
+                        onTap: () =>
+                            _showMonthSheet(context, ref, monthsWithData),
                       ),
                       const SizedBox(width: 8),
                       _FilterButton(
                         icon: Icons.person,
                         label: clientFilterName ?? 'Cliente',
                         active: clientFilter != null,
-                        onTap: () => _showClientSheet(context, ref, clients, clientGigCounts),
+                        onTap: () => _showClientSheet(
+                          context,
+                          ref,
+                          clients,
+                          clientGigCounts,
+                        ),
                       ),
                       const SizedBox(width: 8),
                       _FilterButton(
@@ -227,8 +474,8 @@ class GigsListScreen extends ConsumerWidget {
                         label: facturableFilter == null
                             ? 'Facturable'
                             : facturableFilter == true
-                                ? 'Facturable'
-                                : 'En B',
+                            ? 'Facturable'
+                            : 'En B',
                         active: facturableFilter != null,
                         onTap: () => _showFacturableSheet(context, ref),
                       ),
@@ -256,7 +503,10 @@ class GigsListScreen extends ConsumerWidget {
                         const SizedBox(height: 16),
                         const Text(
                           'No hay bolos con estos filtros',
-                          style: TextStyle(fontSize: 16, color: AppColors.textSecondary),
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: AppColors.textSecondary,
+                          ),
                         ),
                       ],
                     ),
@@ -269,30 +519,103 @@ class GigsListScreen extends ConsumerWidget {
                     itemCount: filteredGigs.length,
                     itemBuilder: (context, index) {
                       final gig = filteredGigs[index];
-                      return _GigListTile(gig: gig);
+                      return _GigListTile(
+                        gig: gig,
+                        selectionMode: _selectionMode,
+                        selected: _selectedIds.contains(gig.id),
+                        onLongPressSelect: () => _enterSelection(gig.id),
+                        onToggleSelect: () => _toggleSelection(gig.id),
+                      );
                     },
                   ),
                 ),
             ],
           );
         },
-        loading: () => Column(
-          children: List.generate(6, (_) => const GigCardSkeleton()),
-        ),
+        loading: () =>
+            Column(children: List.generate(6, (_) => const GigCardSkeleton())),
         error: (e, _) => Center(child: Text('Error: $e')),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push('/gig/new'),
-        icon: const Icon(Icons.add),
-        label: const Text(AppStrings.nuevoBolo),
+      floatingActionButton: _selectionMode
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () => context.push('/gig/new'),
+              icon: const Icon(Icons.add),
+              label: const Text(AppStrings.nuevoBolo),
+            ),
+      bottomNavigationBar: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        height: _selectionMode ? 62 : 0,
+        child: _selectionMode
+            ? SafeArea(
+                top: false,
+                child: Material(
+                  color: AppColors.surface,
+                  elevation: 8,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 8,
+                    ),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          tooltip: 'Cobrado',
+                          onPressed: () => _applyBulkStatus(GigStatus.pagado),
+                          icon: const Icon(Icons.check_circle_outline),
+                        ),
+                        IconButton(
+                          tooltip: 'Pendiente',
+                          onPressed: () =>
+                              _applyBulkStatus(GigStatus.pendiente),
+                          icon: const Icon(Icons.hourglass_empty),
+                        ),
+                        IconButton(
+                          tooltip: 'En B',
+                          onPressed: () =>
+                              _applyBulkStatus(GigStatus.cobradoEnB),
+                          icon: const Icon(
+                            Icons.account_balance_wallet_outlined,
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Facturable',
+                          onPressed: () => _applyBulkFacturable(true),
+                          icon: const Icon(Icons.receipt_long_outlined),
+                        ),
+                        IconButton(
+                          tooltip: 'No facturable',
+                          onPressed: () => _applyBulkFacturable(false),
+                          icon: const Icon(Icons.money_off_csred_outlined),
+                        ),
+                        IconButton(
+                          tooltip: 'Eliminar',
+                          onPressed: () => _applyBulkDelete(context),
+                          icon: const Icon(
+                            Icons.delete_outline,
+                            color: AppColors.error,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              )
+            : const SizedBox.shrink(),
       ),
     );
   }
 
   // ─── Bottom sheets ───
 
-  void _showYearSheet(BuildContext context, WidgetRef ref, Map<int, int> yearCounts) {
-    final sortedYears = yearCounts.keys.toList()..sort((a, b) => b.compareTo(a));
+  void _showYearSheet(
+    BuildContext context,
+    WidgetRef ref,
+    Map<int, int> yearCounts,
+  ) {
+    final sortedYears = yearCounts.keys.toList()
+      ..sort((a, b) => b.compareTo(a));
     final selectedYear = ref.read(gigYearFilterProvider);
 
     showModalBottomSheet(
@@ -308,7 +631,10 @@ class GigsListScreen extends ConsumerWidget {
           children: [
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16),
-              child: Text('Filtrar por año', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              child: Text(
+                'Filtrar por año',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
             ),
             const SizedBox(height: 8),
             RadioGroup<int?>(
@@ -325,11 +651,13 @@ class GigsListScreen extends ConsumerWidget {
                     title: const Text('Todos los años'),
                     value: null,
                   ),
-                  ...sortedYears.map((year) => RadioListTile<int?>(
-                    title: Text(year.toString()),
-                    subtitle: Text('${yearCounts[year]} bolos'),
-                    value: year,
-                  )),
+                  ...sortedYears.map(
+                    (year) => RadioListTile<int?>(
+                      title: Text(year.toString()),
+                      subtitle: Text('${yearCounts[year]} bolos'),
+                      value: year,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -339,7 +667,11 @@ class GigsListScreen extends ConsumerWidget {
     );
   }
 
-  void _showMonthSheet(BuildContext context, WidgetRef ref, Map<int, int> monthsWithData) {
+  void _showMonthSheet(
+    BuildContext context,
+    WidgetRef ref,
+    Map<int, int> monthsWithData,
+  ) {
     final selectedMonth = ref.read(gigMonthFilterProvider);
 
     showModalBottomSheet(
@@ -353,12 +685,19 @@ class GigsListScreen extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Filtrar por mes', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const Text(
+              'Filtrar por mes',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 12),
             ListTile(
               leading: Icon(
-                selectedMonth == null ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                color: selectedMonth == null ? AppColors.primary : AppColors.textSecondary,
+                selectedMonth == null
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_unchecked,
+                color: selectedMonth == null
+                    ? AppColors.primary
+                    : AppColors.textSecondary,
               ),
               title: const Text('Todos los meses'),
               contentPadding: EdgeInsets.zero,
@@ -388,7 +727,8 @@ class GigsListScreen extends ConsumerWidget {
                 return GestureDetector(
                   onTap: hasData
                       ? () {
-                          ref.read(gigMonthFilterProvider.notifier).state = month;
+                          ref.read(gigMonthFilterProvider.notifier).state =
+                              month;
                           Navigator.pop(ctx);
                         }
                       : null,
@@ -398,15 +738,15 @@ class GigsListScreen extends ConsumerWidget {
                       color: isSelected
                           ? AppColors.primary
                           : hasData
-                              ? AppColors.primaryLight
-                              : AppColors.surface,
+                          ? AppColors.primaryLight
+                          : AppColors.surface,
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
                         color: isSelected
                             ? AppColors.primary
                             : hasData
-                                ? AppColors.cardBorder
-                                : AppColors.divider,
+                            ? AppColors.cardBorder
+                            : AppColors.divider,
                       ),
                     ),
                     child: Column(
@@ -416,12 +756,16 @@ class GigsListScreen extends ConsumerWidget {
                           name,
                           style: TextStyle(
                             fontSize: 12,
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                            fontWeight: isSelected
+                                ? FontWeight.bold
+                                : FontWeight.normal,
                             color: isSelected
                                 ? Colors.white
                                 : hasData
-                                    ? AppColors.textPrimary
-                                    : AppColors.textSecondary.withValues(alpha: 0.4),
+                                ? AppColors.textPrimary
+                                : AppColors.textSecondary.withValues(
+                                    alpha: 0.4,
+                                  ),
                           ),
                         ),
                         if (hasData)
@@ -429,7 +773,9 @@ class GigsListScreen extends ConsumerWidget {
                             '${monthsWithData[month]}',
                             style: TextStyle(
                               fontSize: 10,
-                              color: isSelected ? Colors.white70 : AppColors.textSecondary,
+                              color: isSelected
+                                  ? Colors.white70
+                                  : AppColors.textSecondary,
                             ),
                           ),
                       ],
@@ -450,10 +796,10 @@ class GigsListScreen extends ConsumerWidget {
     List<Client> clients,
     Map<String, int> gigCounts,
   ) {
-    final clientsWithGigs = clients
-        .where((c) => (gigCounts[c.id] ?? 0) > 0)
-        .toList()
-      ..sort((a, b) => (gigCounts[b.id] ?? 0).compareTo(gigCounts[a.id] ?? 0));
+    final clientsWithGigs =
+        clients.where((c) => (gigCounts[c.id] ?? 0) > 0).toList()..sort(
+          (a, b) => (gigCounts[b.id] ?? 0).compareTo(gigCounts[a.id] ?? 0),
+        );
 
     final selectedClientId = ref.read(gigClientFilterProvider);
 
@@ -498,7 +844,10 @@ class GigsListScreen extends ConsumerWidget {
           children: [
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16),
-              child: Text('Filtrar por facturabilidad', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              child: Text(
+                'Filtrar por facturabilidad',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
             ),
             const SizedBox(height: 8),
             RadioGroup<bool?>(
@@ -510,18 +859,12 @@ class GigsListScreen extends ConsumerWidget {
               child: const Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  RadioListTile<bool?>(
-                    title: Text('Todos'),
-                    value: null,
-                  ),
+                  RadioListTile<bool?>(title: Text('Todos'), value: null),
                   RadioListTile<bool?>(
                     title: Text('Solo facturables'),
                     value: true,
                   ),
-                  RadioListTile<bool?>(
-                    title: Text('Solo en B'),
-                    value: false,
-                  ),
+                  RadioListTile<bool?>(title: Text('Solo en B'), value: false),
                 ],
               ),
             ),
@@ -539,7 +882,11 @@ class _StatusChip extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
-  const _StatusChip({required this.label, required this.selected, required this.onTap});
+  const _StatusChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -581,13 +928,13 @@ class _FilterButton extends StatelessWidget {
     final bgColor = active
         ? AppColors.warningBg
         : disabled
-            ? AppColors.surface
-            : AppColors.surface;
+        ? AppColors.surface
+        : AppColors.surface;
     final fgColor = active
         ? AppColors.warning
         : disabled
-            ? AppColors.textSecondary.withValues(alpha: 0.5)
-            : AppColors.textSecondary;
+        ? AppColors.textSecondary.withValues(alpha: 0.5)
+        : AppColors.textSecondary;
 
     return GestureDetector(
       onTap: onTap,
@@ -597,7 +944,9 @@ class _FilterButton extends StatelessWidget {
           color: bgColor,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: active ? AppColors.warning.withValues(alpha: 0.3) : AppColors.cardBorder,
+            color: active
+                ? AppColors.warning.withValues(alpha: 0.3)
+                : AppColors.cardBorder,
           ),
         ),
         child: Row(
@@ -645,10 +994,72 @@ class _ClearFiltersButton extends StatelessWidget {
             SizedBox(width: 4),
             Text(
               'Limpiar',
-              style: TextStyle(fontSize: 12, color: AppColors.error, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                fontSize: 12,
+                color: AppColors.error,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _InlineActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _InlineActionButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: _InlineActionButtonContent(icon: icon, label: label),
+      ),
+    );
+  }
+}
+
+class _InlineActionButtonContent extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _InlineActionButtonContent({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 40,
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.cardBorder),
+      ),
+      alignment: Alignment.center,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 16, color: AppColors.textSecondary),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -691,7 +1102,9 @@ class _ClientSheetContentState extends State<_ClientSheetContent> {
         : widget.clients.where((c) {
             if (c.nombre.toLowerCase().contains(lower)) return true;
             if (c.alias.toLowerCase().contains(lower)) return true;
-            if (c.aliases.any((a) => a.toLowerCase().contains(lower))) return true;
+            if (c.aliases.any((a) => a.toLowerCase().contains(lower))) {
+              return true;
+            }
             return false;
           }).toList();
 
@@ -711,7 +1124,10 @@ class _ClientSheetContentState extends State<_ClientSheetContent> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Filtrar por cliente', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              const Text(
+                'Filtrar por cliente',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 12),
               TextField(
                 controller: _searchController,
@@ -720,8 +1136,13 @@ class _ClientSheetContentState extends State<_ClientSheetContent> {
                   hintText: 'Buscar cliente...',
                   prefixIcon: const Icon(Icons.search, size: 20),
                   isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
               ),
             ],
@@ -759,8 +1180,18 @@ class _ClientSheetContentState extends State<_ClientSheetContent> {
 
 class _GigListTile extends ConsumerWidget {
   final Gig gig;
+  final bool selectionMode;
+  final bool selected;
+  final VoidCallback onLongPressSelect;
+  final VoidCallback onToggleSelect;
 
-  const _GigListTile({required this.gig});
+  const _GigListTile({
+    required this.gig,
+    required this.selectionMode,
+    required this.selected,
+    required this.onLongPressSelect,
+    required this.onToggleSelect,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -768,7 +1199,11 @@ class _GigListTile extends ConsumerWidget {
 
     return Dismissible(
       key: Key(gig.id),
+      direction: selectionMode
+          ? DismissDirection.none
+          : DismissDirection.horizontal,
       confirmDismiss: (direction) async {
+        if (selectionMode) return false;
         if (direction == DismissDirection.startToEnd) {
           HapticFeedback.mediumImpact();
           _showSwipeOptions(context, ref, gig);
@@ -792,7 +1227,14 @@ class _GigListTile extends ConsumerWidget {
           children: [
             Icon(Icons.more_horiz, color: Colors.white, size: 24),
             SizedBox(height: 4),
-            Text('Opciones', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w500)),
+            Text(
+              'Opciones',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
           ],
         ),
       ),
@@ -809,7 +1251,14 @@ class _GigListTile extends ConsumerWidget {
           children: [
             Icon(Icons.visibility, color: Colors.white, size: 24),
             SizedBox(height: 4),
-            Text('Ver', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w500)),
+            Text(
+              'Ver',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
           ],
         ),
       ),
@@ -819,14 +1268,21 @@ class _GigListTile extends ConsumerWidget {
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           child: ListTile(
             onTap: () {
+              if (selectionMode) {
+                onToggleSelect();
+                return;
+              }
               AppHaptics.light();
               context.push('/gig/${gig.id}');
             },
+            onLongPress: onLongPressSelect,
             leading: Container(
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: gig.facturable ? AppColors.primaryLight : AppColors.purpleBg,
+                color: gig.facturable
+                    ? AppColors.primaryLight
+                    : AppColors.purpleBg,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
@@ -865,15 +1321,17 @@ class _GigListTile extends ConsumerWidget {
                   ),
               ],
             ),
-            trailing: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                FacturableBadge(facturable: gig.facturable),
-                const SizedBox(height: 4),
-                StatusBadge(status: gig.status),
-              ],
-            ),
+            trailing: selectionMode
+                ? Checkbox(value: selected, onChanged: (_) => onToggleSelect())
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      FacturableBadge(facturable: gig.facturable),
+                      const SizedBox(height: 4),
+                      StatusBadge(status: gig.status),
+                    ],
+                  ),
             isThreeLine: true,
           ),
         ),
@@ -910,9 +1368,13 @@ class _GigListTile extends ConsumerWidget {
                   context.push('/gig/edit/${gig.id}');
                 },
               ),
-              if (gig.facturable && (gig.invoiceId == null || gig.invoiceId!.isEmpty))
+              if (gig.facturable &&
+                  (gig.invoiceId == null || gig.invoiceId!.isEmpty))
                 ListTile(
-                  leading: const Icon(Icons.receipt_long, color: AppColors.success),
+                  leading: const Icon(
+                    Icons.receipt_long,
+                    color: AppColors.success,
+                  ),
                   title: const Text('Generar factura'),
                   onTap: () {
                     Navigator.pop(ctx);
@@ -934,9 +1396,9 @@ class _GigListTile extends ConsumerWidget {
                 onTap: () {
                   AppHaptics.medium();
                   Navigator.pop(ctx);
-                  ref.read(gigsProvider.notifier).updateGig(
-                    gig.copyWith(status: GigStatus.cancelado),
-                  );
+                  ref
+                      .read(gigsProvider.notifier)
+                      .updateGig(gig.copyWith(status: GigStatus.cancelado));
                 },
               ),
             ],

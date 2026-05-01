@@ -135,6 +135,12 @@ class SupabaseService {
     debugPrint('[Supabase] Uploaded ${gigs.length} gigs');
   }
 
+  Future<void> uploadGigDirect(Gig gig) async {
+    if (!isAuthenticated) return;
+    await _client!.from('gigs').upsert(_gigToSupabase(gig), onConflict: 'id');
+    debugPrint('[Supabase] Uploaded gig ${gig.id}');
+  }
+
   Future<void> uploadInvoices(List<Invoice> invoices) async {
     if (!isAuthenticated) return;
 
@@ -151,10 +157,45 @@ class SupabaseService {
         .delete()
         .eq('user_id', userId!)
         .eq('numero', invoice.numero.toString())
+        .gte(
+          'fecha_emision',
+          DateTime(invoice.fecha.year, 1, 1).toIso8601String().split('T').first,
+        )
+        .lte(
+          'fecha_emision',
+          DateTime(
+            invoice.fecha.year,
+            12,
+            31,
+          ).toIso8601String().split('T').first,
+        )
         .neq('id', invoice.id);
 
     final map = _invoiceToSupabaseEs(invoice);
     await _upsertInvoiceWithSchemaFallback(invoice, map);
+  }
+
+  Future<void> renumberInvoices(List<Invoice> invoices) async {
+    if (!isAuthenticated || invoices.isEmpty) return;
+
+    for (var i = 0; i < invoices.length; i++) {
+      await _client!
+          .from('invoices')
+          .update({'numero': (-1000000 - i).toString()})
+          .eq('user_id', userId!)
+          .eq('id', invoices[i].id);
+    }
+
+    for (final invoice in invoices) {
+      await _upsertInvoiceWithSchemaFallback(
+        invoice,
+        _invoiceToSupabaseEs(invoice),
+      );
+    }
+
+    debugPrint(
+      '[Supabase] Renumbered ${invoices.length} invoices for year ${invoices.first.fecha.year}',
+    );
   }
 
   Future<void> _upsertInvoiceWithSchemaFallback(
@@ -187,14 +228,16 @@ class SupabaseService {
 
   String? _extractMissingColumn(PostgrestException e) {
     final msg = e.message;
-    final isMissingColumn = e.code == 'PGRST204' ||
+    final isMissingColumn =
+        e.code == 'PGRST204' ||
         msg.toLowerCase().contains('could not find the') ||
         (msg.toLowerCase().contains('schema cache') &&
             msg.toLowerCase().contains('column'));
     if (!isMissingColumn) return null;
 
-    final match = RegExp(r"Could not find the '([^']+)' column of")
-        .firstMatch(msg);
+    final match = RegExp(
+      r"Could not find the '([^']+)' column of",
+    ).firstMatch(msg);
     return match?.group(1);
   }
 
@@ -260,14 +303,14 @@ class SupabaseService {
     // Fase 1: Subir clientes
     await uploadClients(clients);
 
-    // Fase 2: Subir gigs SIN invoice_id (para que invoices pueda referenciarlos)
+    // Fase 2: asegurar gigs sin tocar invoice_id existente.
     for (final gig in gigs) {
       final map = _gigToSupabase(gig);
-      map['invoice_id'] = null; // Temporalmente sin invoice
+      map.remove('invoice_id');
       await _client!.from('gigs').upsert(map, onConflict: 'id');
     }
     debugPrint(
-      '[Supabase] Uploaded ${gigs.length} gigs (phase 1, without invoice_id)',
+      '[Supabase] Uploaded ${gigs.length} gigs (phase 1, preserving invoice_id)',
     );
 
     // Fase 3: Subir invoices (ahora gigs existen)
@@ -460,6 +503,32 @@ class SupabaseService {
     }
   }
 
+  Future<void> deleteGigsBatch({
+    required Set<String> gigIds,
+    required Set<String> invoiceIds,
+  }) async {
+    if (!isAuthenticated) return;
+    if (gigIds.isEmpty && invoiceIds.isEmpty) return;
+
+    final gigs = gigIds.toList();
+    final invoices = invoiceIds.toList();
+
+    try {
+      if (invoices.isNotEmpty) {
+        await _client!.from('invoices').delete().inFilter('id', invoices);
+      }
+      if (gigs.isNotEmpty) {
+        await _client!.from('gigs').delete().inFilter('id', gigs);
+      }
+      debugPrint(
+        '[Supabase] Deleted batch gigs=${gigs.length} invoices=${invoices.length}',
+      );
+    } catch (e) {
+      debugPrint('[Supabase] Delete batch gigs error: $e');
+      rethrow;
+    }
+  }
+
   /// Borra un registro de cualquier tabla por nombre (para pending deletions)
   Future<void> deleteByTable(String tableName, String recordId) async {
     if (!isAuthenticated) return;
@@ -612,11 +681,13 @@ class SupabaseService {
       items: items,
       subtotal: (m['subtotal'] as num?)?.toDouble() ?? 0,
       ivaRate: ivaRate,
-      ivaAmount: (m['iva_importe'] as num?)?.toDouble() ??
+      ivaAmount:
+          (m['iva_importe'] as num?)?.toDouble() ??
           (m['iva_amount'] as num?)?.toDouble() ??
           0,
       irpfRate: irpfRate,
-      irpfAmount: (m['irpf_importe'] as num?)?.toDouble() ??
+      irpfAmount:
+          (m['irpf_importe'] as num?)?.toDouble() ??
           (m['irpf_amount'] as num?)?.toDouble() ??
           0,
       total: (m['total'] as num?)?.toDouble() ?? 0,

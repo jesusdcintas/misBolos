@@ -49,6 +49,13 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Importar historial'),
+        actions: [
+          IconButton(
+            tooltip: 'Reparar XLSX',
+            onPressed: _showXlsxRepairDialog,
+            icon: const Icon(Icons.build_circle_outlined),
+          ),
+        ],
       ),
       body: Stepper(
         currentStep: _currentStep,
@@ -84,7 +91,9 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
             title: const Text('Importar'),
             content: _buildStep5(),
             isActive: _currentStep >= 4,
-            state: _result != null && _result!.error == null ? StepState.complete : StepState.indexed,
+            state: _result != null && _result!.error == null
+                ? StepState.complete
+                : StepState.indexed,
           ),
         ],
       ),
@@ -109,16 +118,21 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
               Icon(Icons.check_circle, color: AppColors.success, size: 18),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(_fileName!,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                    overflow: TextOverflow.ellipsis),
+                child: Text(
+                  _fileName!,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
         ],
         if (_isCsv && _rows.isEmpty) ...[
           const SizedBox(height: 16),
-          const Text('Separador del CSV:', style: TextStyle(fontWeight: FontWeight.w600)),
+          const Text(
+            'Separador del CSV:',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
           const SizedBox(height: 8),
           SegmentedButton<String>(
             segments: const [
@@ -132,8 +146,10 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
         ],
         if (_rows.isNotEmpty) ...[
           const SizedBox(height: 16),
-          Text('${_rows.length - 1} filas detectadas · ${_columns.length} columnas',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+          Text(
+            '${_rows.length - 1} filas detectadas · ${_columns.length} columnas',
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+          ),
           const SizedBox(height: 8),
           _buildPreviewTable(),
         ],
@@ -153,16 +169,25 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
         dataRowMaxHeight: 36,
         columnSpacing: 16,
         columns: _columns
-            .map((c) => DataColumn(
-                  label: Text(c.header,
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                ))
+            .map(
+              (c) => DataColumn(
+                label: Text(
+                  c.header,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            )
             .toList(),
         rows: previewRows.skip(1).map((row) {
           return DataRow(
             cells: _columns.map((c) {
               final value = c.index < row.length ? row[c.index] : '';
-              return DataCell(Text(value, style: const TextStyle(fontSize: 11)));
+              return DataCell(
+                Text(value, style: const TextStyle(fontSize: 11)),
+              );
             }).toList(),
           );
         }).toList(),
@@ -185,57 +210,83 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
           style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
         ),
         const SizedBox(height: 12),
-        ..._columns.map((col) => Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 100,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(col.header,
-                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                        if (col.sampleValues.isNotEmpty)
-                          Text(col.sampleValues.first,
-                              style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
-                              overflow: TextOverflow.ellipsis),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  const Icon(Icons.arrow_forward, size: 16, color: AppColors.textMuted),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: DropdownButtonFormField<ColumnRole>(
-                      initialValue: _columnRoles[col.index] ?? ColumnRole.ignorar,
-                      isDense: true,
-                      decoration: const InputDecoration(
-                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        border: OutlineInputBorder(),
+        ..._columns.map(
+          (col) => Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 100,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        col.header,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
                       ),
-                      items: ColumnRole.values
-                          .map((role) => DropdownMenuItem(
-                                value: role,
-                                child: Text(role.label, style: const TextStyle(fontSize: 13)),
-                              ))
-                          .toList(),
-                      onChanged: (role) {
-                        if (role != null) {
-                          setState(() {
-                            // Remove this role from any other column
-                            if (role != ColumnRole.ignorar) {
-                              _columnRoles.removeWhere((k, v) => v == role && k != col.index);
-                            }
-                            _columnRoles[col.index] = role;
-                          });
-                        }
-                      },
-                    ),
+                      if (col.sampleValues.isNotEmpty)
+                        Text(
+                          col.sampleValues.first,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppColors.textSecondary,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                    ],
                   ),
-                ],
-              ),
-            )),
+                ),
+                const SizedBox(width: 8),
+                const Icon(
+                  Icons.arrow_forward,
+                  size: 16,
+                  color: AppColors.textMuted,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: DropdownButtonFormField<ColumnRole>(
+                    initialValue: _columnRoles[col.index] ?? ColumnRole.ignorar,
+                    isDense: true,
+                    decoration: const InputDecoration(
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      border: OutlineInputBorder(),
+                    ),
+                    items: ColumnRole.values
+                        .map(
+                          (role) => DropdownMenuItem(
+                            value: role,
+                            child: Text(
+                              role.label,
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (role) {
+                      if (role != null) {
+                        setState(() {
+                          // Remove this role from any other column
+                          if (role != ColumnRole.ignorar) {
+                            _columnRoles.removeWhere(
+                              (k, v) => v == role && k != col.index,
+                            );
+                          }
+                          _columnRoles[col.index] = role;
+                        });
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
         if (!_hasFechaAndCliente) ...[
           const SizedBox(height: 8),
           Container(
@@ -272,7 +323,10 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text('Año de los datos', style: TextStyle(fontWeight: FontWeight.w600)),
+        const Text(
+          'Año de los datos',
+          style: TextStyle(fontWeight: FontWeight.w600),
+        ),
         const SizedBox(height: 8),
         DropdownButtonFormField<int>(
           initialValue: _year,
@@ -280,13 +334,17 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
             border: OutlineInputBorder(),
             contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           ),
-          items: List.generate(10, (i) => DateTime.now().year - i)
-              .map((y) => DropdownMenuItem(value: y, child: Text('$y')))
-              .toList(),
+          items: List.generate(
+            10,
+            (i) => DateTime.now().year - i,
+          ).map((y) => DropdownMenuItem(value: y, child: Text('$y'))).toList(),
           onChanged: (v) => setState(() => _year = v ?? _year),
         ),
         const SizedBox(height: 16),
-        const Text('Estado de los bolos importados', style: TextStyle(fontWeight: FontWeight.w600)),
+        const Text(
+          'Estado de los bolos importados',
+          style: TextStyle(fontWeight: FontWeight.w600),
+        ),
         const SizedBox(height: 8),
         SegmentedButton<ImportDefaultStatus>(
           segments: ImportDefaultStatus.values
@@ -299,8 +357,10 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
           title: const Text('Crear clientes automáticamente'),
-          subtitle: const Text('Si el venue no existe, se crea como cliente nuevo',
-              style: TextStyle(fontSize: 12)),
+          subtitle: const Text(
+            'Si el venue no existe, se crea como cliente nuevo',
+            style: TextStyle(fontSize: 12),
+          ),
           value: _createClients,
           onChanged: (v) => setState(() => _createClients = v),
         ),
@@ -313,7 +373,11 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
           ),
           child: Row(
             children: [
-              Icon(Icons.cloud_done_outlined, color: AppColors.success, size: 18),
+              Icon(
+                Icons.cloud_done_outlined,
+                color: AppColors.success,
+                size: 18,
+              ),
               const SizedBox(width: 8),
               const Expanded(
                 child: Text(
@@ -352,15 +416,23 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Listo para importar',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const Text(
+            'Listo para importar',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          ),
           const Divider(height: 24),
           _summaryRow('Bolos facturables', '${p.bolosFacturables}'),
           _summaryRow('Bolos en B', '${p.bolosEnB}'),
           _summaryRow('Clientes nuevos', '${p.clientesNuevos}'),
-          _summaryRow('Total importe', CurrencyFormatter.format(p.totalImporte)),
+          _summaryRow(
+            'Total importe',
+            CurrencyFormatter.format(p.totalImporte),
+          ),
           if (p.fechaMin != null && p.fechaMax != null)
-            _summaryRow('Período', '${dateFormat.format(p.fechaMin!)} — ${dateFormat.format(p.fechaMax!)}'),
+            _summaryRow(
+              'Período',
+              '${dateFormat.format(p.fechaMin!)} — ${dateFormat.format(p.fechaMax!)}',
+            ),
         ],
       ),
     );
@@ -372,8 +444,14 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(color: AppColors.textSecondary, fontSize: 14)),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+          Text(
+            label,
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+          ),
+          Text(
+            value,
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+          ),
         ],
       ),
     );
@@ -383,7 +461,9 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
 
   Widget _buildStep5() {
     if (_importing) {
-      final progress = _progressTotal > 0 ? _progressCurrent / _progressTotal : 0.0;
+      final progress = _progressTotal > 0
+          ? _progressCurrent / _progressTotal
+          : 0.0;
       return Column(
         children: [
           LinearProgressIndicator(value: progress),
@@ -406,7 +486,9 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
             children: [
               Icon(Icons.error, color: AppColors.error),
               const SizedBox(width: 12),
-              Expanded(child: Text(r.error!, style: TextStyle(color: AppColors.error))),
+              Expanded(
+                child: Text(r.error!, style: TextStyle(color: AppColors.error)),
+              ),
             ],
           ),
         );
@@ -432,13 +514,17 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
             ),
             if (r.skipped > 0) ...[
               const SizedBox(height: 4),
-              Text('${r.skipped} ya existían',
-                  style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+              Text(
+                '${r.skipped} ya existían',
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+              ),
             ],
             if (r.clientsCreated > 0) ...[
               const SizedBox(height: 4),
-              Text('${r.clientsCreated} clientes nuevos creados',
-                  style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+              Text(
+                '${r.clientsCreated} clientes nuevos creados',
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+              ),
             ],
           ],
         ),
@@ -452,7 +538,8 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
 
   Widget _buildControls(BuildContext context, ControlsDetails details) {
     // Don't show controls on step 5 after result
-    if (_currentStep == 4 && (_importing || (_result != null && _result!.error == null))) {
+    if (_currentStep == 4 &&
+        (_importing || (_result != null && _result!.error == null))) {
       if (_result != null && _result!.error == null) {
         return Padding(
           padding: const EdgeInsets.only(top: 16),
@@ -648,5 +735,120 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
         _result = result;
       });
     }
+  }
+
+  Future<void> _showXlsxRepairDialog() async {
+    var year = DateTime.now().year;
+    var loading = false;
+    XlsxRepairPreview? preview;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setLocalState) {
+            Future<void> loadPreview() async {
+              setLocalState(() => loading = true);
+              final p = await ImportService.previewXlsxOfficialRepair(
+                year: year,
+              );
+              setLocalState(() {
+                preview = p;
+                loading = false;
+              });
+            }
+
+            Future<void> applyFix() async {
+              final navigator = Navigator.of(ctx);
+              final messenger = ScaffoldMessenger.of(this.context);
+              setLocalState(() => loading = true);
+              final updated = await ImportService.applyXlsxOfficialRepair(
+                year: year,
+              );
+              if (!mounted) return;
+              ref.invalidate(gigsProvider);
+              navigator.pop();
+              messenger.showSnackBar(
+                SnackBar(
+                  content: Text('Reparadas $updated facturas XLSX de $year'),
+                ),
+              );
+            }
+
+            return AlertDialog(
+              title: const Text('Reparar importación XLSX'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButtonFormField<int>(
+                    initialValue: year,
+                    decoration: const InputDecoration(labelText: 'Año'),
+                    items: List.generate(10, (i) => DateTime.now().year - i)
+                        .map(
+                          (y) => DropdownMenuItem(value: y, child: Text('$y')),
+                        )
+                        .toList(),
+                    onChanged: loading
+                        ? null
+                        : (v) => setLocalState(() {
+                            year = v ?? year;
+                            preview = null;
+                          }),
+                  ),
+                  const SizedBox(height: 12),
+                  if (preview != null) ...[
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text('Facturas: ${preview!.candidates}'),
+                    ),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Total actual: ${CurrencyFormatter.format(preview!.totalActual)}',
+                      ),
+                    ),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Total corregido: ${CurrencyFormatter.format(preview!.totalCorregido)}',
+                      ),
+                    ),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Base: ${CurrencyFormatter.format(preview!.totalBase)} · IVA: ${CurrencyFormatter.format(preview!.totalIva)}',
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: loading ? null : () => Navigator.of(ctx).pop(),
+                  child: const Text('Cerrar'),
+                ),
+                TextButton(
+                  onPressed: loading ? null : loadPreview,
+                  child: const Text('Preview'),
+                ),
+                ElevatedButton(
+                  onPressed:
+                      loading || preview == null || preview!.candidates == 0
+                      ? null
+                      : applyFix,
+                  child: loading
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Confirmar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 }

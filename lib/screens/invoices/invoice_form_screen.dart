@@ -55,7 +55,9 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
 
       if (widget.invoiceId != null) {
         // Editando factura existente
-        final invoice = await ref.read(invoiceByIdProvider(widget.invoiceId!).future);
+        final invoice = await ref.read(
+          invoiceByIdProvider(widget.invoiceId!).future,
+        );
         if (invoice != null) {
           _existingInvoice = invoice;
           _gig = await ref.read(gigByIdProvider(invoice.gigId).future);
@@ -64,35 +66,64 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
           _irpfRate = invoice.irpfRate;
           _applyIrpf = invoice.irpfRate > 0;
           _fecha = invoice.fecha;
-          _items = invoice.items.map((item) => _LineItemState(
-            cantidad: item.cantidad,
-            descripcion: item.descripcion,
-            precioUnitario: item.precioUnitario,
-          )).toList();
+          _items = invoice.items
+              .map(
+                (item) => _LineItemState(
+                  cantidad: item.cantidad,
+                  descripcion: item.descripcion,
+                  precioUnitario: item.precioUnitario,
+                ),
+              )
+              .toList();
         }
       } else if (widget.gigId != null) {
         // Creando nueva factura desde gig o editando existente
         _gig = await ref.read(gigByIdProvider(widget.gigId!).future);
         if (_gig != null) {
           _client = await ref.read(clientByIdProvider(_gig!.clientId).future);
-          
+
           // Verificar si ya existe una factura para este gig
           if (_gig!.invoiceId != null) {
-            final existingInvoice = await ref.read(invoiceByIdProvider(_gig!.invoiceId!).future);
+            final existingInvoice = await ref.read(
+              invoiceByIdProvider(_gig!.invoiceId!).future,
+            );
             if (existingInvoice != null) {
               _existingInvoice = existingInvoice;
               _ivaRate = existingInvoice.ivaRate;
               _irpfRate = existingInvoice.irpfRate;
               _applyIrpf = existingInvoice.irpfRate > 0;
               _fecha = existingInvoice.fecha;
-              _items = existingInvoice.items.map((item) => _LineItemState(
-                cantidad: item.cantidad,
-                descripcion: item.descripcion,
-                precioUnitario: item.precioUnitario,
-              )).toList();
+              _items = existingInvoice.items
+                  .map(
+                    (item) => _LineItemState(
+                      cantidad: item.cantidad,
+                      descripcion: item.descripcion,
+                      precioUnitario: item.precioUnitario,
+                    ),
+                  )
+                  .toList();
             }
           }
-          
+          _existingInvoice ??= await ref.read(
+            invoiceByGigProvider(_gig!.id).future,
+          );
+          if (_existingInvoice != null) {
+            final existingInvoice = _existingInvoice!;
+            _ivaRate = existingInvoice.ivaRate;
+            _irpfRate = existingInvoice.irpfRate;
+            _applyIrpf = existingInvoice.irpfRate > 0;
+            _fecha = existingInvoice.fecha;
+            _items = existingInvoice.items
+                .map(
+                  (item) => _LineItemState(
+                    cantidad: item.cantidad,
+                    descripcion: item.descripcion,
+                    precioUnitario: item.precioUnitario,
+                  ),
+                )
+                .toList();
+          }
+
           // Si no hay factura existente, crear items por defecto
           if (_existingInvoice == null) {
             _fecha = _gig!.fecha;
@@ -110,7 +141,9 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
       }
 
       if (_items.isEmpty) {
-        _items = [_LineItemState(cantidad: 1, descripcion: '', precioUnitario: 0)];
+        _items = [
+          _LineItemState(cantidad: 1, descripcion: '', precioUnitario: 0),
+        ];
       }
     } finally {
       if (mounted) {
@@ -153,8 +186,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                       if (_settings != null)
                         Expanded(child: _buildEmisorCard()),
                       const SizedBox(width: 12),
-                      if (_client != null)
-                        Expanded(child: _buildClientCard()),
+                      if (_client != null) Expanded(child: _buildClientCard()),
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -189,7 +221,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                     height: 50,
                     child: ElevatedButton.icon(
                       onPressed: _isSaving ? null : _save,
-                      icon: _isSaving 
+                      icon: _isSaving
                           ? const SizedBox(
                               width: 20,
                               height: 20,
@@ -200,10 +232,15 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                             )
                           : const Icon(Icons.save),
                       label: Text(
-                        _isSaving 
-                            ? 'Guardando...' 
-                            : (_existingInvoice != null ? 'Guardar cambios' : 'Crear factura'),
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        _isSaving
+                            ? 'Guardando...'
+                            : (_existingInvoice != null
+                                  ? 'Guardar cambios'
+                                  : 'Crear factura'),
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ),
@@ -267,19 +304,30 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
               ),
             ),
             const SizedBox(height: 8),
-            Text(_settings!.emisorNombre, style: const TextStyle(fontWeight: FontWeight.w500)),
+            Text(
+              _settings!.emisorNombre,
+              style: const TextStyle(fontWeight: FontWeight.w500),
+            ),
             if (_settings!.emisorNIF.isNotEmpty) Text(_settings!.emisorNIF),
-            if (_settings!.emisorDireccion.isNotEmpty) Text(_settings!.emisorDireccion),
-            if (_settings!.emisorCiudad.isNotEmpty || _settings!.emisorProvincia.isNotEmpty || _settings!.emisorCodigoPostal.isNotEmpty)
+            if (_settings!.emisorDireccion.isNotEmpty)
+              Text(_settings!.emisorDireccion),
+            if (_settings!.emisorCiudad.isNotEmpty ||
+                _settings!.emisorProvincia.isNotEmpty ||
+                _settings!.emisorCodigoPostal.isNotEmpty)
               Text(
                 [
                   _settings!.emisorCiudad,
-                  if (_settings!.emisorProvincia.isNotEmpty) _settings!.emisorProvincia,
-                  if (_settings!.emisorCodigoPostal.isNotEmpty) _settings!.emisorCodigoPostal,
+                  if (_settings!.emisorProvincia.isNotEmpty)
+                    _settings!.emisorProvincia,
+                  if (_settings!.emisorCodigoPostal.isNotEmpty)
+                    _settings!.emisorCodigoPostal,
                 ].where((s) => s.isNotEmpty).join(', '),
               ),
             if (_settings!.emisorEmail.isNotEmpty)
-              Text(_settings!.emisorEmail, style: const TextStyle(color: Colors.blue)),
+              Text(
+                _settings!.emisorEmail,
+                style: const TextStyle(color: Colors.blue),
+              ),
             if (_settings!.emisorTelefono.isNotEmpty)
               Text(_settings!.emisorTelefono),
           ],
@@ -304,10 +352,15 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
               ),
             ),
             const SizedBox(height: 8),
-            Text(_client!.nombre, style: const TextStyle(fontWeight: FontWeight.w500)),
+            Text(
+              _client!.nombre,
+              style: const TextStyle(fontWeight: FontWeight.w500),
+            ),
             if (_client!.cifNif.isNotEmpty) Text(_client!.cifNif),
             if (_client!.direccion.isNotEmpty) Text(_client!.direccion),
-            if (_client!.ciudad.isNotEmpty || _client!.codigoPostal.isNotEmpty || _client!.provincia.isNotEmpty)
+            if (_client!.ciudad.isNotEmpty ||
+                _client!.codigoPostal.isNotEmpty ||
+                _client!.provincia.isNotEmpty)
               Text(
                 [
                   _client!.ciudad,
@@ -345,7 +398,10 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                   ),
                   if (_items.length > 1)
                     IconButton(
-                      icon: const Icon(Icons.delete_outline, color: AppColors.accentRed),
+                      icon: const Icon(
+                        Icons.delete_outline,
+                        color: AppColors.accentRed,
+                      ),
                       onPressed: () => _removeItem(index),
                       constraints: const BoxConstraints(),
                       padding: EdgeInsets.zero,
@@ -387,7 +443,10 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                         });
                       },
                       validator: (value) {
-                        if (value == null || value.isEmpty || int.tryParse(value) == null || int.parse(value) < 1) {
+                        if (value == null ||
+                            value.isEmpty ||
+                            int.tryParse(value) == null ||
+                            int.parse(value) < 1) {
                           return 'Min 1';
                         }
                         return null;
@@ -403,10 +462,13 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                         labelText: 'Precio unitario (€)',
                         border: OutlineInputBorder(),
                       ),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       onChanged: (value) {
                         setState(() {
-                          item.precioUnitario = double.tryParse(value.replaceAll(',', '.')) ?? 0;
+                          item.precioUnitario =
+                              double.tryParse(value.replaceAll(',', '.')) ?? 0;
                         });
                       },
                       validator: (value) {
@@ -444,7 +506,9 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
 
   void _addItem() {
     setState(() {
-      _items.add(_LineItemState(cantidad: 1, descripcion: '', precioUnitario: 0));
+      _items.add(
+        _LineItemState(cantidad: 1, descripcion: '', precioUnitario: 0),
+      );
     });
   }
 
@@ -467,7 +531,10 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                 initialValue: _ivaRate,
                 decoration: const InputDecoration(
                   border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                 ),
                 items: const [
                   DropdownMenuItem(value: 0.0, child: Text('0%')),
@@ -555,7 +622,10 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
           children: [
             _buildTotalRow('Subtotal', _subtotal),
             const SizedBox(height: 8),
-            _buildTotalRow('IVA (${(_ivaRate * 100).toStringAsFixed(0)}%)', _ivaAmount),
+            _buildTotalRow(
+              'IVA (${(_ivaRate * 100).toStringAsFixed(0)}%)',
+              _ivaAmount,
+            ),
             if (_applyIrpf && _irpfRate > 0) ...[
               const SizedBox(height: 8),
               _buildTotalRow(
@@ -592,13 +662,19 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
     );
   }
 
-  Widget _buildTotalRow(String label, double amount, {bool isNegative = false}) {
+  Widget _buildTotalRow(
+    String label,
+    double amount, {
+    bool isNegative = false,
+  }) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(label, style: const TextStyle(fontSize: 14)),
         Text(
-          isNegative ? '-${CurrencyFormatter.format(amount.abs())}' : CurrencyFormatter.format(amount),
+          isNegative
+              ? '-${CurrencyFormatter.format(amount.abs())}'
+              : CurrencyFormatter.format(amount),
           style: TextStyle(
             fontSize: 14,
             color: isNegative ? AppColors.accentRed : null,
@@ -615,11 +691,15 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
     setState(() => _isSaving = true);
 
     try {
-      final items = _items.map((item) => InvoiceLineItem(
-        cantidad: item.cantidad,
-        descripcion: item.descripcion,
-        precioUnitario: item.precioUnitario,
-      )).toList();
+      final items = _items
+          .map(
+            (item) => InvoiceLineItem(
+              cantidad: item.cantidad,
+              descripcion: item.descripcion,
+              precioUnitario: item.precioUnitario,
+            ),
+          )
+          .toList();
 
       final subtotal = _subtotal;
       final ivaAmount = _ivaAmount;
@@ -642,7 +722,9 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
         await ref.read(invoicesProvider.notifier).updateInvoice(updatedInvoice);
       } else {
         // Crear nueva factura
-        final nextNum = await ref.read(nextInvoiceNumberProvider.future);
+        final nextNum = await ref.read(
+          nextInvoiceNumberProvider(_fecha.year).future,
+        );
         final invoice = Invoice(
           numero: nextNum,
           fecha: _fecha,
@@ -656,21 +738,20 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
           irpfAmount: irpfAmount,
           total: total,
         );
-        await ref.read(invoicesProvider.notifier).add(invoice);
-        await ref.read(gigsProvider.notifier).linkInvoice(_gig!.id, invoice.id);
+        await ref.read(invoicesProvider.notifier).addAndLinkToGig(invoice);
       }
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Factura guardada')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Factura guardada')));
         context.pop();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     } finally {
       if (mounted) {

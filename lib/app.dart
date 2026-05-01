@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'core/theme/app_theme.dart';
+import 'providers/invoice_provider.dart';
 import 'providers/sync_provider.dart';
 import 'screens/dashboard/dashboard_screen.dart';
 import 'screens/calendar/calendar_screen.dart';
@@ -261,13 +262,15 @@ class MisBolosApp extends ConsumerStatefulWidget {
   ConsumerState<MisBolosApp> createState() => _MisBolosAppState();
 }
 
-class _MisBolosAppState extends ConsumerState<MisBolosApp> {
+class _MisBolosAppState extends ConsumerState<MisBolosApp>
+    with WidgetsBindingObserver {
   bool _synced = false;
   Timer? _autoSyncTimer;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _autoSyncTimer = Timer(const Duration(seconds: 1), _autoSync);
   }
 
@@ -278,11 +281,25 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp> {
     final notifier = ref.read(syncProvider.notifier);
     if (notifier.isAuthenticated) {
       await notifier.syncAll();
+      await ref
+          .read(invoicesProvider.notifier)
+          .refreshFromCloud(reason: 'app_start_sync');
     }
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    unawaited(
+      ref
+          .read(invoicesProvider.notifier)
+          .refreshFromCloud(reason: 'app_resumed'),
+    );
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _autoSyncTimer?.cancel();
     super.dispose();
   }
