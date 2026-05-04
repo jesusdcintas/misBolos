@@ -5,12 +5,14 @@ import 'package:uuid/uuid.dart';
 import '../database/database_helper.dart';
 import '../models/app_settings.dart';
 import '../services/supabase_service.dart';
+import '../services/sync_queue_processor.dart';
 import '../repositories/client_repository.dart';
 import '../repositories/expense_repository.dart';
 import '../repositories/asset_repository.dart';
 import '../repositories/gig_repository.dart';
 import '../repositories/invoice_repository.dart';
 import '../repositories/settings_repository.dart';
+import '../repositories/sync_queue_repository.dart';
 import 'client_provider.dart';
 import 'expenses_provider.dart';
 import 'assets_provider.dart';
@@ -102,6 +104,9 @@ class SyncNotifier extends StateNotifier<SyncState> {
     try {
       // Primero procesar borrados pendientes para limpiar la nube
       await processPendingDeletions();
+      await SyncQueueProcessor.instance.processPending(
+        reason: 'upload_to_cloud',
+      );
 
       final clients = await ClientRepository.instance.getAll();
       final invoices = await InvoiceRepository.instance.getAll();
@@ -182,6 +187,9 @@ class SyncNotifier extends StateNotifier<SyncState> {
     try {
       // Primero procesar borrados pendientes para que la nube esté limpia
       await processPendingDeletions();
+      await SyncQueueProcessor.instance.processPending(
+        reason: 'download_from_cloud',
+      );
 
       // Descargar de Supabase
       final cloudClients = await _supabase.downloadClients();
@@ -196,10 +204,34 @@ class SyncNotifier extends StateNotifier<SyncState> {
         await ClientRepository.instance.upsert(client);
       }
       for (final gig in cloudGigs) {
-        await GigRepository.instance.upsert(gig);
+        if (gig.deletedAt != null) {
+          await GigRepository.instance.delete(gig.id);
+          continue;
+        }
+        final hasPending = await SyncQueueRepository.instance.hasPending(
+          'gig',
+          gig.id,
+        );
+        if (hasPending) continue;
+        final local = await GigRepository.instance.getById(gig.id);
+        if (local == null || gig.updatedAt.isAfter(local.updatedAt)) {
+          await GigRepository.instance.upsert(gig);
+        }
       }
       for (final invoice in cloudInvoices) {
-        await InvoiceRepository.instance.upsert(invoice);
+        if (invoice.deletedAt != null) {
+          await InvoiceRepository.instance.delete(invoice.id);
+          continue;
+        }
+        final hasPending = await SyncQueueRepository.instance.hasPending(
+          'invoice',
+          invoice.id,
+        );
+        if (hasPending) continue;
+        final local = await InvoiceRepository.instance.getById(invoice.id);
+        if (local == null || invoice.updatedAt.isAfter(local.updatedAt)) {
+          await InvoiceRepository.instance.upsert(invoice);
+        }
       }
       final repaired = await GigRepository.instance.repairStatusesFromInvoices(
         cloudInvoices,
@@ -231,14 +263,22 @@ class SyncNotifier extends StateNotifier<SyncState> {
       }
       final localGigs = await GigRepository.instance.getAll();
       for (final g in localGigs) {
-        if (!cloudGigIds.contains(g.id)) {
+        final hasPending = await SyncQueueRepository.instance.hasPending(
+          'gig',
+          g.id,
+        );
+        if (!cloudGigIds.contains(g.id) && !hasPending) {
           await GigRepository.instance.delete(g.id);
           debugPrint('[Sync] Removed local orphan gig: ${g.id}');
         }
       }
       final localInvoices = await InvoiceRepository.instance.getAll();
       for (final i in localInvoices) {
-        if (!cloudInvoiceIds.contains(i.id)) {
+        final hasPending = await SyncQueueRepository.instance.hasPending(
+          'invoice',
+          i.id,
+        );
+        if (!cloudInvoiceIds.contains(i.id) && !hasPending) {
           await InvoiceRepository.instance.delete(i.id);
           debugPrint('[Sync] Removed local orphan invoice: ${i.id}');
         }
@@ -366,4 +406,12 @@ final syncProvider = StateNotifierProvider<SyncNotifier, SyncState>((ref) {
 
 final isCloudAuthenticatedProvider = Provider<bool>((ref) {
   return SupabaseService.instance.isAuthenticated;
+});
+
+final syncQueuePendingCountProvider = StreamProvider<int>((ref) async* {
+  while (true) {
+    final total = await SyncQueueRepository.instance.countPending();
+    yield total;
+    await Future<void>.delayed(const Duration(seconds: 2));
+  }
 });

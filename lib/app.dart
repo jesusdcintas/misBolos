@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import 'core/theme/app_theme.dart';
 import 'providers/invoice_provider.dart';
 import 'providers/sync_provider.dart';
+import 'services/sync_queue_processor.dart';
 import 'screens/dashboard/dashboard_screen.dart';
 import 'screens/calendar/calendar_screen.dart';
 import 'screens/calendar/gig_detail_screen.dart';
@@ -266,12 +267,18 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp>
     with WidgetsBindingObserver {
   bool _synced = false;
   Timer? _autoSyncTimer;
+  Timer? _queueRetryTimer;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _autoSyncTimer = Timer(const Duration(seconds: 1), _autoSync);
+    _queueRetryTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      unawaited(
+        SyncQueueProcessor.instance.processPending(reason: 'periodic_retry'),
+      );
+    });
   }
 
   Future<void> _autoSync() async {
@@ -291,6 +298,9 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
     unawaited(
+      SyncQueueProcessor.instance.processPending(reason: 'app_resumed'),
+    );
+    unawaited(
       ref
           .read(invoicesProvider.notifier)
           .refreshFromCloud(reason: 'app_resumed'),
@@ -301,6 +311,7 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _autoSyncTimer?.cancel();
+    _queueRetryTimer?.cancel();
     super.dispose();
   }
 

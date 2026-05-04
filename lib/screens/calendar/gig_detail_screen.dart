@@ -16,6 +16,7 @@ import '../../services/pdf_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/google_auth_service.dart';
 import '../../services/google_calendar_service.dart';
+import '../../services/whatsapp_service.dart';
 import '../../widgets/common/status_badge.dart';
 import '../../widgets/common/facturable_badge.dart';
 import '../../widgets/common/cobrado_confetti_button.dart';
@@ -250,6 +251,17 @@ class _GigDetailContent extends ConsumerWidget {
       ]);
     }
 
+    actions.addAll([
+      const SizedBox(height: 8),
+      _ActionButton(
+        label: 'Enviar por WhatsApp',
+        icon: Icons.chat_outlined,
+        color: AppColors.success,
+        onPressed: () => _openWhatsAppForGig(context, ref, gig),
+        outlined: true,
+      ),
+    ]);
+
     // Siempre mostrar opción de eliminar
     actions.addAll([
       const SizedBox(height: 8),
@@ -305,6 +317,39 @@ class _GigDetailContent extends ConsumerWidget {
       '[GigDetail] pdf invoice lookup done invoice_id=${invoice.id} gig_id=${invoice.gigId}',
     );
     context.push('/invoice/${invoice.id}');
+  }
+
+  Future<void> _openWhatsAppForGig(
+    BuildContext context,
+    WidgetRef ref,
+    Gig gig,
+  ) async {
+    final client = await ref.read(clientByIdProvider(gig.clientId).future);
+    if (client == null) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se encontró el cliente')),
+        );
+      }
+      return;
+    }
+
+    final message =
+        'Hola ${client.nombre}, confirmamos el bolo del '
+        '${DateFormatter.dayOfWeek(gig.fecha)}'
+        '${gig.cachet != null ? ' por ${CurrencyFormatter.format(gig.cachet!)}' : ''}.';
+
+    final ok = await const WhatsAppService().openChat(
+      phone: client.whatsappPhone ?? client.telefono,
+      message: message,
+    );
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('El cliente no tiene un teléfono válido para WhatsApp'),
+        ),
+      );
+    }
   }
 
   Future<void> _sharePdf(BuildContext context, WidgetRef ref, Gig gig) async {

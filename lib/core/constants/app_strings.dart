@@ -2,7 +2,7 @@ class AppStrings {
   AppStrings._();
 
   static const String appName = 'MisBolos';
-  
+
   // Navegación
   static const String dashboard = 'Dashboard';
   static const String calendario = 'Calendario';
@@ -64,6 +64,7 @@ class AppStrings {
   static const String codigoPostal = 'Código postal';
   static const String email = 'Email';
   static const String telefono = 'Teléfono';
+  static const String whatsapp = 'WhatsApp';
 
   // Dashboard
   static const String ingresosOficiales = 'Ingresos oficiales';
@@ -91,7 +92,8 @@ class AppStrings {
   static const String sincronizar = 'Sincronizar';
   static const String backup = 'Backup';
   static const String exportarCSV = 'Exportar CSV';
-  static const String avisoLegal = 'Todos tus datos, incluidos los ingresos no facturados, se sincronizan de forma segura. Solo tú puedes acceder a ellos.';
+  static const String avisoLegal =
+      'Todos tus datos, incluidos los ingresos no facturados, se sincronizan de forma segura. Solo tú puedes acceder a ellos.';
 
   // Mensajes
   static const String boloCreado = 'Bolo creado correctamente';
@@ -99,7 +101,8 @@ class AppStrings {
   static const String facturaCreada = 'Factura generada correctamente';
   static const String clienteCreado = 'Cliente creado correctamente';
   static const String clienteActualizado = 'Cliente actualizado';
-  static const String errorGeneral = 'Ha ocurrido un error. Inténtalo de nuevo.';
+  static const String errorGeneral =
+      'Ha ocurrido un error. Inténtalo de nuevo.';
   static const String campoObligatorio = 'Este campo es obligatorio';
   static const String emailInvalido = 'Email no válido';
   static const String sinBolos = 'No hay bolos registrados';

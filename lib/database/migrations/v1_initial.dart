@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS clients (
   codigo_postal TEXT DEFAULT '',
   email TEXT,
   telefono TEXT,
+  whatsapp_phone TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );

@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS clients (
   codigo_postal TEXT,
   email TEXT,
   telefono TEXT,
+  whatsapp_phone TEXT,
   notas TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -44,7 +45,8 @@ CREATE TABLE IF NOT EXISTS gigs (
     )),
   invoice_id UUID,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ
 );
 
 -- Tabla de facturas
@@ -66,7 +68,8 @@ CREATE TABLE IF NOT EXISTS invoices (
     CHECK (status IN ('borrador', 'enviada', 'pagada')),
   notas TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ
 );
 
 -- FK circular: gigs.invoice_id → invoices (se añade después de crear ambas tablas)
@@ -76,7 +79,8 @@ ALTER TABLE gigs
 
 -- El número de factura es único por usuario y año fiscal, no global
 CREATE UNIQUE INDEX idx_invoices_numero_user_year
-  ON invoices(user_id, (EXTRACT(YEAR FROM fecha_emision)), numero);
+  ON invoices(user_id, (EXTRACT(YEAR FROM fecha_emision)), numero)
+  WHERE deleted_at IS NULL;
 
 -- Índices
 CREATE INDEX idx_clients_user_id ON clients(user_id);

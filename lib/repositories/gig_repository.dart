@@ -30,9 +30,13 @@ class GigRepository {
     await _ensureInvoiceConsistency(db, gig);
   }
 
-  Future<List<Gig>> getAll() async {
+  Future<List<Gig>> getAll({bool includeDeleted = false}) async {
     final db = await DatabaseHelper.instance.database;
-    final maps = await db.query('gigs', orderBy: 'fecha ASC');
+    final maps = await db.query(
+      'gigs',
+      where: includeDeleted ? null : 'deleted_at IS NULL',
+      orderBy: 'fecha ASC',
+    );
     final gigs = maps.map((m) => Gig.fromMap(m)).toList();
     // Reparar inconsistencias antiguas (bolo con estado de factura sin invoice).
     for (final g in gigs) {
@@ -54,7 +58,7 @@ class GigRepository {
     final db = await DatabaseHelper.instance.database;
     final maps = await db.query(
       'gigs',
-      where: 'client_id = ?',
+      where: 'client_id = ? AND deleted_at IS NULL',
       whereArgs: [clientId],
       orderBy: 'fecha ASC',
     );
@@ -67,7 +71,7 @@ class GigRepository {
     final db = await DatabaseHelper.instance.database;
     final maps = await db.query(
       'gigs',
-      where: 'fecha >= ? AND fecha <= ?',
+      where: 'fecha >= ? AND fecha <= ? AND deleted_at IS NULL',
       whereArgs: [start.toIso8601String(), end.toIso8601String()],
       orderBy: 'fecha ASC',
     );
@@ -79,7 +83,7 @@ class GigRepository {
     final db = await DatabaseHelper.instance.database;
     final maps = await db.query(
       'gigs',
-      where: 'fecha >= ? AND status != ?',
+      where: 'fecha >= ? AND status != ? AND deleted_at IS NULL',
       whereArgs: [now, 'cancelado'],
       orderBy: 'fecha ASC',
       limit: 10,
@@ -89,7 +93,12 @@ class GigRepository {
 
   Future<List<Gig>> getRecent({int limit = 5}) async {
     final db = await DatabaseHelper.instance.database;
-    final maps = await db.query('gigs', orderBy: 'fecha DESC', limit: limit);
+    final maps = await db.query(
+      'gigs',
+      where: 'deleted_at IS NULL',
+      orderBy: 'fecha DESC',
+      limit: limit,
+    );
     return maps.map((m) => Gig.fromMap(m)).toList();
   }
 
@@ -97,7 +106,7 @@ class GigRepository {
     final db = await DatabaseHelper.instance.database;
     final maps = await db.query(
       'gigs',
-      where: 'facturable = 1 AND status = ?',
+      where: 'facturable = 1 AND status = ? AND deleted_at IS NULL',
       whereArgs: ['factura_enviada'],
     );
     return maps.map((m) => Gig.fromMap(m)).toList();
@@ -105,13 +114,18 @@ class GigRepository {
 
   Future<void> insert(Gig gig) async {
     final db = await DatabaseHelper.instance.database;
-    await db.insert('gigs', gig.toMap());
+    await db.insert('gigs', gig.touch().toMap());
     await _ensureInvoiceConsistency(db, gig);
   }
 
   Future<void> update(Gig gig) async {
     final db = await DatabaseHelper.instance.database;
-    await db.update('gigs', gig.toMap(), where: 'id = ?', whereArgs: [gig.id]);
+    await db.update(
+      'gigs',
+      gig.touch().toMap(),
+      where: 'id = ?',
+      whereArgs: [gig.id],
+    );
     await _ensureInvoiceConsistency(db, gig);
   }
 
@@ -119,7 +133,10 @@ class GigRepository {
     final db = await DatabaseHelper.instance.database;
     await db.update(
       'gigs',
-      {'status': status.dbValue},
+      {
+        'status': status.dbValue,
+        'updated_at': DateTime.now().toIso8601String(),
+      },
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -187,7 +204,10 @@ class GigRepository {
     final placeholders = List.filled(ids.length, '?').join(',');
     await db.update(
       'gigs',
-      {'status': status.dbValue},
+      {
+        'status': status.dbValue,
+        'updated_at': DateTime.now().toIso8601String(),
+      },
       where: 'id IN ($placeholders)',
       whereArgs: ids.toList(),
     );
@@ -199,7 +219,10 @@ class GigRepository {
     final placeholders = List.filled(ids.length, '?').join(',');
     await db.update(
       'gigs',
-      {'facturable': facturable ? 1 : 0},
+      {
+        'facturable': facturable ? 1 : 0,
+        'updated_at': DateTime.now().toIso8601String(),
+      },
       where: 'id IN ($placeholders)',
       whereArgs: ids.toList(),
     );
@@ -271,15 +294,19 @@ class GigRepository {
 
       if (invoiceIds.isNotEmpty) {
         final invPlaceholders = List.filled(invoiceIds.length, '?').join(',');
-        await txn.delete(
+        final deletedAt = DateTime.now().toIso8601String();
+        await txn.update(
           'invoices',
+          {'deleted_at': deletedAt, 'updated_at': deletedAt},
           where: 'id IN ($invPlaceholders)',
           whereArgs: invoiceIds.toList(),
         );
       }
 
-      await txn.delete(
+      final deletedAt = DateTime.now().toIso8601String();
+      await txn.update(
         'gigs',
+        {'deleted_at': deletedAt, 'updated_at': deletedAt},
         where: 'id IN ($placeholders)',
         whereArgs: gigIds,
       );

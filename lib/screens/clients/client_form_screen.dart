@@ -27,6 +27,7 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
   final _codigoPostalController = TextEditingController();
   final _emailController = TextEditingController();
   final _telefonoController = TextEditingController();
+  final _whatsappController = TextEditingController();
   bool _isLoading = false;
   Client? _existingClient;
 
@@ -53,6 +54,7 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
         _codigoPostalController.text = client.codigoPostal;
         _emailController.text = client.email ?? '';
         _telefonoController.text = client.telefono ?? '';
+        _whatsappController.text = client.whatsappPhone ?? '';
       });
     }
   }
@@ -69,6 +71,7 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
     _codigoPostalController.dispose();
     _emailController.dispose();
     _telefonoController.dispose();
+    _whatsappController.dispose();
     super.dispose();
   }
 
@@ -78,7 +81,9 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(isEditing ? AppStrings.editarCliente : AppStrings.nuevoCliente),
+        title: Text(
+          isEditing ? AppStrings.editarCliente : AppStrings.nuevoCliente,
+        ),
       ),
       body: Form(
         key: _formKey,
@@ -91,8 +96,9 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
                 labelText: '${AppStrings.nombre} *',
                 prefixIcon: Icon(Icons.person),
               ),
-              validator: (v) =>
-                  v == null || v.trim().isEmpty ? AppStrings.campoObligatorio : null,
+              validator: (v) => v == null || v.trim().isEmpty
+                  ? AppStrings.campoObligatorio
+                  : null,
             ),
             const SizedBox(height: 12),
             TextFormField(
@@ -121,15 +127,21 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
                     Wrap(
                       spacing: 6,
                       runSpacing: 4,
-                      children: _aliases.map((a) => Chip(
-                        label: Text(a),
-                        deleteIcon: const Icon(Icons.close, size: 16),
-                        onDeleted: () {
-                          setState(() => _aliases.remove(a));
-                        },
-                        backgroundColor: AppColors.primaryLight,
-                        labelStyle: const TextStyle(color: AppColors.primary),
-                      )).toList(),
+                      children: _aliases
+                          .map(
+                            (a) => Chip(
+                              label: Text(a),
+                              deleteIcon: const Icon(Icons.close, size: 16),
+                              onDeleted: () {
+                                setState(() => _aliases.remove(a));
+                              },
+                              backgroundColor: AppColors.primaryLight,
+                              labelStyle: const TextStyle(
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          )
+                          .toList(),
                     ),
                     const SizedBox(height: 8),
                   ],
@@ -147,7 +159,10 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
                         ),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.add_circle_outline, color: AppColors.primary),
+                        icon: const Icon(
+                          Icons.add_circle_outline,
+                          color: AppColors.primary,
+                        ),
                         onPressed: _addAlias,
                         tooltip: 'Añadir',
                       ),
@@ -188,9 +203,7 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
                 Expanded(
                   child: TextFormField(
                     controller: _codigoPostalController,
-                    decoration: const InputDecoration(
-                      labelText: 'C.P.',
-                    ),
+                    decoration: const InputDecoration(labelText: 'C.P.'),
                     keyboardType: TextInputType.number,
                   ),
                 ),
@@ -228,6 +241,15 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
               ),
               keyboardType: TextInputType.phone,
             ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _whatsappController,
+              decoration: const InputDecoration(
+                labelText: AppStrings.whatsapp,
+                prefixIcon: Icon(Icons.chat_outlined),
+              ),
+              keyboardType: TextInputType.phone,
+            ),
             const SizedBox(height: 32),
             SizedBox(
               width: double.infinity,
@@ -238,7 +260,9 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
                         width: 20,
                         height: 20,
                         child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white),
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
                       )
                     : const Icon(Icons.save),
                 label: Text(AppStrings.guardar),
@@ -271,6 +295,7 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
     try {
       final email = _emailController.text.trim();
       final telefono = _telefonoController.text.trim();
+      final whatsappPhone = _whatsappController.text.trim();
 
       if (_existingClient != null) {
         final updated = _existingClient!.copyWith(
@@ -284,6 +309,7 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
           codigoPostal: _codigoPostalController.text.trim(),
           email: email.isEmpty ? null : email,
           telefono: telefono.isEmpty ? null : telefono,
+          whatsappPhone: whatsappPhone.isEmpty ? null : whatsappPhone,
         );
         await ref.read(clientsProvider.notifier).updateClient(updated);
       } else {
@@ -298,6 +324,7 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
           codigoPostal: _codigoPostalController.text.trim(),
           email: email.isEmpty ? null : email,
           telefono: telefono.isEmpty ? null : telefono,
+          whatsappPhone: whatsappPhone.isEmpty ? null : whatsappPhone,
         );
         await ref.read(clientsProvider.notifier).add(client);
       }
@@ -307,18 +334,20 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(_existingClient != null
-                ? AppStrings.clienteActualizado
-                : AppStrings.clienteCreado),
+            content: Text(
+              _existingClient != null
+                  ? AppStrings.clienteActualizado
+                  : AppStrings.clienteCreado,
+            ),
           ),
         );
         context.pop();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);

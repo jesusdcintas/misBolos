@@ -78,6 +78,8 @@ class Invoice {
   final double total;
   final InvoiceStatus status;
   final DateTime createdAt;
+  final DateTime updatedAt;
+  final DateTime? deletedAt;
 
   Invoice({
     String? id,
@@ -94,11 +96,18 @@ class Invoice {
     double? total,
     this.status = InvoiceStatus.borrador,
     DateTime? createdAt,
-  })  : id = id ?? const Uuid().v4(),
-        ivaAmount = ivaAmount ?? (subtotal * ivaRate),
-        irpfAmount = irpfAmount ?? (subtotal * irpfRate),
-        total = total ?? (subtotal + (ivaAmount ?? subtotal * ivaRate) - (irpfAmount ?? subtotal * irpfRate)),
-        createdAt = createdAt ?? DateTime.now();
+    DateTime? updatedAt,
+    this.deletedAt,
+  }) : id = id ?? const Uuid().v4(),
+       ivaAmount = ivaAmount ?? (subtotal * ivaRate),
+       irpfAmount = irpfAmount ?? (subtotal * irpfRate),
+       total =
+           total ??
+           (subtotal +
+               (ivaAmount ?? subtotal * ivaRate) -
+               (irpfAmount ?? subtotal * irpfRate)),
+       createdAt = createdAt ?? DateTime.now(),
+       updatedAt = updatedAt ?? DateTime.now();
 
   Invoice copyWith({
     int? numero,
@@ -113,6 +122,8 @@ class Invoice {
     double? irpfAmount,
     double? total,
     InvoiceStatus? status,
+    DateTime? updatedAt,
+    DateTime? deletedAt,
   }) {
     return Invoice(
       id: id,
@@ -129,8 +140,12 @@ class Invoice {
       total: total ?? this.total,
       status: status ?? this.status,
       createdAt: createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      deletedAt: deletedAt ?? this.deletedAt,
     );
   }
+
+  Invoice touch() => copyWith(updatedAt: DateTime.now());
 
   Map<String, dynamic> toMap() {
     return {
@@ -148,6 +163,8 @@ class Invoice {
       'total': total,
       'status': status.dbValue,
       'created_at': createdAt.toIso8601String(),
+      'updated_at': updatedAt.toIso8601String(),
+      'deleted_at': deletedAt?.toIso8601String(),
     };
   }
 
@@ -170,6 +187,12 @@ class Invoice {
       total: (map['total'] as num).toDouble(),
       status: InvoiceStatusExtension.fromDb(map['status'] as String),
       createdAt: DateTime.parse(map['created_at'] as String),
+      updatedAt: DateTime.parse(
+        (map['updated_at'] ?? map['created_at']) as String,
+      ),
+      deletedAt: map['deleted_at'] != null
+          ? DateTime.parse(map['deleted_at'] as String)
+          : null,
     );
   }
 }

@@ -16,9 +16,13 @@ class InvoiceRepository {
     );
   }
 
-  Future<List<Invoice>> getAll() async {
+  Future<List<Invoice>> getAll({bool includeDeleted = false}) async {
     final db = await DatabaseHelper.instance.database;
-    final maps = await db.query('invoices', orderBy: 'fecha DESC, numero DESC');
+    final maps = await db.query(
+      'invoices',
+      where: includeDeleted ? null : 'deleted_at IS NULL',
+      orderBy: 'fecha DESC, numero DESC',
+    );
     return maps.map((m) => Invoice.fromMap(m)).toList();
   }
 
@@ -33,7 +37,7 @@ class InvoiceRepository {
     final db = await DatabaseHelper.instance.database;
     final maps = await db.query(
       'invoices',
-      where: 'gig_id = ?',
+      where: 'gig_id = ? AND deleted_at IS NULL',
       whereArgs: [gigId],
     );
     if (maps.isEmpty) return null;
@@ -44,7 +48,7 @@ class InvoiceRepository {
     final db = await DatabaseHelper.instance.database;
     final maps = await db.query(
       'invoices',
-      where: 'status = ?',
+      where: 'status = ? AND deleted_at IS NULL',
       whereArgs: [status.dbValue],
       orderBy: 'numero ASC',
     );
@@ -55,7 +59,7 @@ class InvoiceRepository {
     final db = await DatabaseHelper.instance.database;
     final maps = await db.query(
       'invoices',
-      where: 'client_id = ?',
+      where: 'client_id = ? AND deleted_at IS NULL',
       whereArgs: [clientId],
       orderBy: 'numero ASC',
     );
@@ -73,6 +77,7 @@ class InvoiceRepository {
       SELECT MAX(numero) as max_num
       FROM invoices
       WHERE CAST(strftime('%Y', fecha) AS INTEGER) = ?
+        AND deleted_at IS NULL
       ''',
       [year],
     );
@@ -82,16 +87,24 @@ class InvoiceRepository {
 
   Future<void> insert(Invoice invoice) async {
     final db = await DatabaseHelper.instance.database;
-    await db.insert('invoices', invoice.toMap());
+    await db.insert('invoices', invoice.touch().toMap());
   }
 
   Future<void> insertAndLinkGig(Invoice invoice) async {
     final db = await DatabaseHelper.instance.database;
     await db.transaction((txn) async {
-      await txn.insert('invoices', invoice.toMap());
+      final now = DateTime.now().toIso8601String();
+      await txn.insert(
+        'invoices',
+        invoice.copyWith(updatedAt: DateTime.now()).toMap(),
+      );
       await txn.update(
         'gigs',
-        {'invoice_id': invoice.id, 'status': GigStatus.facturaGenerada.dbValue},
+        {
+          'invoice_id': invoice.id,
+          'status': GigStatus.facturaGenerada.dbValue,
+          'updated_at': now,
+        },
         where: 'id = ?',
         whereArgs: [invoice.gigId],
       );
@@ -102,7 +115,7 @@ class InvoiceRepository {
     final db = await DatabaseHelper.instance.database;
     await db.update(
       'invoices',
-      invoice.toMap(),
+      invoice.touch().toMap(),
       where: 'id = ?',
       whereArgs: [invoice.id],
     );
@@ -112,7 +125,10 @@ class InvoiceRepository {
     final db = await DatabaseHelper.instance.database;
     await db.update(
       'invoices',
-      {'status': status.dbValue},
+      {
+        'status': status.dbValue,
+        'updated_at': DateTime.now().toIso8601String(),
+      },
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -120,7 +136,13 @@ class InvoiceRepository {
 
   Future<void> delete(String id) async {
     final db = await DatabaseHelper.instance.database;
-    await db.delete('invoices', where: 'id = ?', whereArgs: [id]);
+    final now = DateTime.now().toIso8601String();
+    await db.update(
+      'invoices',
+      {'deleted_at': now, 'updated_at': now},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 
   Future<Invoice?> deleteAndUnlinkGig(String id) async {
@@ -135,11 +157,21 @@ class InvoiceRepository {
       final invoice = Invoice.fromMap(rows.first);
       await txn.update(
         'gigs',
-        {'invoice_id': null, 'status': GigStatus.pendiente.dbValue},
+        {
+          'invoice_id': null,
+          'status': GigStatus.pendiente.dbValue,
+          'updated_at': DateTime.now().toIso8601String(),
+        },
         where: 'id = ? AND invoice_id = ?',
         whereArgs: [invoice.gigId, invoice.id],
       );
-      await txn.delete('invoices', where: 'id = ?', whereArgs: [id]);
+      final now = DateTime.now().toIso8601String();
+      await txn.update(
+        'invoices',
+        {'deleted_at': now, 'updated_at': now},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
       return invoice;
     });
   }
@@ -149,7 +181,7 @@ class InvoiceRepository {
     final db = await DatabaseHelper.instance.database;
     await db.update(
       'invoices',
-      {'numero': newNumber},
+      {'numero': newNumber, 'updated_at': DateTime.now().toIso8601String()},
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -165,8 +197,8 @@ class InvoiceRepository {
     final result = await db.query(
       'invoices',
       where: excludeId != null
-          ? "numero = ? AND CAST(strftime('%Y', fecha) AS INTEGER) = ? AND id != ?"
-          : "numero = ? AND CAST(strftime('%Y', fecha) AS INTEGER) = ?",
+          ? "numero = ? AND CAST(strftime('%Y', fecha) AS INTEGER) = ? AND id != ? AND deleted_at IS NULL"
+          : "numero = ? AND CAST(strftime('%Y', fecha) AS INTEGER) = ? AND deleted_at IS NULL",
       whereArgs: excludeId != null ? [number, year, excludeId] : [number, year],
     );
     return result.isNotEmpty;
@@ -181,7 +213,8 @@ class InvoiceRepository {
     return db.transaction((txn) async {
       final rows = await txn.query(
         'invoices',
-        where: "CAST(strftime('%Y', fecha) AS INTEGER) = ?",
+        where:
+            "CAST(strftime('%Y', fecha) AS INTEGER) = ? AND deleted_at IS NULL",
         whereArgs: [year],
         orderBy: 'fecha ASC, created_at ASC, id ASC',
       );
@@ -225,8 +258,8 @@ class InvoiceRepository {
   }) async {
     final db = await DatabaseHelper.instance.database;
     final where = includeDrafts
-        ? "CAST(strftime('%Y', fecha) AS INTEGER) = ?"
-        : "CAST(strftime('%Y', fecha) AS INTEGER) = ? AND status != ?";
+        ? "CAST(strftime('%Y', fecha) AS INTEGER) = ? AND deleted_at IS NULL"
+        : "CAST(strftime('%Y', fecha) AS INTEGER) = ? AND status != ? AND deleted_at IS NULL";
     final args = includeDrafts
         ? [year]
         : [year, InvoiceStatus.borrador.dbValue];
@@ -264,8 +297,8 @@ class InvoiceRepository {
     final db = await DatabaseHelper.instance.database;
     return db.transaction((txn) async {
       final where = includeDrafts
-          ? "CAST(strftime('%Y', fecha) AS INTEGER) = ?"
-          : "CAST(strftime('%Y', fecha) AS INTEGER) = ? AND status != ?";
+          ? "CAST(strftime('%Y', fecha) AS INTEGER) = ? AND deleted_at IS NULL"
+          : "CAST(strftime('%Y', fecha) AS INTEGER) = ? AND status != ? AND deleted_at IS NULL";
       final args = includeDrafts
           ? <Object?>[year]
           : <Object?>[year, InvoiceStatus.borrador.dbValue];

@@ -482,6 +482,8 @@ class _SyncSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final syncState = ref.watch(syncProvider);
+    final pendingCountAsync = ref.watch(syncQueuePendingCountProvider);
+    final pendingCount = pendingCountAsync.valueOrNull ?? 0;
     // Usar el provider reactivo para el estado de autenticación
     final authState = ref.watch(supabaseAuthProvider);
     final isCloudAuth =
@@ -535,6 +537,33 @@ class _SyncSection extends ConsumerWidget {
               'Sincroniza todos tus datos entre dispositivos.',
               style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
             ),
+            if (isCloudAuth) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(
+                    pendingCount > 0 ? Icons.schedule : Icons.check_circle,
+                    size: 16,
+                    color: pendingCount > 0
+                        ? AppColors.warning
+                        : AppColors.success,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    pendingCount > 0
+                        ? '$pendingCount cambio${pendingCount == 1 ? '' : 's'} pendiente${pendingCount == 1 ? '' : 's'} de sincronizar'
+                        : 'Sin cambios pendientes',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: pendingCount > 0
+                          ? AppColors.warning
+                          : AppColors.success,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: 16),
 
             if (!isCloudAuth && isSupported) ...[

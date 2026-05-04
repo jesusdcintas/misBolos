@@ -11,6 +11,7 @@ import '../../models/invoice.dart';
 import '../../providers/gig_provider.dart';
 import '../../providers/client_provider.dart';
 import '../../providers/invoice_provider.dart';
+import '../../providers/sync_provider.dart';
 import '../../services/google_auth_service.dart';
 import '../../services/google_calendar_service.dart';
 import '../../widgets/common/status_badge.dart';
@@ -137,6 +138,13 @@ class CalendarScreen extends ConsumerWidget {
     );
   }
 
+  Future<void> _refreshBolos(WidgetRef ref) async {
+    await ref.read(syncProvider.notifier).downloadFromCloud();
+    ref.invalidate(gigsProvider);
+    ref.invalidate(invoicesProvider);
+    ref.invalidate(clientsProvider);
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final gigsAsync = ref.watch(gigsProvider);
@@ -146,13 +154,38 @@ class CalendarScreen extends ConsumerWidget {
     final syncing = ref.watch(_syncingProvider);
     final isCalendarView = ref.watch(_viewModeProvider);
     final selectionMode = ref.watch(_selectionModeProvider);
+    final pendingCount =
+        ref.watch(syncQueuePendingCountProvider).valueOrNull ?? 0;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          isCalendarView ? AppStrings.calendario : 'Bolos',
-        ),
+        title: Text(isCalendarView ? AppStrings.calendario : 'Bolos'),
         actions: [
+          if (pendingCount > 0)
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.warningBg,
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: AppColors.warning),
+                  ),
+                  child: Text(
+                    '$pendingCount',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.warning,
+                    ),
+                  ),
+                ),
+              ),
+            ),
           // Toggle vista
           IconButton(
             icon: Icon(isCalendarView ? Icons.list : Icons.calendar_month),
@@ -215,16 +248,19 @@ class CalendarScreen extends ConsumerWidget {
             ),
         ],
       ),
-      body: isCalendarView
-          ? _buildCalendarView(
-              context,
-              ref,
-              gigsAsync,
-              selectedDay,
-              focusedDay,
-              googleAuth,
-            )
-          : _buildListView(context, ref, gigsAsync),
+      body: RefreshIndicator(
+        onRefresh: () => _refreshBolos(ref),
+        child: isCalendarView
+            ? _buildCalendarView(
+                context,
+                ref,
+                gigsAsync,
+                selectedDay,
+                focusedDay,
+                googleAuth,
+              )
+            : _buildListView(context, ref, gigsAsync),
+      ),
       floatingActionButton: selectionMode
           ? null
           : FloatingActionButton(

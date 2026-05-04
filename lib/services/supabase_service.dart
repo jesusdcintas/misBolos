@@ -11,6 +11,7 @@ import '../models/expense.dart';
 import '../models/asset.dart';
 import '../models/gig.dart';
 import '../models/invoice.dart';
+import '../models/sync_queue_item.dart';
 
 class SupabaseService {
   static final SupabaseService instance = SupabaseService._();
@@ -139,6 +140,35 @@ class SupabaseService {
     if (!isAuthenticated) return;
     await _client!.from('gigs').upsert(_gigToSupabase(gig), onConflict: 'id');
     debugPrint('[Supabase] Uploaded gig ${gig.id}');
+  }
+
+  Future<void> processQueuedItem(SyncQueueItem item) async {
+    if (!isAuthenticated) return;
+
+    debugPrint(
+      '[SupabaseQueue] ${item.operation.dbValue} ${item.entityType.dbValue}/${item.entityId}',
+    );
+
+    if (item.entityType == SyncEntityType.gig) {
+      if (item.operation == SyncOperation.delete) {
+        await softDeleteGig(
+          item.entityId,
+          deletedAt: _readPayloadDate(item.payload, 'deleted_at'),
+        );
+        return;
+      }
+      await uploadGigDirect(Gig.fromMap(item.payload));
+      return;
+    }
+
+    if (item.operation == SyncOperation.delete) {
+      await softDeleteInvoice(
+        item.entityId,
+        deletedAt: _readPayloadDate(item.payload, 'deleted_at'),
+      );
+      return;
+    }
+    await uploadInvoices([Invoice.fromMap(item.payload)]);
   }
 
   Future<void> uploadInvoices(List<Invoice> invoices) async {
@@ -476,7 +506,7 @@ class SupabaseService {
   Future<void> deleteGig(String id) async {
     if (!isAuthenticated) return;
     try {
-      await _client!.from('gigs').delete().eq('id', id);
+      await softDeleteGig(id);
       debugPrint('[Supabase] Deleted gig $id from cloud');
     } catch (e) {
       debugPrint('[Supabase] Delete gig error: $e');
@@ -496,11 +526,31 @@ class SupabaseService {
   Future<void> deleteInvoice(String id) async {
     if (!isAuthenticated) return;
     try {
-      await _client!.from('invoices').delete().eq('id', id);
+      await softDeleteInvoice(id);
       debugPrint('[Supabase] Deleted invoice $id from cloud');
     } catch (e) {
       debugPrint('[Supabase] Delete invoice error: $e');
     }
+  }
+
+  Future<void> softDeleteGig(String id, {DateTime? deletedAt}) async {
+    if (!isAuthenticated) return;
+    final at = (deletedAt ?? DateTime.now()).toUtc().toIso8601String();
+    await _client!
+        .from('gigs')
+        .update({'deleted_at': at, 'updated_at': at})
+        .eq('id', id);
+    debugPrint('[Supabase] Soft-deleted gig $id');
+  }
+
+  Future<void> softDeleteInvoice(String id, {DateTime? deletedAt}) async {
+    if (!isAuthenticated) return;
+    final at = (deletedAt ?? DateTime.now()).toUtc().toIso8601String();
+    await _client!
+        .from('invoices')
+        .update({'deleted_at': at, 'updated_at': at})
+        .eq('id', id);
+    debugPrint('[Supabase] Soft-deleted invoice $id');
   }
 
   Future<void> deleteGigsBatch({
@@ -512,13 +562,20 @@ class SupabaseService {
 
     final gigs = gigIds.toList();
     final invoices = invoiceIds.toList();
+    final now = DateTime.now().toUtc().toIso8601String();
 
     try {
       if (invoices.isNotEmpty) {
-        await _client!.from('invoices').delete().inFilter('id', invoices);
+        await _client!
+            .from('invoices')
+            .update({'deleted_at': now, 'updated_at': now})
+            .inFilter('id', invoices);
       }
       if (gigs.isNotEmpty) {
-        await _client!.from('gigs').delete().inFilter('id', gigs);
+        await _client!
+            .from('gigs')
+            .update({'deleted_at': now, 'updated_at': now})
+            .inFilter('id', gigs);
       }
       debugPrint(
         '[Supabase] Deleted batch gigs=${gigs.length} invoices=${invoices.length}',
@@ -532,7 +589,15 @@ class SupabaseService {
   /// Borra un registro de cualquier tabla por nombre (para pending deletions)
   Future<void> deleteByTable(String tableName, String recordId) async {
     if (!isAuthenticated) return;
-    await _client!.from(tableName).delete().eq('id', recordId);
+    final now = DateTime.now().toUtc().toIso8601String();
+    if (tableName == 'gigs' || tableName == 'invoices') {
+      await _client!
+          .from(tableName)
+          .update({'deleted_at': now, 'updated_at': now})
+          .eq('id', recordId);
+    } else {
+      await _client!.from(tableName).delete().eq('id', recordId);
+    }
     debugPrint('[Supabase] Deleted $tableName/$recordId from cloud');
   }
 
@@ -582,6 +647,7 @@ class SupabaseService {
     'codigo_postal': c.codigoPostal,
     'email': c.email,
     'telefono': c.telefono,
+    'whatsapp_phone': c.whatsappPhone,
     'created_at': c.createdAt.toUtc().toIso8601String(),
     'updated_at': c.updatedAt.toUtc().toIso8601String(),
   };
@@ -598,6 +664,7 @@ class SupabaseService {
     codigoPostal: m['codigo_postal'] ?? '',
     email: m['email'],
     telefono: m['telefono'],
+    whatsappPhone: m['whatsapp_phone'],
     createdAt: DateTime.parse(m['created_at']),
     updatedAt: DateTime.parse(m['updated_at']),
   );
@@ -613,6 +680,9 @@ class SupabaseService {
     'status': g.status.dbValue,
     'invoice_id': g.invoiceId,
     'created_at': g.createdAt.toUtc().toIso8601String(),
+    'updated_at': g.updatedAt.toUtc().toIso8601String(),
+    if (g.deletedAt != null)
+      'deleted_at': g.deletedAt!.toUtc().toIso8601String(),
   };
 
   Gig _gigFromSupabase(Map<String, dynamic> m) => Gig(
@@ -625,6 +695,10 @@ class SupabaseService {
     status: GigStatusExtension.fromDb(m['status'] ?? 'pendiente'),
     invoiceId: m['invoice_id'],
     createdAt: DateTime.parse(m['created_at']),
+    updatedAt: DateTime.parse((m['updated_at'] ?? m['created_at']).toString()),
+    deletedAt: m['deleted_at'] != null
+        ? DateTime.parse(m['deleted_at'].toString())
+        : null,
   );
 
   Map<String, dynamic> _invoiceToSupabaseEs(Invoice i) => {
@@ -643,6 +717,9 @@ class SupabaseService {
     'total': i.total,
     'status': i.status.dbValue,
     'created_at': i.createdAt.toUtc().toIso8601String(),
+    'updated_at': i.updatedAt.toUtc().toIso8601String(),
+    if (i.deletedAt != null)
+      'deleted_at': i.deletedAt!.toUtc().toIso8601String(),
   };
 
   Invoice _invoiceFromSupabase(Map<String, dynamic> m) {
@@ -693,7 +770,19 @@ class SupabaseService {
       total: (m['total'] as num?)?.toDouble() ?? 0,
       status: InvoiceStatusExtension.fromDb(m['status'] ?? 'borrador'),
       createdAt: DateTime.parse(m['created_at']),
+      updatedAt: DateTime.parse(
+        (m['updated_at'] ?? m['created_at']).toString(),
+      ),
+      deletedAt: m['deleted_at'] != null
+          ? DateTime.parse(m['deleted_at'].toString())
+          : null,
     );
+  }
+
+  DateTime? _readPayloadDate(Map<String, dynamic> payload, String key) {
+    final raw = payload[key];
+    if (raw == null) return null;
+    return DateTime.tryParse(raw.toString());
   }
 
   double _readRate({

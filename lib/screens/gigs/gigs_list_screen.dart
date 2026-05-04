@@ -12,6 +12,7 @@ import '../../models/client.dart';
 import '../../models/gig.dart';
 import '../../providers/gig_provider.dart';
 import '../../providers/client_provider.dart';
+import '../../providers/sync_provider.dart';
 import '../../widgets/common/status_badge.dart';
 import '../../widgets/common/facturable_badge.dart';
 import '../../widgets/common/skeleton_loading.dart';
@@ -124,6 +125,12 @@ class _GigsListScreenState extends ConsumerState<GigsListScreen> {
     if (confirm != true) return;
     await ref.read(gigsProvider.notifier).bulkDelete(_selectedIds);
     _clearSelection();
+  }
+
+  Future<void> _refreshGigs() async {
+    await ref.read(syncProvider.notifier).downloadFromCloud();
+    ref.invalidate(gigsProvider);
+    ref.invalidate(clientsProvider);
   }
 
   @override
@@ -254,282 +261,292 @@ class _GigsListScreenState extends ConsumerState<GigsListScreen> {
             monthLabel = m[0].toUpperCase() + m.substring(1);
           }
 
-          return Column(
-            children: [
-              // ── Resumen dinámico ──
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                color: AppColors.primaryLight,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(
-                      Icons.music_note,
-                      color: AppColors.primary,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      '$filteredCount bolos',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
+          return RefreshIndicator(
+            onRefresh: _refreshGigs,
+            child: Column(
+              children: [
+                // ── Resumen dinámico ──
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  color: AppColors.primaryLight,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.music_note,
                         color: AppColors.primary,
+                        size: 20,
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    const Text(
-                      '·',
-                      style: TextStyle(fontSize: 16, color: AppColors.primary),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      CurrencyFormatter.format(filteredCachet),
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.primary,
+                      const SizedBox(width: 6),
+                      Text(
+                        '$filteredCount bolos',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primary,
+                        ),
                       ),
-                    ),
-                    if (hasActiveFilters) ...[
+                      const SizedBox(width: 8),
+                      const Text(
+                        '·',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: AppColors.primary,
+                        ),
+                      ),
                       const SizedBox(width: 8),
                       Text(
-                        '[de $totalCount]',
+                        CurrencyFormatter.format(filteredCachet),
                         style: const TextStyle(
-                          fontSize: 13,
-                          color: AppColors.textSecondary,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primary,
                         ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-                child: Row(
-                  children: [
-                    _InlineActionButton(
-                      icon: Icons.checklist,
-                      label: _selectionMode ? 'Cancelar' : 'Seleccionar',
-                      onTap: _selectionMode
-                          ? _clearSelection
-                          : () {
-                              setState(() {
-                                _selectionMode = true;
-                                _selectedIds.clear();
-                              });
-                            },
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: PopupMenuButton<GigSortOption>(
-                        onSelected: (value) {
-                          ref.read(gigSortProvider.notifier).state = value;
-                        },
-                        itemBuilder: (context) => [
-                          const PopupMenuItem(
-                            value: GigSortOption.fechaAsc,
-                            child: Text('Fecha (antigua)'),
-                          ),
-                          const PopupMenuItem(
-                            value: GigSortOption.fechaDesc,
-                            child: Text('Fecha (reciente)'),
-                          ),
-                          const PopupMenuDivider(),
-                          const PopupMenuItem(
-                            value: GigSortOption.precioAsc,
-                            child: Text('Precio (menor)'),
-                          ),
-                          const PopupMenuItem(
-                            value: GigSortOption.precioDesc,
-                            child: Text('Precio (mayor)'),
-                          ),
-                        ],
-                        child: const _InlineActionButtonContent(
-                          icon: Icons.sort,
-                          label: 'Ordenar',
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: PopupMenuButton<String>(
-                        onSelected: (value) {
-                          if (value == 'select_all') {
-                            _toggleSelectAll(filteredGigs);
-                          }
-                        },
-                        itemBuilder: (context) => const [
-                          PopupMenuItem(
-                            value: 'select_all',
-                            child: Text('Seleccionar todo'),
-                          ),
-                        ],
-                        child: const _InlineActionButtonContent(
-                          icon: Icons.more_horiz,
-                          label: 'Más',
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // ── Fila 1: Chips de estado ──
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-                child: SizedBox(
-                  height: 36,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    children: [
-                      _StatusChip(
-                        label: 'Todos',
-                        selected: statusFilter == null,
-                        onTap: () =>
-                            ref.read(gigStatusFilterProvider.notifier).state =
-                                null,
-                      ),
-                      _StatusChip(
-                        label: GigStatus.pendiente.label,
-                        selected: statusFilter == GigStatus.pendiente,
-                        onTap: () =>
-                            ref.read(gigStatusFilterProvider.notifier).state =
-                                GigStatus.pendiente,
-                      ),
-                      _StatusChip(
-                        label: GigStatus.facturaEnviada.label,
-                        selected: statusFilter == GigStatus.facturaEnviada,
-                        onTap: () =>
-                            ref.read(gigStatusFilterProvider.notifier).state =
-                                GigStatus.facturaEnviada,
-                      ),
-                      _StatusChip(
-                        label: GigStatus.pagado.label,
-                        selected: statusFilter == GigStatus.pagado,
-                        onTap: () =>
-                            ref.read(gigStatusFilterProvider.notifier).state =
-                                GigStatus.pagado,
-                      ),
-                      _StatusChip(
-                        label: GigStatus.cobradoEnB.label,
-                        selected: statusFilter == GigStatus.cobradoEnB,
-                        onTap: () =>
-                            ref.read(gigStatusFilterProvider.notifier).state =
-                                GigStatus.cobradoEnB,
-                      ),
-                      _StatusChip(
-                        label: GigStatus.cancelado.label,
-                        selected: statusFilter == GigStatus.cancelado,
-                        onTap: () =>
-                            ref.read(gigStatusFilterProvider.notifier).state =
-                                GigStatus.cancelado,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              // ── Fila 2: Botones de filtro secundarios ──
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-                child: SizedBox(
-                  height: 36,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    children: [
-                      _FilterButton(
-                        icon: Icons.calendar_today,
-                        label: selectedYear?.toString() ?? 'Año',
-                        active: selectedYear != null,
-                        onTap: () => _showYearSheet(context, ref, yearCounts),
-                      ),
-                      const SizedBox(width: 8),
-                      _FilterButton(
-                        icon: Icons.date_range,
-                        label: monthLabel ?? 'Mes',
-                        active: selectedMonth != null,
-                        onTap: () =>
-                            _showMonthSheet(context, ref, monthsWithData),
-                      ),
-                      const SizedBox(width: 8),
-                      _FilterButton(
-                        icon: Icons.person,
-                        label: clientFilterName ?? 'Cliente',
-                        active: clientFilter != null,
-                        onTap: () => _showClientSheet(
-                          context,
-                          ref,
-                          clients,
-                          clientGigCounts,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      _FilterButton(
-                        icon: Icons.bolt,
-                        label: facturableFilter == null
-                            ? 'Facturable'
-                            : facturableFilter == true
-                            ? 'Facturable'
-                            : 'En B',
-                        active: facturableFilter != null,
-                        onTap: () => _showFacturableSheet(context, ref),
                       ),
                       if (hasActiveFilters) ...[
                         const SizedBox(width: 8),
-                        _ClearFiltersButton(onTap: () => _clearAllFilters(ref)),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-
-              // ── Lista o empty state ──
-              if (filteredGigs.isEmpty)
-                Expanded(
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.music_off,
-                          size: 64,
-                          color: AppColors.textSecondary.withValues(alpha: 0.5),
-                        ),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'No hay bolos con estos filtros',
-                          style: TextStyle(
-                            fontSize: 16,
+                        Text(
+                          '[de $totalCount]',
+                          style: const TextStyle(
+                            fontSize: 13,
                             color: AppColors.textSecondary,
                           ),
                         ),
                       ],
-                    ),
-                  ),
-                )
-              else
-                Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.only(bottom: 80),
-                    itemCount: filteredGigs.length,
-                    itemBuilder: (context, index) {
-                      final gig = filteredGigs[index];
-                      return _GigListTile(
-                        gig: gig,
-                        selectionMode: _selectionMode,
-                        selected: _selectedIds.contains(gig.id),
-                        onLongPressSelect: () => _enterSelection(gig.id),
-                        onToggleSelect: () => _toggleSelection(gig.id),
-                      );
-                    },
+                    ],
                   ),
                 ),
-            ],
+
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                  child: Row(
+                    children: [
+                      _InlineActionButton(
+                        icon: Icons.checklist,
+                        label: _selectionMode ? 'Cancelar' : 'Seleccionar',
+                        onTap: _selectionMode
+                            ? _clearSelection
+                            : () {
+                                setState(() {
+                                  _selectionMode = true;
+                                  _selectedIds.clear();
+                                });
+                              },
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: PopupMenuButton<GigSortOption>(
+                          onSelected: (value) {
+                            ref.read(gigSortProvider.notifier).state = value;
+                          },
+                          itemBuilder: (context) => [
+                            const PopupMenuItem(
+                              value: GigSortOption.fechaAsc,
+                              child: Text('Fecha (antigua)'),
+                            ),
+                            const PopupMenuItem(
+                              value: GigSortOption.fechaDesc,
+                              child: Text('Fecha (reciente)'),
+                            ),
+                            const PopupMenuDivider(),
+                            const PopupMenuItem(
+                              value: GigSortOption.precioAsc,
+                              child: Text('Precio (menor)'),
+                            ),
+                            const PopupMenuItem(
+                              value: GigSortOption.precioDesc,
+                              child: Text('Precio (mayor)'),
+                            ),
+                          ],
+                          child: const _InlineActionButtonContent(
+                            icon: Icons.sort,
+                            label: 'Ordenar',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: PopupMenuButton<String>(
+                          onSelected: (value) {
+                            if (value == 'select_all') {
+                              _toggleSelectAll(filteredGigs);
+                            }
+                          },
+                          itemBuilder: (context) => const [
+                            PopupMenuItem(
+                              value: 'select_all',
+                              child: Text('Seleccionar todo'),
+                            ),
+                          ],
+                          child: const _InlineActionButtonContent(
+                            icon: Icons.more_horiz,
+                            label: 'Más',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // ── Fila 1: Chips de estado ──
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                  child: SizedBox(
+                    height: 36,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      children: [
+                        _StatusChip(
+                          label: 'Todos',
+                          selected: statusFilter == null,
+                          onTap: () =>
+                              ref.read(gigStatusFilterProvider.notifier).state =
+                                  null,
+                        ),
+                        _StatusChip(
+                          label: GigStatus.pendiente.label,
+                          selected: statusFilter == GigStatus.pendiente,
+                          onTap: () =>
+                              ref.read(gigStatusFilterProvider.notifier).state =
+                                  GigStatus.pendiente,
+                        ),
+                        _StatusChip(
+                          label: GigStatus.facturaEnviada.label,
+                          selected: statusFilter == GigStatus.facturaEnviada,
+                          onTap: () =>
+                              ref.read(gigStatusFilterProvider.notifier).state =
+                                  GigStatus.facturaEnviada,
+                        ),
+                        _StatusChip(
+                          label: GigStatus.pagado.label,
+                          selected: statusFilter == GigStatus.pagado,
+                          onTap: () =>
+                              ref.read(gigStatusFilterProvider.notifier).state =
+                                  GigStatus.pagado,
+                        ),
+                        _StatusChip(
+                          label: GigStatus.cobradoEnB.label,
+                          selected: statusFilter == GigStatus.cobradoEnB,
+                          onTap: () =>
+                              ref.read(gigStatusFilterProvider.notifier).state =
+                                  GigStatus.cobradoEnB,
+                        ),
+                        _StatusChip(
+                          label: GigStatus.cancelado.label,
+                          selected: statusFilter == GigStatus.cancelado,
+                          onTap: () =>
+                              ref.read(gigStatusFilterProvider.notifier).state =
+                                  GigStatus.cancelado,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // ── Fila 2: Botones de filtro secundarios ──
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                  child: SizedBox(
+                    height: 36,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      children: [
+                        _FilterButton(
+                          icon: Icons.calendar_today,
+                          label: selectedYear?.toString() ?? 'Año',
+                          active: selectedYear != null,
+                          onTap: () => _showYearSheet(context, ref, yearCounts),
+                        ),
+                        const SizedBox(width: 8),
+                        _FilterButton(
+                          icon: Icons.date_range,
+                          label: monthLabel ?? 'Mes',
+                          active: selectedMonth != null,
+                          onTap: () =>
+                              _showMonthSheet(context, ref, monthsWithData),
+                        ),
+                        const SizedBox(width: 8),
+                        _FilterButton(
+                          icon: Icons.person,
+                          label: clientFilterName ?? 'Cliente',
+                          active: clientFilter != null,
+                          onTap: () => _showClientSheet(
+                            context,
+                            ref,
+                            clients,
+                            clientGigCounts,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        _FilterButton(
+                          icon: Icons.bolt,
+                          label: facturableFilter == null
+                              ? 'Facturable'
+                              : facturableFilter == true
+                              ? 'Facturable'
+                              : 'En B',
+                          active: facturableFilter != null,
+                          onTap: () => _showFacturableSheet(context, ref),
+                        ),
+                        if (hasActiveFilters) ...[
+                          const SizedBox(width: 8),
+                          _ClearFiltersButton(
+                            onTap: () => _clearAllFilters(ref),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+
+                // ── Lista o empty state ──
+                if (filteredGigs.isEmpty)
+                  Expanded(
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.music_off,
+                            size: 64,
+                            color: AppColors.textSecondary.withValues(
+                              alpha: 0.5,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'No hay bolos con estos filtros',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else
+                  Expanded(
+                    child: ListView.builder(
+                      padding: const EdgeInsets.only(bottom: 80),
+                      itemCount: filteredGigs.length,
+                      itemBuilder: (context, index) {
+                        final gig = filteredGigs[index];
+                        return _GigListTile(
+                          gig: gig,
+                          selectionMode: _selectionMode,
+                          selected: _selectedIds.contains(gig.id),
+                          onLongPressSelect: () => _enterSelection(gig.id),
+                          onToggleSelect: () => _toggleSelection(gig.id),
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
           );
         },
         loading: () =>

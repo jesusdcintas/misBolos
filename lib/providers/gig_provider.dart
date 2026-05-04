@@ -4,10 +4,12 @@ import '../models/app_event.dart';
 import '../models/gig.dart';
 import '../repositories/app_event_repository.dart';
 import '../repositories/gig_repository.dart';
+import '../repositories/sync_queue_repository.dart';
 import 'invoice_provider.dart';
 import '../database/database_helper.dart';
-import '../services/supabase_service.dart';
 import '../services/google_calendar_service.dart';
+import '../services/sync_queue_processor.dart';
+import '../models/sync_queue_item.dart';
 
 final gigRepositoryProvider = Provider((ref) => GigRepository.instance);
 
@@ -18,6 +20,7 @@ final gigsProvider = AsyncNotifierProvider<GigsNotifier, List<Gig>>(
 class GigsNotifier extends AsyncNotifier<List<Gig>> {
   @override
   Future<List<Gig>> build() async {
+    await SyncQueueProcessor.instance.processPending(reason: 'gigs_provider');
     return ref.read(gigRepositoryProvider).getAll();
   }
 
@@ -27,6 +30,13 @@ class GigsNotifier extends AsyncNotifier<List<Gig>> {
 
   Future<void> add(Gig gig) async {
     await ref.read(gigRepositoryProvider).insert(gig);
+    final saved = await ref.read(gigRepositoryProvider).getById(gig.id) ?? gig;
+    await SyncQueueRepository.instance.enqueue(
+      entityType: SyncEntityType.gig,
+      entityId: saved.id,
+      operation: SyncOperation.create,
+      payload: saved.toMap(),
+    );
     await AppEventRepository.instance.insert(
       AppEvent(
         entityType: 'gig',
@@ -41,11 +51,7 @@ class GigsNotifier extends AsyncNotifier<List<Gig>> {
         },
       ),
     );
-    try {
-      await SupabaseService.instance.uploadGigDirect(gig);
-    } catch (e) {
-      debugPrint('[GigProvider] Supabase gig upload failed: $e');
-    }
+    await SyncQueueProcessor.instance.processPending(reason: 'gig_add');
     ref.invalidate(gigByIdProvider(gig.id));
     ref.invalidateSelf();
     // En caso de reparaciones automáticas (gig↔invoice), refrescar facturas.
@@ -54,6 +60,13 @@ class GigsNotifier extends AsyncNotifier<List<Gig>> {
 
   Future<void> updateGig(Gig gig) async {
     await ref.read(gigRepositoryProvider).update(gig);
+    final saved = await ref.read(gigRepositoryProvider).getById(gig.id) ?? gig;
+    await SyncQueueRepository.instance.enqueue(
+      entityType: SyncEntityType.gig,
+      entityId: saved.id,
+      operation: SyncOperation.update,
+      payload: saved.toMap(),
+    );
     await AppEventRepository.instance.insert(
       AppEvent(
         entityType: 'gig',
@@ -69,14 +82,7 @@ class GigsNotifier extends AsyncNotifier<List<Gig>> {
         },
       ),
     );
-    try {
-      final updated = await ref.read(gigRepositoryProvider).getById(gig.id);
-      if (updated != null) {
-        await SupabaseService.instance.uploadGigDirect(updated);
-      }
-    } catch (e) {
-      debugPrint('[GigProvider] Supabase gig update failed: $e');
-    }
+    await SyncQueueProcessor.instance.processPending(reason: 'gig_update');
     ref.invalidate(gigByIdProvider(gig.id));
     ref.invalidateSelf();
     await _reloadInvoicesLocal();
@@ -91,16 +97,23 @@ class GigsNotifier extends AsyncNotifier<List<Gig>> {
     await repository.updateStatus(id, status);
     final updatedGig = await repository.getById(id);
     final invoice = await ref.read(invoiceRepositoryProvider).getByGigId(id);
-    try {
-      if (invoice != null && previousInvoice == null) {
-        await SupabaseService.instance.uploadInvoices([invoice]);
-      }
-      if (updatedGig != null) {
-        await SupabaseService.instance.uploadGigDirect(updatedGig);
-      }
-    } catch (e) {
-      debugPrint('[GigProvider] Supabase status sync failed: $e');
+    if (invoice != null && previousInvoice == null) {
+      await SyncQueueRepository.instance.enqueue(
+        entityType: SyncEntityType.invoice,
+        entityId: invoice.id,
+        operation: SyncOperation.create,
+        payload: invoice.toMap(),
+      );
     }
+    if (updatedGig != null) {
+      await SyncQueueRepository.instance.enqueue(
+        entityType: SyncEntityType.gig,
+        entityId: updatedGig.id,
+        operation: SyncOperation.statusChange,
+        payload: updatedGig.toMap(),
+      );
+    }
+    await SyncQueueProcessor.instance.processPending(reason: 'gig_status');
     await AppEventRepository.instance.insert(
       AppEvent(
         entityType: 'gig',
@@ -122,13 +135,17 @@ class GigsNotifier extends AsyncNotifier<List<Gig>> {
   Future<void> linkInvoice(String gigId, String invoiceId) async {
     await ref.read(gigRepositoryProvider).linkInvoice(gigId, invoiceId);
     final gig = await ref.read(gigRepositoryProvider).getById(gigId);
-    try {
-      if (gig != null) {
-        await SupabaseService.instance.uploadGigDirect(gig);
-      }
-    } catch (e) {
-      debugPrint('[GigProvider] Supabase link invoice failed: $e');
+    if (gig != null) {
+      await SyncQueueRepository.instance.enqueue(
+        entityType: SyncEntityType.gig,
+        entityId: gig.id,
+        operation: SyncOperation.update,
+        payload: gig.toMap(),
+      );
     }
+    await SyncQueueProcessor.instance.processPending(
+      reason: 'gig_link_invoice',
+    );
     await AppEventRepository.instance.insert(
       AppEvent(
         entityType: 'gig',
@@ -159,19 +176,47 @@ class GigsNotifier extends AsyncNotifier<List<Gig>> {
       ),
     );
 
-    // 2. Borrar de Supabase (await + queue si falla)
-    try {
-      await SupabaseService.instance.deleteGigsBatch(
-        gigIds: result.deletedGigIds,
-        invoiceIds: result.deletedInvoiceIds,
-      );
-    } catch (e) {
-      debugPrint('[GigProvider] Supabase delete failed, queuing: $e');
-      for (final invoiceId in result.deletedInvoiceIds) {
-        await DatabaseHelper.instance.addPendingDeletion('invoices', invoiceId);
+    for (final invoiceId in result.deletedInvoiceIds) {
+      final deleted = await ref
+          .read(invoiceRepositoryProvider)
+          .getById(invoiceId);
+      if (deleted != null) {
+        await SyncQueueRepository.instance.enqueue(
+          entityType: SyncEntityType.invoice,
+          entityId: invoiceId,
+          operation: SyncOperation.delete,
+          payload: deleted.toMap(),
+        );
       }
-      for (final gigId in result.deletedGigIds) {
-        await DatabaseHelper.instance.addPendingDeletion('gigs', gigId);
+    }
+    for (final gigId in result.deletedGigIds) {
+      final deleted = await ref.read(gigRepositoryProvider).getById(gigId);
+      if (deleted != null) {
+        await SyncQueueRepository.instance.enqueue(
+          entityType: SyncEntityType.gig,
+          entityId: gigId,
+          operation: SyncOperation.delete,
+          payload: deleted.toMap(),
+        );
+      }
+    }
+    await SyncQueueProcessor.instance.processPending(reason: 'gig_delete');
+
+    // Compatibilidad con la cola antigua de borrados si la cola nueva fallase
+    for (final invoiceId in result.deletedInvoiceIds) {
+      try {
+        final hasPending = await SyncQueueRepository.instance.hasPending(
+          'invoice',
+          invoiceId,
+        );
+        if (hasPending) {
+          await DatabaseHelper.instance.addPendingDeletion(
+            'invoices',
+            invoiceId,
+          );
+        }
+      } catch (e) {
+        debugPrint('[GigProvider] Pending deletion fallback failed: $e');
       }
     }
 
@@ -190,6 +235,18 @@ class GigsNotifier extends AsyncNotifier<List<Gig>> {
   Future<void> bulkUpdateStatus(Set<String> ids, GigStatus status) async {
     if (ids.isEmpty) return;
     await ref.read(gigRepositoryProvider).updateStatusBatch(ids, status);
+    for (final id in ids) {
+      final gig = await ref.read(gigRepositoryProvider).getById(id);
+      if (gig != null) {
+        await SyncQueueRepository.instance.enqueue(
+          entityType: SyncEntityType.gig,
+          entityId: id,
+          operation: SyncOperation.statusChange,
+          payload: gig.toMap(),
+        );
+      }
+    }
+    await SyncQueueProcessor.instance.processPending(reason: 'gig_bulk_status');
     ref.invalidateSelf();
     await _reloadInvoicesLocal();
   }
@@ -199,6 +256,20 @@ class GigsNotifier extends AsyncNotifier<List<Gig>> {
     await ref
         .read(gigRepositoryProvider)
         .updateFacturableBatch(ids, facturable);
+    for (final id in ids) {
+      final gig = await ref.read(gigRepositoryProvider).getById(id);
+      if (gig != null) {
+        await SyncQueueRepository.instance.enqueue(
+          entityType: SyncEntityType.gig,
+          entityId: id,
+          operation: SyncOperation.update,
+          payload: gig.toMap(),
+        );
+      }
+    }
+    await SyncQueueProcessor.instance.processPending(
+      reason: 'gig_bulk_facturable',
+    );
     ref.invalidateSelf();
     await _reloadInvoicesLocal();
   }
@@ -207,20 +278,31 @@ class GigsNotifier extends AsyncNotifier<List<Gig>> {
     if (ids.isEmpty) return;
     final result = await ref.read(gigRepositoryProvider).deleteBatch(ids);
 
-    try {
-      await SupabaseService.instance.deleteGigsBatch(
-        gigIds: result.deletedGigIds,
-        invoiceIds: result.deletedInvoiceIds,
-      );
-    } catch (e) {
-      debugPrint('[GigProvider] Supabase bulk delete failed, queuing: $e');
-      for (final invoiceId in result.deletedInvoiceIds) {
-        await DatabaseHelper.instance.addPendingDeletion('invoices', invoiceId);
-      }
-      for (final gigId in result.deletedGigIds) {
-        await DatabaseHelper.instance.addPendingDeletion('gigs', gigId);
+    for (final invoiceId in result.deletedInvoiceIds) {
+      final deleted = await ref
+          .read(invoiceRepositoryProvider)
+          .getById(invoiceId);
+      if (deleted != null) {
+        await SyncQueueRepository.instance.enqueue(
+          entityType: SyncEntityType.invoice,
+          entityId: invoiceId,
+          operation: SyncOperation.delete,
+          payload: deleted.toMap(),
+        );
       }
     }
+    for (final gigId in result.deletedGigIds) {
+      final deleted = await ref.read(gigRepositoryProvider).getById(gigId);
+      if (deleted != null) {
+        await SyncQueueRepository.instance.enqueue(
+          entityType: SyncEntityType.gig,
+          entityId: gigId,
+          operation: SyncOperation.delete,
+          payload: deleted.toMap(),
+        );
+      }
+    }
+    await SyncQueueProcessor.instance.processPending(reason: 'gig_bulk_delete');
 
     try {
       final calendar = GoogleCalendarService();

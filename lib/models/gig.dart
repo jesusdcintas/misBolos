@@ -74,6 +74,8 @@ class Gig {
   final GigStatus status;
   final String? invoiceId;
   final DateTime createdAt;
+  final DateTime updatedAt;
+  final DateTime? deletedAt;
 
   Gig({
     String? id,
@@ -85,8 +87,11 @@ class Gig {
     this.status = GigStatus.pendiente,
     this.invoiceId,
     DateTime? createdAt,
-  })  : id = id ?? const Uuid().v4(),
-        createdAt = createdAt ?? DateTime.now();
+    DateTime? updatedAt,
+    this.deletedAt,
+  }) : id = id ?? const Uuid().v4(),
+       createdAt = createdAt ?? DateTime.now(),
+       updatedAt = updatedAt ?? DateTime.now();
 
   Gig copyWith({
     DateTime? fecha,
@@ -96,6 +101,8 @@ class Gig {
     bool? facturable,
     GigStatus? status,
     String? invoiceId,
+    DateTime? updatedAt,
+    DateTime? deletedAt,
   }) {
     return Gig(
       id: id,
@@ -107,8 +114,12 @@ class Gig {
       status: status ?? this.status,
       invoiceId: invoiceId ?? this.invoiceId,
       createdAt: createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      deletedAt: deletedAt ?? this.deletedAt,
     );
   }
+
+  Gig touch() => copyWith(updatedAt: DateTime.now());
 
   Map<String, dynamic> toMap() {
     return {
@@ -121,6 +132,8 @@ class Gig {
       'status': status.dbValue,
       'invoice_id': invoiceId,
       'created_at': createdAt.toIso8601String(),
+      'updated_at': updatedAt.toIso8601String(),
+      'deleted_at': deletedAt?.toIso8601String(),
     };
   }
 
@@ -135,6 +148,12 @@ class Gig {
       status: GigStatusExtension.fromDb(map['status'] as String),
       invoiceId: map['invoice_id'] as String?,
       createdAt: DateTime.parse(map['created_at'] as String),
+      updatedAt: DateTime.parse(
+        (map['updated_at'] ?? map['created_at']) as String,
+      ),
+      deletedAt: map['deleted_at'] != null
+          ? DateTime.parse(map['deleted_at'] as String)
+          : null,
     );
   }
 }

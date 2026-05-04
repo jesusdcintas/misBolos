@@ -4,12 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/app_event.dart';
 import '../models/invoice.dart';
+import '../models/sync_queue_item.dart';
 import '../repositories/app_event_repository.dart';
 import '../repositories/gig_repository.dart';
 import '../repositories/invoice_repository.dart';
-import '../database/database_helper.dart';
+import '../repositories/sync_queue_repository.dart';
 import '../services/import_service.dart';
 import '../services/supabase_service.dart';
+import '../services/sync_queue_processor.dart';
 import 'gig_provider.dart';
 
 final invoiceRepositoryProvider = Provider((ref) => InvoiceRepository.instance);
@@ -32,6 +34,9 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
   Future<List<Invoice>> build() async {
     _startRealtimeIfNeeded();
     ref.onDispose(_disposeRealtime);
+    await SyncQueueProcessor.instance.processPending(
+      reason: 'invoices_provider',
+    );
     return ref.read(invoiceRepositoryProvider).getAll();
   }
 
@@ -172,6 +177,11 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
         total: (m['total'] as num?)?.toDouble() ?? 0,
         status: status,
         createdAt: createdAt,
+        updatedAt:
+            DateTime.tryParse((m['updated_at'] ?? '').toString()) ?? createdAt,
+        deletedAt: m['deleted_at'] != null
+            ? DateTime.tryParse(m['deleted_at'].toString())
+            : null,
       );
     } catch (_) {
       return null;
@@ -251,17 +261,38 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
 
   Future<void> _doRefreshFromCloud(String reason) async {
     debugPrint('[InvoicesSync] refresh remoto start ($reason)');
+    await SyncQueueProcessor.instance.processPending(
+      reason: 'invoice_refresh_$reason',
+    );
     final repository = ref.read(invoiceRepositoryProvider);
     final cloudInvoices = await SupabaseService.instance.downloadInvoices();
 
     for (final invoice in cloudInvoices) {
-      await repository.upsert(invoice);
+      if (invoice.deletedAt != null) {
+        await repository.delete(invoice.id);
+        continue;
+      }
+
+      final hasPending = await SyncQueueRepository.instance.hasPending(
+        'invoice',
+        invoice.id,
+      );
+      if (hasPending) continue;
+
+      final local = await repository.getById(invoice.id);
+      if (local == null || invoice.updatedAt.isAfter(local.updatedAt)) {
+        await repository.upsert(invoice);
+      }
     }
 
     final cloudIds = cloudInvoices.map((i) => i.id).toSet();
     final localInvoices = await repository.getAll();
     for (final local in localInvoices) {
-      if (!cloudIds.contains(local.id)) {
+      final hasPending = await SyncQueueRepository.instance.hasPending(
+        'invoice',
+        local.id,
+      );
+      if (!cloudIds.contains(local.id) && !hasPending) {
         await repository.delete(local.id);
       }
     }
@@ -279,11 +310,14 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
       '[InvoiceProvider] createInvoiceFromGig start invoice_id=${invoice.id} gig_id=${invoice.gigId}',
     );
     await ref.read(invoiceRepositoryProvider).insert(invoice);
-    try {
-      await SupabaseService.instance.uploadInvoices([invoice]);
-    } catch (e) {
-      debugPrint('[InvoiceProvider] Supabase create upload failed: $e');
-    }
+    final saved = await ref.read(invoiceRepositoryProvider).getById(invoice.id);
+    await SyncQueueRepository.instance.enqueue(
+      entityType: SyncEntityType.invoice,
+      entityId: invoice.id,
+      operation: SyncOperation.create,
+      payload: (saved ?? invoice).toMap(),
+    );
+    await SyncQueueProcessor.instance.processPending(reason: 'invoice_add');
     await AppEventRepository.instance.insert(
       AppEvent(
         entityType: 'invoice',
@@ -311,6 +345,7 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
     );
     final repository = ref.read(invoiceRepositoryProvider);
     await repository.insertAndLinkGig(invoice);
+    final savedInvoice = await repository.getById(invoice.id);
     final gig = await GigRepository.instance.getById(invoice.gigId);
     await AppEventRepository.instance.insert(
       AppEvent(
@@ -326,14 +361,23 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
         },
       ),
     );
-    try {
-      await SupabaseService.instance.uploadInvoices([invoice]);
-      if (gig != null) {
-        await SupabaseService.instance.uploadGigDirect(gig);
-      }
-    } catch (e) {
-      debugPrint('[InvoiceProvider] Supabase create/link upload failed: $e');
+    await SyncQueueRepository.instance.enqueue(
+      entityType: SyncEntityType.invoice,
+      entityId: invoice.id,
+      operation: SyncOperation.create,
+      payload: (savedInvoice ?? invoice).toMap(),
+    );
+    if (gig != null) {
+      await SyncQueueRepository.instance.enqueue(
+        entityType: SyncEntityType.gig,
+        entityId: gig.id,
+        operation: SyncOperation.update,
+        payload: gig.toMap(),
+      );
     }
+    await SyncQueueProcessor.instance.processPending(
+      reason: 'invoice_add_link',
+    );
     debugPrint(
       '[InvoiceProvider] createInvoiceFromGig done invoice_id=${invoice.id} gig_id=${invoice.gigId}',
     );
@@ -345,11 +389,14 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
   Future<void> updateInvoice(Invoice invoice) async {
     _markLocalMutation();
     await ref.read(invoiceRepositoryProvider).update(invoice);
-    try {
-      await SupabaseService.instance.uploadInvoices([invoice]);
-    } catch (e) {
-      debugPrint('[InvoiceProvider] Supabase invoice update failed: $e');
-    }
+    final saved = await ref.read(invoiceRepositoryProvider).getById(invoice.id);
+    await SyncQueueRepository.instance.enqueue(
+      entityType: SyncEntityType.invoice,
+      entityId: invoice.id,
+      operation: SyncOperation.update,
+      payload: (saved ?? invoice).toMap(),
+    );
+    await SyncQueueProcessor.instance.processPending(reason: 'invoice_update');
     await AppEventRepository.instance.insert(
       AppEvent(
         entityType: 'invoice',
@@ -374,11 +421,12 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
     await repository.updateStatus(id, status);
     final invoice = await repository.getById(id);
     if (invoice != null) {
-      try {
-        await SupabaseService.instance.uploadInvoices([invoice]);
-      } catch (e) {
-        debugPrint('[InvoiceProvider] Supabase status upload failed: $e');
-      }
+      await SyncQueueRepository.instance.enqueue(
+        entityType: SyncEntityType.invoice,
+        entityId: invoice.id,
+        operation: SyncOperation.statusChange,
+        payload: invoice.toMap(),
+      );
       await AppEventRepository.instance.insert(
         AppEvent(
           entityType: 'invoice',
@@ -395,12 +443,16 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
       await GigRepository.instance.repairStatusesFromInvoices([invoice]);
       final gig = await GigRepository.instance.getById(invoice.gigId);
       if (gig != null) {
-        try {
-          await SupabaseService.instance.uploadGigDirect(gig);
-        } catch (e) {
-          debugPrint('[InvoiceProvider] Supabase gig status upload failed: $e');
-        }
+        await SyncQueueRepository.instance.enqueue(
+          entityType: SyncEntityType.gig,
+          entityId: gig.id,
+          operation: SyncOperation.statusChange,
+          payload: gig.toMap(),
+        );
       }
+      await SyncQueueProcessor.instance.processPending(
+        reason: 'invoice_status',
+      );
       ref.invalidate(gigByIdProvider(invoice.gigId));
       ref.invalidate(gigsProvider);
     }
@@ -424,18 +476,29 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
         },
       ),
     );
-    try {
-      await SupabaseService.instance.deleteInvoice(id);
-      if (invoice != null) {
-        final gig = await GigRepository.instance.getById(invoice.gigId);
-        if (gig != null) {
-          await SupabaseService.instance.uploadGigDirect(gig);
-        }
-      }
-    } catch (e) {
-      debugPrint('[InvoiceProvider] Supabase delete failed, queuing: $e');
-      await DatabaseHelper.instance.addPendingDeletion('invoices', id);
+    final deletedInvoice = await ref
+        .read(invoiceRepositoryProvider)
+        .getById(id);
+    if (deletedInvoice != null) {
+      await SyncQueueRepository.instance.enqueue(
+        entityType: SyncEntityType.invoice,
+        entityId: id,
+        operation: SyncOperation.delete,
+        payload: deletedInvoice.toMap(),
+      );
     }
+    if (invoice != null) {
+      final gig = await GigRepository.instance.getById(invoice.gigId);
+      if (gig != null) {
+        await SyncQueueRepository.instance.enqueue(
+          entityType: SyncEntityType.gig,
+          entityId: gig.id,
+          operation: SyncOperation.update,
+          payload: gig.toMap(),
+        );
+      }
+    }
+    await SyncQueueProcessor.instance.processPending(reason: 'invoice_delete');
     await reloadLocal();
     if (invoice != null) {
       ref.invalidate(gigByIdProvider(invoice.gigId));
@@ -450,11 +513,15 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
     await repository.updateNumber(id, newNumber);
     final invoice = await repository.getById(id);
     if (invoice != null) {
-      try {
-        await SupabaseService.instance.uploadInvoices([invoice]);
-      } catch (e) {
-        debugPrint('[InvoiceProvider] Supabase number upload failed: $e');
-      }
+      await SyncQueueRepository.instance.enqueue(
+        entityType: SyncEntityType.invoice,
+        entityId: id,
+        operation: SyncOperation.update,
+        payload: invoice.toMap(),
+      );
+      await SyncQueueProcessor.instance.processPending(
+        reason: 'invoice_number',
+      );
     }
     await AppEventRepository.instance.insert(
       AppEvent(

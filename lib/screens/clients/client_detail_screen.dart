@@ -48,20 +48,37 @@ class ClientDetailScreen extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                    if (client.cifNif.isNotEmpty)
-                      _InfoRow(label: AppStrings.cifNif, value: client.cifNif),
-                    if (client.direccion.isNotEmpty)
-                      _InfoRow(label: AppStrings.direccion, value: client.direccion),
-                    if (client.ciudad.isNotEmpty)
-                      _InfoRow(
+                      if (client.cifNif.isNotEmpty)
+                        _InfoRow(
+                          label: AppStrings.cifNif,
+                          value: client.cifNif,
+                        ),
+                      if (client.direccion.isNotEmpty)
+                        _InfoRow(
+                          label: AppStrings.direccion,
+                          value: client.direccion,
+                        ),
+                      if (client.ciudad.isNotEmpty)
+                        _InfoRow(
                           label: AppStrings.ciudad,
-                          value: '${client.ciudad} ${client.codigoPostal}'),
-                    if (client.provincia.isNotEmpty)
-                      _InfoRow(label: 'Provincia', value: client.provincia),
-                    if (client.email != null && client.email!.isNotEmpty)
-                      _InfoRow(label: AppStrings.email, value: client.email!),
-                    if (client.telefono != null && client.telefono!.isNotEmpty)
-                      _InfoRow(label: AppStrings.telefono, value: client.telefono!),
+                          value: '${client.ciudad} ${client.codigoPostal}',
+                        ),
+                      if (client.provincia.isNotEmpty)
+                        _InfoRow(label: 'Provincia', value: client.provincia),
+                      if (client.email != null && client.email!.isNotEmpty)
+                        _InfoRow(label: AppStrings.email, value: client.email!),
+                      if (client.telefono != null &&
+                          client.telefono!.isNotEmpty)
+                        _InfoRow(
+                          label: AppStrings.telefono,
+                          value: client.telefono!,
+                        ),
+                      if (client.whatsappPhone != null &&
+                          client.whatsappPhone!.isNotEmpty)
+                        _InfoRow(
+                          label: AppStrings.whatsapp,
+                          value: client.whatsappPhone!,
+                        ),
                     ],
                   ),
                 ),
@@ -75,8 +92,7 @@ class ClientDetailScreen extends ConsumerWidget {
                   double totalEnB = 0;
                   for (final g in gigs) {
                     final c = g.cachet ?? 0;
-                    if (g.facturable &&
-                        (g.status == GigStatus.pagado)) {
+                    if (g.facturable && (g.status == GigStatus.pagado)) {
                       totalOficial += c;
                     } else if (!g.facturable &&
                         g.status == GigStatus.cobradoEnB) {
@@ -92,14 +108,18 @@ class ClientDetailScreen extends ConsumerWidget {
                             padding: const EdgeInsets.all(12),
                             child: Column(
                               children: [
-                                const Text('Total facturado',
-                                    style: TextStyle(fontSize: 12)),
-                                Text(CurrencyFormatter.format(totalOficial),
-                                    style: const TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                      color: AppColors.accentGreen,
-                                    )),
+                                const Text(
+                                  'Total facturado',
+                                  style: TextStyle(fontSize: 12),
+                                ),
+                                Text(
+                                  CurrencyFormatter.format(totalOficial),
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.accentGreen,
+                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -112,14 +132,18 @@ class ClientDetailScreen extends ConsumerWidget {
                             padding: const EdgeInsets.all(12),
                             child: Column(
                               children: [
-                                const Text('Cobrado en B',
-                                    style: TextStyle(fontSize: 12)),
-                                Text(CurrencyFormatter.format(totalEnB),
-                                    style: const TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                      color: AppColors.accentPurple,
-                                    )),
+                                const Text(
+                                  'Cobrado en B',
+                                  style: TextStyle(fontSize: 12),
+                                ),
+                                Text(
+                                  CurrencyFormatter.format(totalEnB),
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.accentPurple,
+                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -134,8 +158,10 @@ class ClientDetailScreen extends ConsumerWidget {
               const SizedBox(height: 16),
 
               // Historial de bolos
-              Text('Historial de bolos',
-                  style: Theme.of(context).textTheme.titleMedium),
+              Text(
+                'Historial de bolos',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
               const SizedBox(height: 8),
               gigsAsync.when(
                 data: (gigs) {
@@ -146,23 +172,27 @@ class ClientDetailScreen extends ConsumerWidget {
                     );
                   }
                   return Column(
-                    children: gigs.map((g) => Card(
-                      child: ListTile(
-                        onTap: () => context.push('/gig/${g.id}'),
-                        title: Text(DateFormatter.display(g.fecha)),
-                        subtitle: g.cachet != null
-                            ? Text(CurrencyFormatter.format(g.cachet!))
-                            : null,
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            FacturableBadge(facturable: g.facturable),
-                            const SizedBox(width: 4),
-                            StatusBadge(status: g.status),
-                          ],
-                        ),
-                      ),
-                    )).toList(),
+                    children: gigs
+                        .map(
+                          (g) => Card(
+                            child: ListTile(
+                              onTap: () => context.push('/gig/${g.id}'),
+                              title: Text(DateFormatter.display(g.fecha)),
+                              subtitle: g.cachet != null
+                                  ? Text(CurrencyFormatter.format(g.cachet!))
+                                  : null,
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  FacturableBadge(facturable: g.facturable),
+                                  const SizedBox(width: 4),
+                                  StatusBadge(status: g.status),
+                                ],
+                              ),
+                            ),
+                          ),
+                        )
+                        .toList(),
                   );
                 },
                 loading: () => const Center(child: CircularProgressIndicator()),
@@ -198,12 +228,14 @@ class _InfoRow extends StatelessWidget {
         children: [
           SizedBox(
             width: 100,
-            child: Text(label,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                  color: AppColors.textSecondary,
-                )),
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+                color: AppColors.textSecondary,
+              ),
+            ),
           ),
           Expanded(child: Text(value, style: const TextStyle(fontSize: 13))),
         ],

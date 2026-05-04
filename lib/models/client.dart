@@ -13,6 +13,7 @@ class Client {
   final String codigoPostal;
   final String? email;
   final String? telefono;
+  final String? whatsappPhone;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -28,11 +29,12 @@ class Client {
     this.codigoPostal = '',
     this.email,
     this.telefono,
+    this.whatsappPhone,
     DateTime? createdAt,
     DateTime? updatedAt,
-  })  : id = id ?? const Uuid().v4(),
-        createdAt = createdAt ?? DateTime.now(),
-        updatedAt = updatedAt ?? DateTime.now();
+  }) : id = id ?? const Uuid().v4(),
+       createdAt = createdAt ?? DateTime.now(),
+       updatedAt = updatedAt ?? DateTime.now();
 
   Client copyWith({
     String? nombre,
@@ -45,6 +47,7 @@ class Client {
     String? codigoPostal,
     String? email,
     String? telefono,
+    String? whatsappPhone,
     DateTime? updatedAt,
   }) {
     return Client(
@@ -59,6 +62,7 @@ class Client {
       codigoPostal: codigoPostal ?? this.codigoPostal,
       email: email ?? this.email,
       telefono: telefono ?? this.telefono,
+      whatsappPhone: whatsappPhone ?? this.whatsappPhone,
       createdAt: createdAt,
       updatedAt: updatedAt ?? DateTime.now(),
     );
@@ -77,6 +81,7 @@ class Client {
       'codigo_postal': codigoPostal,
       'email': email,
       'telefono': telefono,
+      'whatsapp_phone': whatsappPhone,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
     };
@@ -97,6 +102,7 @@ class Client {
       codigoPostal: map['codigo_postal'] as String? ?? '',
       email: map['email'] as String?,
       telefono: map['telefono'] as String?,
+      whatsappPhone: map['whatsapp_phone'] as String?,
       createdAt: DateTime.parse(map['created_at'] as String),
       updatedAt: DateTime.parse(map['updated_at'] as String),
     );

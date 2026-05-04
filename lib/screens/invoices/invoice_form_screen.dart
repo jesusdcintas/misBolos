@@ -372,6 +372,9 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
               Text(_client!.email!, style: const TextStyle(color: Colors.blue)),
             if (_client!.telefono != null && _client!.telefono!.isNotEmpty)
               Text(_client!.telefono!),
+            if (_client!.whatsappPhone != null &&
+                _client!.whatsappPhone!.isNotEmpty)
+              Text('WhatsApp: ${_client!.whatsappPhone!}'),
           ],
         ),
       ),
