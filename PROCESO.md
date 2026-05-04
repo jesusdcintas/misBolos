@@ -735,3 +735,52 @@ GOOGLE_CLIENT_SECRET=***
 ### 10. Typo spread operator `..[ → ...[`
 - **Causa:** Error tipográfico en la lista de `ActionButton` del `ExpandableFAB`
 - **Solución:** Corregir el spread operator `...[` en `dashboard_screen.dart`
+
+## Actualización 2026-05-04 — Sync robusta y WhatsApp
+
+### Fase Sync robusta (completada)
+- Implementada cola genérica local `sync_queue` para `gig` e `invoice` con
+  operaciones `create`, `update`, `delete` y `status_change`.
+- Procesador de cola con reintentos, límite de intentos y registro de
+  `last_error`.
+- Estrategia offline-first: la operación local nunca falla por error de red;
+  si Supabase falla, la acción queda pendiente en cola.
+- Reintentos automáticos al abrir app, al entrar en secciones clave y al
+  relanzar sincronización manual.
+- Pull-to-refresh en Agenda y Facturas: primero sube pendientes y después baja
+  cambios remotos.
+- Compatibilidad mantenida con el botón existente `Sincronizar todo`.
+- Añadido indicador UI de pendientes de sincronizar (contador de `sync_queue`).
+
+### Borrados persistentes y conflictos (completado)
+- Adoptado `deleted_at` para `gigs` e `invoices` en local y Supabase.
+- Política de resolución:
+  - `deleted_at` tiene prioridad sobre `updated_at`.
+  - si remoto está más nuevo, gana remoto.
+  - antes de descargar, se intenta subir primero cambios locales pendientes.
+- Evitada “resurrección” de registros borrados al sincronizar entre
+  dispositivos.
+
+### Migraciones y schema (completado)
+- Supabase:
+  - `supabase/migrations/202605040001_soft_delete_sync_columns.sql`
+  - `supabase/migrations/202605040002_client_whatsapp_phone.sql`
+- SQLite:
+  - `v18_sync_queue_soft_delete.dart`
+  - `v19_client_whatsapp_phone.dart`
+- `schema.sql` actualizado para reflejar `deleted_at`, índices y unicidad de
+  facturas ignorando soft-deleted.
+
+### WhatsApp (estado actual)
+- Separado teléfono general de cliente y teléfono de WhatsApp:
+  `clients.whatsapp_phone`.
+- Formulario y detalle de cliente actualizados para editar ambos campos.
+- En factura, acción de WhatsApp adaptada para compartir el PDF generado desde
+  la app (vía hoja de compartir), con mensaje prellenado.
+- En bolo/factura se mantiene normalización de teléfono y fallback cuando no
+  hay número válido.
+
+### Validación
+- Validación E2E en dos dispositivos: crear/editar/borrar offline y reintento
+  al recuperar conexión.
+- Instalación en iPhone en modo release verificada durante esta fase.
