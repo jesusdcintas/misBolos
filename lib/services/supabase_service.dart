@@ -168,64 +168,106 @@ class SupabaseService {
       );
       return;
     }
-    await uploadInvoices([Invoice.fromMap(item.payload)]);
+    final includeNumber = item.operation == SyncOperation.create;
+    await uploadInvoices([
+      Invoice.fromMap(item.payload),
+    ], includeNumberForExisting: includeNumber);
   }
 
-  Future<void> uploadInvoices(List<Invoice> invoices) async {
+  Future<void> uploadInvoices(
+    List<Invoice> invoices, {
+    bool includeNumberForExisting = false,
+  }) async {
     if (!isAuthenticated) return;
 
     for (final invoice in invoices) {
-      await _uploadInvoiceWithFallback(invoice);
+      final exists = await _remoteInvoiceExists(invoice.id);
+      await _uploadInvoiceWithFallback(
+        invoice,
+        includeNumber: !exists || includeNumberForExisting,
+      );
     }
     debugPrint('[Supabase] Uploaded ${invoices.length} invoices');
   }
 
-  Future<void> _uploadInvoiceWithFallback(Invoice invoice) async {
-    // Eliminar factura en la nube con mismo numero pero distinto id (renumeración)
-    await _client!
+  Future<bool> _remoteInvoiceExists(String invoiceId) async {
+    final rows = await _client!
         .from('invoices')
-        .delete()
+        .select('id')
         .eq('user_id', userId!)
-        .eq('numero', invoice.numero.toString())
-        .gte(
-          'fecha_emision',
-          DateTime(invoice.fecha.year, 1, 1).toIso8601String().split('T').first,
-        )
-        .lte(
-          'fecha_emision',
-          DateTime(
-            invoice.fecha.year,
-            12,
-            31,
-          ).toIso8601String().split('T').first,
-        )
-        .neq('id', invoice.id);
-
-    final map = _invoiceToSupabaseEs(invoice);
-    await _upsertInvoiceWithSchemaFallback(invoice, map);
+        .eq('id', invoiceId)
+        .limit(1);
+    return (rows as List).isNotEmpty;
   }
 
-  Future<void> renumberInvoices(List<Invoice> invoices) async {
+  Future<void> _uploadInvoiceWithFallback(
+    Invoice invoice, {
+    required bool includeNumber,
+  }) async {
+    if (includeNumber && invoice.numero <= 0) {
+      throw StateError('No se pueden subir números temporales a Supabase.');
+    }
+
+    final map = _invoiceToSupabaseEs(invoice, includeNumber: includeNumber);
+    if (includeNumber) {
+      await _upsertInvoiceWithSchemaFallback(invoice, map);
+    } else {
+      await _updateInvoiceWithSchemaFallback(invoice, map);
+    }
+  }
+
+  Future<void> renumberInvoices(
+    List<Invoice> invoices, {
+    String? reason,
+  }) async {
     if (!isAuthenticated || invoices.isEmpty) return;
-
-    for (var i = 0; i < invoices.length; i++) {
-      await _client!
-          .from('invoices')
-          .update({'numero': (-1000000 - i).toString()})
-          .eq('user_id', userId!)
-          .eq('id', invoices[i].id);
+    if (invoices.any((invoice) => invoice.numero <= 0)) {
+      throw StateError('Supabase no puede recibir números temporales.');
     }
 
-    for (final invoice in invoices) {
-      await _upsertInvoiceWithSchemaFallback(
-        invoice,
-        _invoiceToSupabaseEs(invoice),
-      );
+    final fiscalYears = invoices.map((invoice) => invoice.fecha.year).toSet();
+    if (fiscalYears.length != 1) {
+      throw StateError('Solo se puede reenumerar un año fiscal cada vez.');
     }
+
+    final changes = invoices
+        .map((invoice) => {'id': invoice.id, 'numero': invoice.numero})
+        .toList(growable: false);
+    await _client!.rpc(
+      'renumber_invoices_manually',
+      params: {
+        'p_fiscal_year': fiscalYears.single,
+        'p_changes': changes,
+        'p_reason': reason ?? 'manual_renumber_from_flutter',
+      },
+    );
 
     debugPrint(
-      '[Supabase] Renumbered ${invoices.length} invoices for year ${invoices.first.fecha.year}',
+      '[Supabase] Manual renumbered ${invoices.length} invoices for year ${fiscalYears.single}',
     );
+  }
+
+  Future<bool> hasAuthorizedInvoiceNumberChange({
+    required String invoiceId,
+    required int newNumber,
+  }) async {
+    if (!isAuthenticated) return false;
+    try {
+      final rows = await _client!
+          .from('invoice_number_changes')
+          .select('id')
+          .eq('user_id', userId!)
+          .eq('invoice_id', invoiceId)
+          .eq('new_number', newNumber)
+          .eq('source', 'manual_renumber')
+          .limit(1);
+      return (rows as List).isNotEmpty;
+    } catch (error) {
+      debugPrint(
+        '[Supabase] No se pudo verificar auditoría de número invoice_id=$invoiceId: $error',
+      );
+      return false;
+    }
   }
 
   Future<void> _upsertInvoiceWithSchemaFallback(
@@ -254,6 +296,36 @@ class SupabaseService {
 
     // Si seguimos aqui, re-lanzar para que quede registrado en logs.
     await _client!.from('invoices').upsert(map, onConflict: 'id');
+  }
+
+  Future<void> _updateInvoiceWithSchemaFallback(
+    Invoice invoice,
+    Map<String, dynamic> initialMap,
+  ) async {
+    Map<String, dynamic> map = Map<String, dynamic>.from(initialMap);
+
+    for (var attempt = 0; attempt < 4; attempt++) {
+      try {
+        await _client!
+            .from('invoices')
+            .update(map)
+            .eq('user_id', userId!)
+            .eq('id', invoice.id);
+        return;
+      } on PostgrestException catch (e) {
+        final missing = _extractMissingColumn(e);
+        if (missing == null) rethrow;
+
+        final updated = _applyInvoiceColumnFallback(invoice, map, missing);
+        if (!updated) rethrow;
+      }
+    }
+
+    await _client!
+        .from('invoices')
+        .update(map)
+        .eq('user_id', userId!)
+        .eq('id', invoice.id);
   }
 
   String? _extractMissingColumn(PostgrestException e) {
@@ -627,6 +699,7 @@ class SupabaseService {
     final data = await _client!.from('invoices').select();
     final invoices = (data as List)
         .map((e) => _invoiceFromSupabase(e))
+        .where((invoice) => invoice.numero > 0)
         .toList();
     debugPrint('[Supabase] Downloaded ${invoices.length} invoices');
     return invoices;
@@ -701,10 +774,13 @@ class SupabaseService {
         : null,
   );
 
-  Map<String, dynamic> _invoiceToSupabaseEs(Invoice i) => {
+  Map<String, dynamic> _invoiceToSupabaseEs(
+    Invoice i, {
+    bool includeNumber = true,
+  }) => {
     'id': i.id,
     'user_id': userId,
-    'numero': i.numero.toString(),
+    if (includeNumber) 'numero': i.numero.toString(),
     'fecha_emision': i.fecha.toIso8601String().split('T').first,
     'client_id': i.clientId,
     'gig_id': i.gigId,

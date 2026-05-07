@@ -1,9 +1,7 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_strings.dart';
@@ -21,7 +19,6 @@ import '../../services/pdf_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/google_auth_service.dart';
 import '../../services/google_calendar_service.dart';
-import '../../services/import_service.dart';
 import '../../widgets/common/empty_state.dart';
 import '../../widgets/common/skeleton_loading.dart';
 import '../../core/utils/app_haptics.dart';
@@ -614,40 +611,48 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: PopupMenuButton<String>(
-              onSelected: (value) {
-                if (value == 'renumber') {
-                  _showRenumberDialog(context, ref);
-                } else if (value == 'apply_excel_numbering') {
-                  _showApplyExcelNumberingDialog(context, ref);
-                }
+            child: Builder(
+              builder: (menuContext) {
+                final isMobile = MediaQuery.of(menuContext).size.width < 430;
+                final renumberLabel = isMobile
+                    ? 'Reenumerar'
+                    : 'Reenumerar facturas';
+                return PopupMenuButton<String>(
+                  onSelected: (value) {
+                    if (value == 'renumber') {
+                      _showRenumberDialog(context, ref);
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    PopupMenuItem(
+                      value: 'renumber',
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: isMobile ? 190 : 280,
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.format_list_numbered, size: 20),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                renumberLabel,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                softWrap: true,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                  child: const _InlineActionButtonContent(
+                    icon: Icons.more_horiz,
+                    label: 'Más',
+                  ),
+                );
               },
-              itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: 'apply_excel_numbering',
-                  child: Row(
-                    children: [
-                      Icon(Icons.upload_file, size: 20),
-                      SizedBox(width: 12),
-                      Text('Aplicar numeración desde Excel'),
-                    ],
-                  ),
-                ),
-                const PopupMenuItem(
-                  value: 'renumber',
-                  child: Row(
-                    children: [
-                      Icon(Icons.format_list_numbered, size: 20),
-                      SizedBox(width: 12),
-                      Text('Reenumerar facturas'),
-                    ],
-                  ),
-                ),
-              ],
-              child: const _InlineActionButtonContent(
-                icon: Icons.more_horiz,
-                label: 'Más',
-              ),
             ),
           ),
         ],
@@ -1688,13 +1693,15 @@ class _InvoiceTile extends ConsumerWidget {
 }
 
 Future<void> _showRenumberDialog(BuildContext context, WidgetRef ref) async {
-  final selectedYear = ref.read(_invoiceYearFilterProvider) ?? DateTime.now().year;
+  final selectedYear =
+      ref.read(_invoiceYearFilterProvider) ?? DateTime.now().year;
   final invoices = await ref.read(invoicesProvider.future);
-  final years = invoices
-      .map((invoice) => invoice.fecha.year)
-      .toSet()
-      .toList(growable: false)
-    ..sort((a, b) => b.compareTo(a));
+  final years =
+      invoices
+          .map((invoice) => invoice.fecha.year)
+          .toSet()
+          .toList(growable: false)
+        ..sort((a, b) => b.compareTo(a));
   final availableYears = years.isEmpty ? <int>[selectedYear] : years;
 
   if (!context.mounted) return;
@@ -1725,8 +1732,12 @@ class _ManualRenumberDialog extends ConsumerStatefulWidget {
 class _ManualRenumberDialogState extends ConsumerState<_ManualRenumberDialog> {
   late int _selectedYear;
   final _reasonController = TextEditingController();
+  final _tableVerticalController = ScrollController();
+  final _tableHorizontalController = ScrollController();
+  final _mobileListController = ScrollController();
   bool _saving = false;
   final Map<String, TextEditingController> _numberControllers = {};
+  final Map<String, GlobalKey> _invoiceFieldKeys = {};
 
   @override
   void initState() {
@@ -1742,6 +1753,9 @@ class _ManualRenumberDialogState extends ConsumerState<_ManualRenumberDialog> {
       controller.dispose();
     }
     _reasonController.dispose();
+    _tableVerticalController.dispose();
+    _tableHorizontalController.dispose();
+    _mobileListController.dispose();
     super.dispose();
   }
 
@@ -1752,20 +1766,41 @@ class _ManualRenumberDialogState extends ConsumerState<_ManualRenumberDialog> {
     );
   }
 
-  Future<void> _save(List<Invoice> invoices, Map<String, Client> clientMap) async {
+  GlobalKey _fieldKeyFor(String invoiceId) {
+    return _invoiceFieldKeys.putIfAbsent(invoiceId, GlobalKey.new);
+  }
+
+  void _scrollFieldIntoView(String invoiceId) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final context = _fieldKeyFor(invoiceId).currentContext;
+      if (context == null) return;
+      Scrollable.ensureVisible(
+        context,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+        alignment: 0.35,
+      );
+    });
+  }
+
+  Future<void> _save(List<Invoice> invoices) async {
     final parsed = <String, int>{};
     final seen = <int>{};
     for (final invoice in invoices) {
       final raw = _controllerFor(invoice).text.trim();
       final number = int.tryParse(raw);
       if (number == null || number <= 0) {
-        throw StateError('Todos los nuevos números deben ser enteros positivos.');
+        throw StateError(
+          'Todos los nuevos números deben ser enteros positivos.',
+        );
       }
       if (!seen.add(number)) {
         throw StateError('Hay números duplicados en la nueva numeración.');
       }
       if (invoice.fecha.year != _selectedYear) {
-        throw StateError('Todas las facturas deben pertenecer al mismo año fiscal.');
+        throw StateError(
+          'Todas las facturas deben pertenecer al mismo año fiscal.',
+        );
       }
       parsed[invoice.id] = number;
     }
@@ -1801,21 +1836,19 @@ class _ManualRenumberDialogState extends ConsumerState<_ManualRenumberDialog> {
 
     setState(() => _saving = true);
     try {
-      await ref.read(invoicesProvider.notifier).renumberInvoicesManually(
-        fiscalYear: _selectedYear,
-        newNumbersByInvoiceId: parsed,
-        reason: _reasonController.text.trim().isEmpty
-            ? null
-            : _reasonController.text.trim(),
-      );
+      await ref
+          .read(invoicesProvider.notifier)
+          .renumberInvoicesManually(
+            fiscalYear: _selectedYear,
+            newNumbersByInvoiceId: parsed,
+            reason: _reasonController.text.trim().isEmpty
+                ? null
+                : _reasonController.text.trim(),
+          );
       if (!mounted) return;
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Reenumeración manual aplicada en ${changed.length} facturas.',
-          ),
-        ),
+        const SnackBar(content: Text('Facturas reenumeradas correctamente')),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -1824,246 +1857,358 @@ class _ManualRenumberDialogState extends ConsumerState<_ManualRenumberDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final invoicesAsync = ref.watch(invoicesByFiscalYearProvider(_selectedYear));
+    final invoicesAsync = ref.watch(
+      invoicesByFiscalYearProvider(_selectedYear),
+    );
     final clientsAsync = ref.watch(clientsProvider);
     final clients = clientsAsync.valueOrNull ?? const <Client>[];
     final clientMap = {for (final client in clients) client.id: client};
+    final mediaQuery = MediaQuery.of(context);
+    final screenSize = mediaQuery.size;
+    final isMobile = screenSize.width < 720;
+    final keyboardHeight = mediaQuery.viewInsets.bottom;
+    final keyboardOpen = keyboardHeight > 0;
+    final safeVertical = mediaQuery.padding.top + mediaQuery.padding.bottom;
+    final verticalMargins = isMobile ? 24.0 : 48.0;
+    final availableHeight =
+        screenSize.height - keyboardHeight - safeVertical - verticalMargins;
+    final mobileHeightLimit = screenSize.height * (keyboardOpen ? 0.68 : 0.90);
+    final mobileDialogHeight = availableHeight < 280
+        ? availableHeight
+        : availableHeight.clamp(280.0, mobileHeightLimit);
+    final maxDialogHeight = isMobile
+        ? mobileDialogHeight.toDouble()
+        : (screenSize.height * 0.88);
+    final maxDialogWidth = isMobile ? screenSize.width * 0.95 : 1200.0;
+    final compactHeader = isMobile && keyboardOpen;
 
-    return AlertDialog(
-      title: const Text('Reenumeración manual de facturas'),
-      content: SizedBox(
-        width: 860,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+    return Dialog(
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 12 : 24,
+        vertical: isMobile ? 12 : 24,
+      ),
+      child: AnimatedSize(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+        alignment: Alignment.topCenter,
+        child: SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: maxDialogWidth,
+              maxHeight: maxDialogHeight,
+            ),
+            child: Column(
               children: [
-                const Text('Año fiscal:'),
-                const SizedBox(width: 12),
-                DropdownButton<int>(
-                  value: _selectedYear,
-                  items: widget.availableYears
-                      .map(
-                        (year) => DropdownMenuItem<int>(
-                          value: year,
-                          child: Text(year.toString()),
+                Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    16,
+                    compactHeader ? 10 : 16,
+                    16,
+                    compactHeader ? 6 : 8,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Reenumeración manual de facturas',
+                        style: TextStyle(
+                          fontSize: compactHeader ? 16 : 18,
+                          fontWeight: FontWeight.w700,
                         ),
-                      )
-                      .toList(growable: false),
-                  onChanged: _saving
-                      ? null
-                      : (value) {
-                          if (value == null) return;
-                          setState(() => _selectedYear = value);
-                        },
+                      ),
+                      SizedBox(height: compactHeader ? 6 : 12),
+                      Row(
+                        children: [
+                          const Text('Año fiscal:'),
+                          const SizedBox(width: 12),
+                          DropdownButton<int>(
+                            value: _selectedYear,
+                            items: widget.availableYears
+                                .map(
+                                  (year) => DropdownMenuItem<int>(
+                                    value: year,
+                                    child: Text(year.toString()),
+                                  ),
+                                )
+                                .toList(growable: false),
+                            onChanged: _saving
+                                ? null
+                                : (value) {
+                                    if (value == null) return;
+                                    setState(() => _selectedYear = value);
+                                  },
+                          ),
+                        ],
+                      ),
+                      if (!compactHeader) ...[
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _reasonController,
+                          enabled: !_saving,
+                          decoration: const InputDecoration(
+                            labelText: 'Motivo (opcional)',
+                            hintText:
+                                'Ej: intercambio de numeración por error de emisión',
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                if (_saving)
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 10, 16, 0),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Guardando reenumeración...',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: invoicesAsync.when(
+                      loading: () => const Center(
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      error: (error, _) => Center(
+                        child: Text('Error cargando facturas: $error'),
+                      ),
+                      data: (invoices) {
+                        final visibleInvoices = invoices
+                            .where((invoice) => invoice.numero > 0)
+                            .toList(growable: false);
+                        if (visibleInvoices.isEmpty) {
+                          return const Center(
+                            child: Text('No hay facturas en ese año fiscal.'),
+                          );
+                        }
+                        if (isMobile) {
+                          return ListView.builder(
+                            controller: _mobileListController,
+                            keyboardDismissBehavior:
+                                ScrollViewKeyboardDismissBehavior.onDrag,
+                            padding: EdgeInsets.only(
+                              bottom: keyboardOpen ? 12 : 0,
+                            ),
+                            itemCount: visibleInvoices.length,
+                            itemBuilder: (context, index) {
+                              final invoice = visibleInvoices[index];
+                              final client = clientMap[invoice.clientId];
+                              final clientName =
+                                  client?.alias.isNotEmpty == true
+                                  ? client!.alias
+                                  : client?.nombre ?? invoice.clientId;
+                              final controller = _controllerFor(invoice);
+                              return Card(
+                                key: _fieldKeyFor(invoice.id),
+                                margin: const EdgeInsets.only(bottom: 10),
+                                child: Padding(
+                                  padding: EdgeInsets.all(
+                                    compactHeader ? 10 : 12,
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Nº actual: ${invoice.numero}',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Fecha emisión: ${DateFormat('dd/MM/yyyy').format(invoice.fecha)}',
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Cliente: $clientName',
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Total: ${CurrencyFormatter.format(invoice.total)}',
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text('Estado: ${invoice.status.label}'),
+                                      const SizedBox(height: 10),
+                                      TextField(
+                                        controller: controller,
+                                        enabled: !_saving,
+                                        keyboardType: TextInputType.number,
+                                        scrollPadding: EdgeInsets.only(
+                                          bottom: keyboardHeight + 96,
+                                        ),
+                                        onTap: () =>
+                                            _scrollFieldIntoView(invoice.id),
+                                        decoration: const InputDecoration(
+                                          labelText: 'Nuevo número',
+                                          isDense: true,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          );
+                        }
+                        return Scrollbar(
+                          controller: _tableVerticalController,
+                          thumbVisibility: true,
+                          child: SingleChildScrollView(
+                            controller: _tableVerticalController,
+                            child: Scrollbar(
+                              controller: _tableHorizontalController,
+                              thumbVisibility: true,
+                              notificationPredicate: (notification) =>
+                                  notification.metrics.axis == Axis.horizontal,
+                              child: SingleChildScrollView(
+                                controller: _tableHorizontalController,
+                                scrollDirection: Axis.horizontal,
+                                child: DataTable(
+                                  columns: const [
+                                    DataColumn(label: Text('Nº actual')),
+                                    DataColumn(label: Text('Fecha emisión')),
+                                    DataColumn(label: Text('Cliente')),
+                                    DataColumn(label: Text('Total')),
+                                    DataColumn(label: Text('Estado')),
+                                    DataColumn(label: Text('Nuevo nº')),
+                                  ],
+                                  rows: visibleInvoices
+                                      .map((invoice) {
+                                        final client =
+                                            clientMap[invoice.clientId];
+                                        final clientName =
+                                            client?.alias.isNotEmpty == true
+                                            ? client!.alias
+                                            : client?.nombre ??
+                                                  invoice.clientId;
+                                        final controller = _controllerFor(
+                                          invoice,
+                                        );
+                                        return DataRow(
+                                          cells: [
+                                            DataCell(
+                                              Text(invoice.numero.toString()),
+                                            ),
+                                            DataCell(
+                                              Text(
+                                                DateFormat(
+                                                  'dd/MM/yyyy',
+                                                ).format(invoice.fecha),
+                                              ),
+                                            ),
+                                            DataCell(
+                                              SizedBox(
+                                                width: 180,
+                                                child: Text(
+                                                  clientName,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ),
+                                            DataCell(
+                                              Text(
+                                                CurrencyFormatter.format(
+                                                  invoice.total,
+                                                ),
+                                              ),
+                                            ),
+                                            DataCell(
+                                              Text(invoice.status.label),
+                                            ),
+                                            DataCell(
+                                              SizedBox(
+                                                width: 110,
+                                                child: TextField(
+                                                  controller: controller,
+                                                  enabled: !_saving,
+                                                  keyboardType:
+                                                      TextInputType.number,
+                                                  textAlign: TextAlign.center,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        );
+                                      })
+                                      .toList(growable: false),
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                const Divider(height: 1),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: _saving
+                              ? null
+                              : () => Navigator.of(context).pop(),
+                          child: const Text('Cancelar'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: _saving
+                              ? null
+                              : () async {
+                                  final messenger = ScaffoldMessenger.of(
+                                    context,
+                                  );
+                                  final invoices = await ref.read(
+                                    invoicesByFiscalYearProvider(
+                                      _selectedYear,
+                                    ).future,
+                                  );
+                                  try {
+                                    await _save(invoices);
+                                  } catch (error) {
+                                    if (!mounted) return;
+                                    messenger.showSnackBar(
+                                      SnackBar(content: Text(error.toString())),
+                                    );
+                                  }
+                                },
+                          child: _saving
+                              ? const Text('Guardando...')
+                              : const Text('Guardar'),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _reasonController,
-              enabled: !_saving,
-              decoration: const InputDecoration(
-                labelText: 'Motivo (opcional)',
-                hintText: 'Ej: intercambio de numeración por error de emisión',
-              ),
-            ),
-            const SizedBox(height: 12),
-            Flexible(
-              child: invoicesAsync.when(
-                loading: () =>
-                    const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                error: (error, _) => Text('Error cargando facturas: $error'),
-                data: (invoices) {
-                  if (invoices.isEmpty) {
-                    return const Text('No hay facturas en ese año fiscal.');
-                  }
-                  return Scrollbar(
-                    child: SingleChildScrollView(
-                      child: DataTable(
-                        columns: const [
-                          DataColumn(label: Text('Nº actual')),
-                          DataColumn(label: Text('Fecha emisión')),
-                          DataColumn(label: Text('Cliente')),
-                          DataColumn(label: Text('Total')),
-                          DataColumn(label: Text('Estado')),
-                          DataColumn(label: Text('Nuevo nº')),
-                        ],
-                        rows: invoices.map((invoice) {
-                          final client = clientMap[invoice.clientId];
-                          final clientName =
-                              client?.alias.isNotEmpty == true
-                                  ? client!.alias
-                                  : client?.nombre ?? invoice.clientId;
-                          final controller = _controllerFor(invoice);
-                          return DataRow(
-                            cells: [
-                              DataCell(Text(invoice.numero.toString())),
-                              DataCell(
-                                Text(DateFormat('dd/MM/yyyy').format(invoice.fecha)),
-                              ),
-                              DataCell(
-                                SizedBox(
-                                  width: 180,
-                                  child: Text(
-                                    clientName,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ),
-                              DataCell(
-                                Text(CurrencyFormatter.format(invoice.total)),
-                              ),
-                              DataCell(Text(invoice.status.label)),
-                              DataCell(
-                                SizedBox(
-                                  width: 90,
-                                  child: TextField(
-                                    controller: controller,
-                                    enabled: !_saving,
-                                    keyboardType: TextInputType.number,
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          );
-                        }).toList(growable: false),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
+          ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: _saving ? null : () => Navigator.of(context).pop(),
-          child: const Text('Cancelar'),
-        ),
-        ElevatedButton(
-          onPressed: _saving
-              ? null
-              : () async {
-                  final messenger = ScaffoldMessenger.of(context);
-                  final invoices = await ref.read(
-                    invoicesByFiscalYearProvider(_selectedYear).future,
-                  );
-                  try {
-                    await _save(invoices, clientMap);
-                  } catch (error) {
-                    if (!mounted) return;
-                    messenger.showSnackBar(
-                      SnackBar(content: Text(error.toString())),
-                    );
-                  }
-                },
-          child: _saving
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Text('Guardar'),
-        ),
-      ],
     );
   }
-}
-
-Future<void> _showApplyExcelNumberingDialog(
-  BuildContext context,
-  WidgetRef ref,
-) async {
-  final selectedYear = ref.read(_invoiceYearFilterProvider);
-  final year = selectedYear ?? DateTime.now().year;
-
-  final pick = await FilePicker.platform.pickFiles(
-    type: FileType.custom,
-    allowedExtensions: ['xlsx', 'xls'],
-  );
-  if (pick == null || pick.files.isEmpty) return;
-  final path = pick.files.first.path;
-  if (path == null) return;
-  final bytes = await File(path).readAsBytes();
-
-  final preview = await ImportService.previewApplyNumberingFromExcel(
-    bytes: bytes,
-    year: year,
-  );
-
-  if (!context.mounted) return;
-  if (preview.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Sin cambios de numeración desde Excel en $year')),
-    );
-    return;
-  }
-
-  final confirm = await showDialog<bool>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: Text('Aplicar numeración Excel ($year)'),
-      content: SizedBox(
-        width: 420,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Preview:'),
-            const SizedBox(height: 8),
-            Flexible(
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: preview
-                      .take(30)
-                      .map(
-                        (p) => Text('#${p.currentNumber} → #${p.excelNumber}'),
-                      )
-                      .toList(),
-                ),
-              ),
-            ),
-            if (preview.length > 30)
-              Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Text('+ ${preview.length - 30} cambios más'),
-              ),
-            const SizedBox(height: 8),
-            const Text(
-              'Se respeta número exacto del Excel. Se permiten huecos.',
-              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(ctx, false),
-          child: const Text('Cancelar'),
-        ),
-        ElevatedButton(
-          onPressed: () => Navigator.pop(ctx, true),
-          child: const Text('Confirmar'),
-        ),
-      ],
-    ),
-  );
-
-  if (confirm != true || !context.mounted) return;
-
-  final updated = await ref
-      .read(invoicesProvider.notifier)
-      .applyExcelNumberingPreview(year, preview);
-
-  if (!context.mounted) return;
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text('Numeración Excel aplicada: $updated facturas')),
-  );
 }
 
 // ─── Widgets auxiliares para filtros secundarios ───

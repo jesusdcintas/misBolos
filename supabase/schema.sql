@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS clients (
   telefono TEXT,
   whatsapp_phone TEXT,
   notas TEXT,
+  number_locked BOOLEAN NOT NULL DEFAULT true,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -81,6 +82,17 @@ ALTER TABLE gigs
 CREATE UNIQUE INDEX idx_invoices_numero_user_year
   ON invoices(user_id, (EXTRACT(YEAR FROM fecha_emision)), numero)
   WHERE deleted_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS invoice_number_changes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  invoice_id UUID NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  old_number INTEGER,
+  new_number INTEGER NOT NULL CHECK (new_number > 0),
+  source TEXT NOT NULL CHECK (source IN ('create_invoice', 'manual_renumber')),
+  reason TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
 -- Índices
 CREATE INDEX idx_clients_user_id ON clients(user_id);

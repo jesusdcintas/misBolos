@@ -4,10 +4,12 @@ import 'package:csv/csv.dart';
 import 'package:excel/excel.dart';
 import 'package:intl/intl.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:uuid/uuid.dart';
 import '../database/database_helper.dart';
 import '../models/client.dart';
 import '../models/gig.dart';
 import '../models/invoice.dart';
+import '../repositories/invoice_repository.dart';
 
 class ImportColumn {
   final int index;
@@ -105,22 +107,6 @@ class XlsxRepairPreview {
     required this.totalCorregido,
     required this.totalBase,
     required this.totalIva,
-  });
-}
-
-class ExcelInvoiceNumberingPreviewItem {
-  final String invoiceId;
-  final DateTime fecha;
-  final String clientName;
-  final int currentNumber;
-  final int excelNumber;
-
-  ExcelInvoiceNumberingPreviewItem({
-    required this.invoiceId,
-    required this.fecha,
-    required this.clientName,
-    required this.currentNumber,
-    required this.excelNumber,
   });
 }
 
@@ -443,6 +429,16 @@ class ImportService {
             );
 
             await txn.insert('invoices', invoice.toMap());
+            await txn.insert('invoice_number_changes', {
+              'id': const Uuid().v4(),
+              'invoice_id': invoice.id,
+              'user_id': null,
+              'old_number': null,
+              'new_number': invoice.numero,
+              'source': InvoiceNumberChangeSource.createInvoice,
+              'reason': 'import_excel_create_invoice',
+              'created_at': DateTime.now().toIso8601String(),
+            });
             await txn.update(
               'gigs',
               {'invoice_id': invoice.id},
@@ -725,138 +721,4 @@ class ImportService {
   }
 
   static double _round2(double value) => (value * 100).round() / 100.0;
-
-  static Future<List<ExcelInvoiceNumberingPreviewItem>>
-  previewApplyNumberingFromExcel({
-    required Uint8List bytes,
-    required int year,
-  }) async {
-    final rows = parseExcel(bytes);
-    final auto = autoDetectJesusFormat(rows);
-    if (auto == null) return [];
-
-    final parsed = _parseRows(
-      rows,
-      ImportMapping(columnRoles: auto, year: year),
-    ).where((r) => r.numeroFactura != null).toList();
-    if (parsed.isEmpty) return [];
-
-    final excelNumbers = parsed
-        .map((r) => r.numeroFactura!)
-        .toSet()
-        .toList()
-      ..sort();
-    int? firstGap;
-    if (excelNumbers.length > 1) {
-      var prev = excelNumbers.first;
-      for (var i = 1; i < excelNumbers.length; i++) {
-        final n = excelNumbers[i];
-        if (n > prev + 1) {
-          firstGap = prev + 1;
-          break;
-        }
-        prev = n;
-      }
-    }
-    if (firstGap == null) return [];
-    final firstAfterGap = excelNumbers.firstWhere((n) => n > firstGap!);
-    final shift = firstAfterGap - firstGap;
-    if (shift <= 0) return [];
-
-    final db = await DatabaseHelper.instance.database;
-    final localRows = await db.rawQuery(
-      '''
-      SELECT i.id, i.numero, i.fecha, c.nombre as client_name
-      FROM invoices i
-      JOIN clients c ON c.id = i.client_id
-      WHERE CAST(strftime('%Y', i.fecha) AS INTEGER) = ?
-        AND i.status != ?
-        AND i.numero >= ?
-      ORDER BY i.numero ASC
-      ''',
-      [year, InvoiceStatus.borrador.dbValue, firstGap],
-    );
-
-    final preview = <ExcelInvoiceNumberingPreviewItem>[];
-    for (final row in localRows) {
-      final current = row['numero'] as int;
-      final excelNum = current + shift;
-      if (!excelNumbers.contains(excelNum)) continue;
-      preview.add(
-        ExcelInvoiceNumberingPreviewItem(
-          invoiceId: row['id'] as String,
-          fecha: DateTime.parse(row['fecha'] as String),
-          clientName: (row['client_name'] ?? '').toString(),
-          currentNumber: current,
-          excelNumber: excelNum,
-        ),
-      );
-    }
-    return preview;
-  }
-
-  static Future<int> applyNumberingFromExcelPreview({
-    required int year,
-    required List<ExcelInvoiceNumberingPreviewItem> preview,
-  }) async {
-    if (preview.isEmpty) return 0;
-
-    final targetPerId = <String, int>{};
-    final targetNumbers = <int>{};
-    for (final p in preview) {
-      if (targetNumbers.contains(p.excelNumber)) {
-        throw Exception('Excel contiene números duplicados en $year');
-      }
-      targetNumbers.add(p.excelNumber);
-      targetPerId[p.invoiceId] = p.excelNumber;
-    }
-
-    final db = await DatabaseHelper.instance.database;
-    return db.transaction((txn) async {
-      final affectedIds = targetPerId.keys.toList();
-      final ph = List.filled(affectedIds.length, '?').join(',');
-
-      final collisions = await txn.rawQuery(
-        '''
-        SELECT id, numero
-        FROM invoices
-        WHERE CAST(strftime('%Y', fecha) AS INTEGER) = ?
-          AND numero IN (${List.filled(targetNumbers.length, '?').join(',')})
-        ''',
-        [year, ...targetNumbers],
-      );
-      for (final c in collisions) {
-        final id = c['id'] as String;
-        if (!targetPerId.containsKey(id)) {
-          throw Exception('Conflicto: número ${c['numero']} ya existe');
-        }
-      }
-
-      final currentRows = await txn.query(
-        'invoices',
-        columns: ['id'],
-        where: 'id IN ($ph)',
-        whereArgs: affectedIds,
-      );
-      for (var i = 0; i < currentRows.length; i++) {
-        await txn.update(
-          'invoices',
-          {'numero': -2000000 - i},
-          where: 'id = ?',
-          whereArgs: [currentRows[i]['id']],
-        );
-      }
-
-      for (final entry in targetPerId.entries) {
-        await txn.update(
-          'invoices',
-          {'numero': entry.value},
-          where: 'id = ?',
-          whereArgs: [entry.key],
-        );
-      }
-      return targetPerId.length;
-    });
-  }
-
 }

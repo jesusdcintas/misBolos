@@ -230,7 +230,26 @@ class SyncNotifier extends StateNotifier<SyncState> {
         if (hasPending) continue;
         final local = await InvoiceRepository.instance.getById(invoice.id);
         if (local == null || invoice.updatedAt.isAfter(local.updatedAt)) {
-          await InvoiceRepository.instance.upsert(invoice);
+          String? source;
+          if (local != null && local.numero != invoice.numero) {
+            final authorized = await _supabase.hasAuthorizedInvoiceNumberChange(
+              invoiceId: invoice.id,
+              newNumber: invoice.numero,
+            );
+            if (authorized) {
+              source = InvoiceNumberChangeSource.manualRenumber;
+            } else {
+              debugPrint(
+                '[InvoiceNumber][CRITICAL] download ignorará número remoto sin auditoría '
+                'invoice_id=${invoice.id} local=${local.numero} remote=${invoice.numero}',
+              );
+              debugPrintStack(stackTrace: StackTrace.current);
+            }
+          }
+          await InvoiceRepository.instance.upsert(
+            invoice,
+            allowedNumberChangeSource: source,
+          );
         }
       }
       final repaired = await GigRepository.instance.repairStatusesFromInvoices(

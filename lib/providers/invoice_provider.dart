@@ -9,7 +9,6 @@ import '../repositories/app_event_repository.dart';
 import '../repositories/gig_repository.dart';
 import '../repositories/invoice_repository.dart';
 import '../repositories/sync_queue_repository.dart';
-import '../services/import_service.dart';
 import '../services/supabase_service.dart';
 import '../services/sync_queue_processor.dart';
 import 'gig_provider.dart';
@@ -27,6 +26,7 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
   Future<void>? _refreshInFlight;
   Timer? _realtimeRefreshDebounce;
   DateTime? _lastLocalMutationAt;
+  bool _manualRenumberInProgress = false;
   static const Duration _realtimeDebounceDelay = Duration(milliseconds: 700);
   static const Duration _localEchoWindow = Duration(seconds: 3);
 
@@ -85,7 +85,27 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
     _lastLocalMutationAt = DateTime.now().toUtc();
   }
 
-  Future<void> reloadLocal() async {
+  void _logInvoiceNumberChange({
+    required String origin,
+    required String invoiceId,
+    required int? oldNumber,
+    required int newNumber,
+  }) {
+    const allowedOrigins = {'create_invoice', 'manual_renumber'};
+    final prefix = allowedOrigins.contains(origin)
+        ? '[InvoiceNumber]'
+        : '[InvoiceNumber][WARNING]';
+    debugPrint(
+      '$prefix origin=$origin invoice_id=$invoiceId '
+      'old_number=$oldNumber new_number=$newNumber',
+    );
+  }
+
+  Future<void> reloadLocal({bool force = false}) async {
+    if (_manualRenumberInProgress && !force) {
+      debugPrint('[InvoicesSync] reload local omitido: reenumeración en curso');
+      return;
+    }
     final invoices = await ref.read(invoiceRepositoryProvider).getAll();
     state = AsyncData(invoices);
   }
@@ -188,7 +208,30 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
     }
   }
 
+  Future<String?> _remoteNumberChangeSource(Invoice remote) async {
+    final local = await ref.read(invoiceRepositoryProvider).getById(remote.id);
+    if (local == null || local.numero == remote.numero) return null;
+    final authorized = await SupabaseService.instance
+        .hasAuthorizedInvoiceNumberChange(
+          invoiceId: remote.id,
+          newNumber: remote.numero,
+        );
+    if (authorized) return InvoiceNumberChangeSource.manualRenumber;
+
+    debugPrint(
+      '[InvoiceNumber][CRITICAL] remoto intentó cambiar número sin auditoría '
+      'invoice_id=${remote.id} local=${local.numero} remote=${remote.numero}',
+    );
+    debugPrintStack(stackTrace: StackTrace.current);
+    return null;
+  }
+
   Future<void> _handleRealtimeEvent(PostgresChangePayload payload) async {
+    if (_manualRenumberInProgress) {
+      debugPrint('[InvoicesSync] realtime ignorado: reenumeración en curso');
+      return;
+    }
+
     if (_isLikelyLocalEcho(payload)) {
       return;
     }
@@ -201,7 +244,16 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
     if (event == PostgresChangeEvent.update) {
       final invoice = _invoiceFromRealtimeRecord(payload.newRecord);
       if (invoice == null) return;
-      await ref.read(invoiceRepositoryProvider).upsert(invoice);
+      if (invoice.numero <= 0) {
+        debugPrint(
+          '[InvoicesSync] realtime ignorado por número temporal invoice_id=${invoice.id}',
+        );
+        return;
+      }
+      final source = await _remoteNumberChangeSource(invoice);
+      await ref
+          .read(invoiceRepositoryProvider)
+          .upsert(invoice, allowedNumberChangeSource: source);
       await GigRepository.instance.repairStatusesFromInvoices([invoice]);
       ref.invalidate(gigByIdProvider(invoice.gigId));
       ref.invalidate(gigsProvider);
@@ -231,6 +283,13 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
     String reason = 'manual',
     bool force = false,
   }) async {
+    if (_manualRenumberInProgress) {
+      debugPrint(
+        '[InvoicesSync] refresh omitido ($reason): reenumeración en curso',
+      );
+      return;
+    }
+
     _startRealtimeIfNeeded();
     final supabase = SupabaseService.instance;
     if (!supabase.isAuthenticated) {
@@ -268,6 +327,12 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
     final cloudInvoices = await SupabaseService.instance.downloadInvoices();
 
     for (final invoice in cloudInvoices) {
+      if (invoice.numero <= 0) {
+        debugPrint(
+          '[InvoicesSync] factura remota omitida por número temporal invoice_id=${invoice.id}',
+        );
+        continue;
+      }
       if (invoice.deletedAt != null) {
         await repository.delete(invoice.id);
         continue;
@@ -281,7 +346,8 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
 
       final local = await repository.getById(invoice.id);
       if (local == null || invoice.updatedAt.isAfter(local.updatedAt)) {
-        await repository.upsert(invoice);
+        final source = await _remoteNumberChangeSource(invoice);
+        await repository.upsert(invoice, allowedNumberChangeSource: source);
       }
     }
 
@@ -310,6 +376,12 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
       '[InvoiceProvider] createInvoiceFromGig start invoice_id=${invoice.id} gig_id=${invoice.gigId}',
     );
     await ref.read(invoiceRepositoryProvider).insert(invoice);
+    _logInvoiceNumberChange(
+      origin: 'create_invoice',
+      invoiceId: invoice.id,
+      oldNumber: null,
+      newNumber: invoice.numero,
+    );
     final saved = await ref.read(invoiceRepositoryProvider).getById(invoice.id);
     await SyncQueueRepository.instance.enqueue(
       entityType: SyncEntityType.invoice,
@@ -345,6 +417,12 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
     );
     final repository = ref.read(invoiceRepositoryProvider);
     await repository.insertAndLinkGig(invoice);
+    _logInvoiceNumberChange(
+      origin: 'create_invoice',
+      invoiceId: invoice.id,
+      oldNumber: null,
+      newNumber: invoice.numero,
+    );
     final savedInvoice = await repository.getById(invoice.id);
     final gig = await GigRepository.instance.getById(invoice.gigId);
     await AppEventRepository.instance.insert(
@@ -388,8 +466,21 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
 
   Future<void> updateInvoice(Invoice invoice) async {
     _markLocalMutation();
-    await ref.read(invoiceRepositoryProvider).update(invoice);
-    final saved = await ref.read(invoiceRepositoryProvider).getById(invoice.id);
+    final repository = ref.read(invoiceRepositoryProvider);
+    final previous = await repository.getById(invoice.id);
+    if (previous != null && previous.numero != invoice.numero) {
+      _logInvoiceNumberChange(
+        origin: 'invoice_update',
+        invoiceId: invoice.id,
+        oldNumber: previous.numero,
+        newNumber: invoice.numero,
+      );
+      throw StateError(
+        'El número fiscal solo puede cambiar desde la reenumeración manual.',
+      );
+    }
+    await repository.update(invoice);
+    final saved = await repository.getById(invoice.id);
     await SyncQueueRepository.instance.enqueue(
       entityType: SyncEntityType.invoice,
       entityId: invoice.id,
@@ -506,43 +597,6 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
     }
   }
 
-  Future<void> updateNumber(String id, int newNumber) async {
-    _markLocalMutation();
-    final repository = ref.read(invoiceRepositoryProvider);
-    final previous = await repository.getById(id);
-    await repository.updateNumber(id, newNumber);
-    final invoice = await repository.getById(id);
-    if (invoice != null) {
-      await SyncQueueRepository.instance.enqueue(
-        entityType: SyncEntityType.invoice,
-        entityId: id,
-        operation: SyncOperation.update,
-        payload: invoice.toMap(),
-      );
-      await SyncQueueProcessor.instance.processPending(
-        reason: 'invoice_number',
-      );
-    }
-    await AppEventRepository.instance.insert(
-      AppEvent(
-        entityType: 'invoice',
-        entityId: id,
-        eventType: 'invoice_number_changed',
-        payload: {'from': previous?.numero, 'to': newNumber},
-      ),
-    );
-    await reloadLocal();
-  }
-
-  Future<void> renumberYear(int year) async {
-    _markLocalMutation();
-    final invoices = await ref
-        .read(invoiceRepositoryProvider)
-        .renumberYear(year, startFrom: 1);
-    await SupabaseService.instance.renumberInvoices(invoices);
-    await refreshFromCloud(reason: 'local_renumber_year', force: true);
-  }
-
   Future<void> renumberInvoicesManually({
     required int fiscalYear,
     required Map<String, int> newNumbersByInvoiceId,
@@ -553,92 +607,82 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
       throw StateError('Debes iniciar sesión para reenumerar facturas.');
     }
 
-    _markLocalMutation();
     final repository = ref.read(invoiceRepositoryProvider);
-    final result = await repository.renumberInvoicesManually(
-      fiscalYear: fiscalYear,
-      newNumbersByInvoiceId: newNumbersByInvoiceId,
-    );
-
-    for (final invoice in result.updatedInvoices) {
-      await SyncQueueRepository.instance.enqueue(
-        entityType: SyncEntityType.invoice,
-        entityId: invoice.id,
-        operation: SyncOperation.update,
-        payload: invoice.toMap(),
-      );
-    }
-    await SyncQueueProcessor.instance.processPending(
-      reason: 'invoice_manual_renumber',
-    );
-
-    final createdAt = DateTime.now().toIso8601String();
-    for (final change in result.changes) {
-      await AppEventRepository.instance.insert(
-        AppEvent(
-          entityType: 'invoice',
-          entityId: change.invoiceId,
-          eventType: 'invoice_manual_renumbered',
-          payload: {
-            'invoice_id': change.invoiceId,
-            'old_number': change.oldNumber,
-            'new_number': change.newNumber,
-            'user_id': userId,
-            'created_at': createdAt,
-            'reason': reason,
-          },
-        ),
-      );
-    }
-
-    await SupabaseService.instance.renumberInvoices(result.updatedInvoices);
-    await reloadLocal();
-  }
-
-  Future<List<InvoiceGapPreviewItem>> previewCloseGapsYear(
-    int year, {
-    bool includeDrafts = false,
-  }) {
-    return ref
-        .read(invoiceRepositoryProvider)
-        .previewCloseGapsYear(year, includeDrafts: includeDrafts);
-  }
-
-  Future<void> closeGapsYear(int year, {bool includeDrafts = false}) async {
+    ManualRenumberResult? result;
+    _manualRenumberInProgress = true;
     _markLocalMutation();
-    final invoices = await ref
-        .read(invoiceRepositoryProvider)
-        .closeGapsYear(year, includeDrafts: includeDrafts);
-    await SupabaseService.instance.renumberInvoices(invoices);
-    await refreshFromCloud(reason: 'local_close_gaps_year', force: true);
-  }
+    try {
+      result = await repository.renumberInvoicesManually(
+        fiscalYear: fiscalYear,
+        newNumbersByInvoiceId: newNumbersByInvoiceId,
+        userId: userId,
+        reason: reason,
+      );
+      final hasTemporaryNumber = result.updatedInvoices.any(
+        (invoice) => invoice.numero <= 0,
+      );
+      if (hasTemporaryNumber) {
+        throw StateError(
+          'Error crítico: la reenumeración devolvió números temporales.',
+        );
+      }
 
-  Future<bool> isNumberTaken(
-    int number, {
-    required int year,
-    String? excludeId,
-  }) async {
-    return ref
-        .read(invoiceRepositoryProvider)
-        .isNumberTaken(number, year: year, excludeId: excludeId);
-  }
+      await SupabaseService.instance.renumberInvoices(
+        result.updatedInvoices,
+        reason: reason,
+      );
 
-  Future<int> applyExcelNumberingPreview(
-    int year,
-    List<ExcelInvoiceNumberingPreviewItem> preview,
-  ) async {
-    _markLocalMutation();
-    final updated = await ImportService.applyNumberingFromExcelPreview(
-      year: year,
-      preview: preview,
-    );
-    final repo = ref.read(invoiceRepositoryProvider);
-    final all = await repo.getAll();
-    final targetIds = preview.map((p) => p.invoiceId).toSet();
-    final affected = all.where((i) => targetIds.contains(i.id)).toList();
-    await SupabaseService.instance.renumberInvoices(affected);
-    await refreshFromCloud(reason: 'local_apply_excel_numbering', force: true);
-    return updated;
+      final createdAt = DateTime.now().toIso8601String();
+      for (final change in result.changes) {
+        _logInvoiceNumberChange(
+          origin: 'manual_renumber',
+          invoiceId: change.invoiceId,
+          oldNumber: change.oldNumber,
+          newNumber: change.newNumber,
+        );
+        await AppEventRepository.instance.insert(
+          AppEvent(
+            entityType: 'invoice',
+            entityId: change.invoiceId,
+            eventType: 'invoice_manual_renumbered',
+            payload: {
+              'invoice_id': change.invoiceId,
+              'old_number': change.oldNumber,
+              'new_number': change.newNumber,
+              'user_id': userId,
+              'created_at': createdAt,
+              'reason': reason,
+            },
+          ),
+        );
+      }
+    } catch (error) {
+      if (result != null) {
+        final rollbackNumbers = {
+          for (final change in result.changes)
+            change.invoiceId: change.oldNumber,
+        };
+        try {
+          await repository.renumberInvoicesManually(
+            fiscalYear: fiscalYear,
+            newNumbersByInvoiceId: rollbackNumbers,
+            userId: userId,
+            reason: 'rollback_after_failed_remote_renumber',
+          );
+          debugPrint(
+            '[InvoiceNumber] rollback local aplicado tras fallo: $error',
+          );
+        } catch (rollbackError) {
+          debugPrint(
+            '[InvoiceNumber][WARNING] rollback local falló: $rollbackError',
+          );
+        }
+      }
+      rethrow;
+    } finally {
+      _manualRenumberInProgress = false;
+      await reloadLocal(force: true);
+    }
   }
 }
 

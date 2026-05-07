@@ -19,6 +19,7 @@ import 'migrations/v16_invoice_number_by_year.dart';
 import 'migrations/v17_invoice_number_unique_by_year.dart';
 import 'migrations/v18_sync_queue_soft_delete.dart';
 import 'migrations/v19_client_whatsapp_phone.dart';
+import 'migrations/v20_invoice_number_changes.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._internal();
@@ -38,7 +39,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 19,
+      version: 20,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       onConfigure: (db) async {
@@ -110,6 +111,9 @@ class DatabaseHelper {
     if (version >= 19) {
       await _applyMigration(db, v19ClientWhatsappPhone);
     }
+    if (version >= 20) {
+      await _applyMigration(db, v20InvoiceNumberChanges);
+    }
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -166,6 +170,9 @@ class DatabaseHelper {
     }
     if (oldVersion < 19) {
       await _applyMigration(db, v19ClientWhatsappPhone);
+    }
+    if (oldVersion < 20) {
+      await _applyMigration(db, v20InvoiceNumberChanges);
     }
   }
 

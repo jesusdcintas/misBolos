@@ -485,17 +485,6 @@ class _InvoiceDetailContent extends ConsumerWidget {
           ),
           const SizedBox(height: 8),
 
-          // Cambiar número de factura
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () => _changeNumber(context, ref),
-              icon: const Icon(Icons.numbers),
-              label: const Text('Cambiar número de factura'),
-            ),
-          ),
-          const SizedBox(height: 8),
-
           // Eliminar factura
           SizedBox(
             width: double.infinity,
@@ -702,88 +691,6 @@ class _InvoiceDetailContent extends ConsumerWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('No se pudo compartir por WhatsApp: $e')),
       );
-    }
-  }
-
-  Future<void> _changeNumber(BuildContext context, WidgetRef ref) async {
-    final controller = TextEditingController(text: invoice.numero.toString());
-
-    final newNumber = await showDialog<int>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Cambiar número de factura'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: controller,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Nuevo número',
-                hintText: 'Ej: 1, 2, 3...',
-              ),
-              autofocus: true,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Asegúrate de que el número no esté en uso por otra factura de ${invoice.fecha.year}.',
-              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final num = int.tryParse(controller.text.trim());
-              if (num != null && num > 0) {
-                Navigator.pop(ctx, num);
-              }
-            },
-            child: const Text('Guardar'),
-          ),
-        ],
-      ),
-    );
-
-    if (newNumber != null && newNumber != invoice.numero && context.mounted) {
-      // Verificar si el número ya está en uso
-      final isTaken = await ref
-          .read(invoicesProvider.notifier)
-          .isNumberTaken(
-            newNumber,
-            year: invoice.fecha.year,
-            excludeId: invoice.id,
-          );
-
-      if (isTaken) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'El número $newNumber ya está en uso por otra factura de ${invoice.fecha.year}',
-              ),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-        return;
-      }
-
-      await ref
-          .read(invoicesProvider.notifier)
-          .updateNumber(invoice.id, newNumber);
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Número de factura cambiado a #$newNumber')),
-        );
-        // Volver a la lista para ver el cambio
-        context.pop();
-      }
     }
   }
 
