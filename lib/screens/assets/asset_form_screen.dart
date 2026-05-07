@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:file_picker/file_picker.dart';
 import '../../core/constants/app_colors.dart';
 import '../../models/asset.dart';
+import '../../models/investment_extraction_result.dart';
 import '../../providers/assets_provider.dart';
+import '../../services/ai_attachment_service.dart';
+import '../../services/document_text_extractor.dart';
+import '../../services/investment_ai_extractor.dart';
 
 class AssetFormScreen extends ConsumerStatefulWidget {
   final int? assetId;
@@ -23,12 +26,14 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
   final _valorResidualController = TextEditingController(text: '0');
   final _vidaUtilController = TextEditingController();
   final _notasController = TextEditingController();
+  final _iaTextController = TextEditingController();
 
   DateTime _fechaCompra = DateTime.now();
   AssetCategory _categoria = AssetCategory.otros;
   double _ivaRate = 21.0;
   String? _documentoPath;
   bool _loading = false;
+  bool _extracting = false;
   bool _loaded = false;
 
   // Getters para el preview en tiempo real
@@ -54,6 +59,7 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
     _valorResidualController.dispose();
     _vidaUtilController.dispose();
     _notasController.dispose();
+    _iaTextController.dispose();
     super.dispose();
   }
 
@@ -97,13 +103,196 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
   }
 
   Future<void> _pickDocument() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
-    );
-    if (result != null && result.files.single.path != null) {
-      setState(() => _documentoPath = result.files.single.path);
+    try {
+      final path = await AiAttachmentService.instance.pickPdf();
+      if (path != null && mounted) setState(() => _documentoPath = path);
+    } catch (e) {
+      _showPickerError('No se pudo seleccionar el PDF: $e');
     }
+  }
+
+  Future<void> _pickPhoto() async {
+    try {
+      final path = await AiAttachmentService.instance.pickImageFromGallery();
+      if (path != null && mounted) setState(() => _documentoPath = path);
+    } catch (e) {
+      _showPickerError('No se pudo seleccionar la imagen: $e');
+    }
+  }
+
+  Future<void> _takePhoto() async {
+    try {
+      final path = await AiAttachmentService.instance.takePhotoWithCamera();
+      if (path != null && mounted) setState(() => _documentoPath = path);
+    } catch (e) {
+      _showPickerError('No se pudo abrir la cámara: $e');
+    }
+  }
+
+  void _showPickerError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  Future<void> _extractWithAi() async {
+    var inputText = _iaTextController.text.trim();
+    if (_extracting || _loading) return;
+
+    setState(() => _extracting = true);
+    try {
+      final path = _documentoPath;
+      if (path != null && AiAttachmentService.instance.isImagePath(path)) {
+        final result =
+            await InvestmentAiExtractor.instance.extractFromImagePath(path);
+        if (!mounted) return;
+        await _confirmApplyExtraction(result);
+        return;
+      }
+
+      if (inputText.isEmpty && path != null) {
+        final extracted = await DocumentTextExtractor.instance.tryExtractText(path);
+        if (extracted != null && extracted.trim().isNotEmpty) {
+          inputText = extracted.trim();
+          if (mounted) setState(() => _iaTextController.text = inputText);
+        }
+      }
+
+      if (inputText.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Adjunta una factura o escribe una descripción.'),
+          ),
+        );
+        return;
+      }
+
+      final result = path == null
+          ? await InvestmentAiExtractor.instance.extractFromText(inputText)
+          : await InvestmentAiExtractor.instance.extractFromReceiptText(inputText);
+      if (!mounted) return;
+      await _confirmApplyExtraction(result);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo extraer la inversión: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _extracting = false);
+    }
+  }
+
+  Future<void> _confirmApplyExtraction(InvestmentExtractionResult result) async {
+    final moneyFmt = NumberFormat.currency(locale: 'es_ES', symbol: '€');
+    final dateFmt = DateFormat('dd/MM/yyyy');
+    final summary = <String>[
+      if (result.name != null) 'Nombre inversión: ${result.name}',
+      if (result.supplier != null) 'Proveedor: ${result.supplier}',
+      if (result.invoiceNumber != null) 'Nº factura: ${result.invoiceNumber}',
+      if (result.purchaseDate != null)
+        'Fecha compra: ${dateFmt.format(result.purchaseDate!)}',
+      if (result.concept != null) 'Concepto: ${result.concept}',
+      if (result.category != null) 'Categoría: ${result.category!.label}',
+      if (result.baseAmount != null)
+        'Base amortizable: ${moneyFmt.format(result.baseAmount)}',
+      if (result.taxAmount != null)
+        'IVA soportado: ${moneyFmt.format(result.taxAmount)}',
+      if (result.vatRate != null)
+        'IVA %: ${result.vatRate!.toStringAsFixed(0)}%',
+      if (result.totalAmount != null)
+        'Total factura: ${moneyFmt.format(result.totalAmount)}',
+      if (result.usefulLifeYears != null)
+        'Vida útil sugerida: ${result.usefulLifeYears} años',
+      if (result.maxAnnualPercentage != null)
+        'Porcentaje máximo anual: ${result.maxAnnualPercentage!.toStringAsFixed(0)}%',
+      if (result.annualAmortizationAmount != null)
+        'Amortización anual estimada: ${moneyFmt.format(result.annualAmortizationAmount)}',
+      if (result.deductiblePercentage != null)
+        'Porcentaje deducible: ${result.deductiblePercentage!.toStringAsFixed(0)}%',
+      'Confianza estimada: ${(result.confidence * 100).clamp(0, 100).toStringAsFixed(0)}%',
+    ];
+
+    final apply = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Datos detectados'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final line in summary) Text(line),
+              if (result.warnings.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                const Text(
+                  'Revisa estos puntos:',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 6),
+                for (final warning in result.warnings) Text('• $warning'),
+              ],
+              if (result.confidence < 0.75) ...[
+                const SizedBox(height: 12),
+                const Text(
+                  'Confianza baja: revisa manualmente antes de guardar.',
+                  style: TextStyle(
+                    color: Colors.orange,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Corregir manualmente'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Guardar inversión'),
+          ),
+        ],
+      ),
+    );
+
+    if (apply != true || !mounted) return;
+
+    setState(() {
+      final description = result.name ?? result.concept;
+      if (description != null) _descripcionController.text = description;
+      if (result.purchaseDate != null) _fechaCompra = result.purchaseDate!;
+      if (result.category != null) _categoria = result.category!;
+      if (result.totalAmount != null) {
+        _importeTotalController.text = result.totalAmount!.toStringAsFixed(2);
+      } else if (result.baseAmount != null && result.taxAmount != null) {
+        _importeTotalController.text =
+            (result.baseAmount! + result.taxAmount!).toStringAsFixed(2);
+      }
+      if (result.vatRate != null) _ivaRate = result.vatRate!;
+      if (result.usefulLifeYears != null && result.usefulLifeYears! > 0) {
+        _vidaUtilController.text = result.usefulLifeYears.toString();
+      }
+      _notasController.text = _mergeNotes(result);
+    });
+  }
+
+  String _mergeNotes(InvestmentExtractionResult result) {
+    final parts = <String>[
+      if (_notasController.text.trim().isNotEmpty) _notasController.text.trim(),
+      if (result.supplier != null) 'Proveedor: ${result.supplier}',
+      if (result.invoiceNumber != null) 'Factura: ${result.invoiceNumber}',
+      if (result.maxAnnualPercentage != null)
+        'Máx. anual: ${result.maxAnnualPercentage!.toStringAsFixed(0)}%',
+      if (result.annualAmortizationAmount != null)
+        'Amortización anual IA: ${result.annualAmortizationAmount!.toStringAsFixed(2)} €',
+      if (result.deductiblePercentage != null)
+        'Deducible: ${result.deductiblePercentage!.toStringAsFixed(0)}%',
+    ];
+    return parts.join(' | ');
   }
 
   /// Al cambiar categoría, sugerir vida útil según Hacienda (editable)
@@ -113,7 +302,8 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
       _categoria = cat;
       if (_vidaUtilController.text.isEmpty ||
           _vidaUtilController.text == '0') {
-        _vidaUtilController.text = cat.vidaUtilSugerida.toString();
+        final suggested = cat.vidaUtilSugerida;
+        _vidaUtilController.text = suggested > 0 ? suggested.toString() : '';
       }
     });
   }
@@ -323,8 +513,9 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
               controller: _vidaUtilController,
               decoration: InputDecoration(
                 labelText: 'Vida útil (años) *',
-                hintText:
-                    'Sugerido Hacienda: ${_categoria.vidaUtilSugerida}',
+                hintText: _categoria.vidaUtilSugerida > 0
+                    ? 'Sugerido Hacienda: ${_categoria.vidaUtilSugerida}'
+                    : 'Revisar manualmente',
               ),
               keyboardType: TextInputType.number,
               onChanged: (_) => setState(() {}),
@@ -432,10 +623,50 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
                 onDeleted: () => setState(() => _documentoPath = null),
               ),
             const SizedBox(height: 4),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: _pickDocument,
+                  icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                  label: const Text('PDF'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _pickPhoto,
+                  icon: const Icon(Icons.photo_outlined, size: 18),
+                  label: const Text('Galería'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _takePhoto,
+                  icon: const Icon(Icons.photo_camera_outlined, size: 18),
+                  label: const Text('Cámara'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
             OutlinedButton.icon(
-              onPressed: _pickDocument,
-              icon: const Icon(Icons.attach_file_outlined, size: 18),
-              label: const Text('Adjuntar factura'),
+              onPressed: _extracting || _loading ? null : _extractWithAi,
+              icon: _extracting
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.auto_awesome_outlined, size: 18),
+              label: const Text('Extraer inversión con IA'),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _iaTextController,
+              decoration: const InputDecoration(
+                labelText: 'Texto detectado de la factura o descripción manual',
+                hintText:
+                    'Puedes pegar aquí el texto de una factura o escribir una descripción como: Portátil 1.200€, IVA 21%, comprado el 04/03/2026.',
+              ),
+              minLines: 3,
+              maxLines: 6,
             ),
             const SizedBox(height: 16),
 

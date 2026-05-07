@@ -38,6 +38,8 @@ dependencies:
   url_launcher: ^6.3.2
   confetti: ^0.7.0
   shared_preferences: ^2.2.3
+  syncfusion_flutter_pdf: ^29.2.11
+  image: ^4.3.0
   flutter_localizations:
     sdk: flutter
 

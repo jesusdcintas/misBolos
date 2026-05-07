@@ -39,6 +39,12 @@
 	<string>744196169382-b961jji32sdiqhf9ulpvut1f6fghb63m.apps.googleusercontent.com</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>MisBolos necesita acceder a la cámara para fotografiar facturas y tickets.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>MisBolos necesita acceder a tus fotos para seleccionar facturas o tickets.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>MisBolos puede guardar documentos generados si decides compartirlos o exportarlos.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

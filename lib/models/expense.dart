@@ -1,4 +1,5 @@
 enum ExpenseCategory {
+  combustible,
   transporte,
   equipo,
   software,
@@ -11,6 +12,8 @@ enum ExpenseCategory {
 extension ExpenseCategoryExtension on ExpenseCategory {
   String get label {
     switch (this) {
+      case ExpenseCategory.combustible:
+        return 'Combustible';
       case ExpenseCategory.transporte:
         return 'Transporte';
       case ExpenseCategory.equipo:

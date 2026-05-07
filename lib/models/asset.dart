@@ -3,21 +3,27 @@ import 'package:flutter/material.dart';
 
 enum AssetCategory {
   equipoDj,
+  iluminacion,
   informatica,
   mobiliario,
   vehiculo,
+  herramientas,
   otros;
 
   String get label {
     switch (this) {
       case AssetCategory.equipoDj:
-        return 'Equipo DJ';
+        return 'Equipo DJ / Sonido';
+      case AssetCategory.iluminacion:
+        return 'Iluminación';
       case AssetCategory.informatica:
         return 'Informática';
       case AssetCategory.mobiliario:
         return 'Mobiliario';
       case AssetCategory.vehiculo:
         return 'Vehículo';
+      case AssetCategory.herramientas:
+        return 'Herramientas / Utillaje';
       case AssetCategory.otros:
         return 'Otros';
     }
@@ -36,12 +42,16 @@ enum AssetCategory {
     switch (this) {
       case AssetCategory.equipoDj:
         return Icons.speaker;
+      case AssetCategory.iluminacion:
+        return Icons.lightbulb_outline;
       case AssetCategory.informatica:
         return Icons.laptop;
       case AssetCategory.mobiliario:
         return Icons.chair;
       case AssetCategory.vehiculo:
         return Icons.directions_car;
+      case AssetCategory.herramientas:
+        return Icons.handyman_outlined;
       case AssetCategory.otros:
         return Icons.inventory_2_outlined;
     }
@@ -52,12 +62,16 @@ enum AssetCategory {
     switch (this) {
       case AssetCategory.equipoDj:
         return 0.20;
+      case AssetCategory.iluminacion:
+        return 0.20;
       case AssetCategory.informatica:
         return 0.25;
       case AssetCategory.mobiliario:
         return 0.10;
       case AssetCategory.vehiculo:
         return 0.16;
+      case AssetCategory.herramientas:
+        return 0.30;
       case AssetCategory.otros:
         return 0.10;
     }
@@ -65,6 +79,9 @@ enum AssetCategory {
 
   /// Vida útil mínima en años según el coeficiente máximo
   int get vidaUtilSugerida {
+    if (this == AssetCategory.vehiculo || this == AssetCategory.otros) {
+      return 0;
+    }
     return (1 / coeficienteMaxHacienda).round();
   }
 }

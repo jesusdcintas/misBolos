@@ -515,6 +515,8 @@ class _ExpenseCard extends StatelessWidget {
 
   IconData _categoryIcon(ExpenseCategory cat) {
     switch (cat) {
+      case ExpenseCategory.combustible:
+        return Icons.local_gas_station_outlined;
       case ExpenseCategory.transporte:
         return Icons.directions_car_outlined;
       case ExpenseCategory.equipo:
