@@ -63,6 +63,42 @@ void main() {
     expect((await InvoiceRepository.instance.getById('inv-2025-b'))?.numero, 2);
     expect((await InvoiceRepository.instance.getById('inv-2026'))?.numero, 1);
   });
+
+  test('renumberInvoicesManually permite intercambiar 1 y 2 sin conflicto', () async {
+    final db = await DatabaseHelper.instance.database;
+    await db.insert('clients', {
+      'id': 'client-1',
+      'nombre': 'Cliente',
+      'created_at': DateTime(2026).toIso8601String(),
+      'updated_at': DateTime(2026).toIso8601String(),
+    });
+    for (final id in ['gig-a', 'gig-b']) {
+      await db.insert('gigs', {
+        'id': id,
+        'fecha': DateTime(2026, 1, 1).toIso8601String(),
+        'client_id': 'client-1',
+        'facturable': 1,
+        'status': 'pendiente',
+        'created_at': DateTime(2026).toIso8601String(),
+      });
+    }
+
+    await InvoiceRepository.instance.insert(
+      _invoice('inv-a', 1, DateTime(2026, 1, 10), 'gig-a'),
+    );
+    await InvoiceRepository.instance.insert(
+      _invoice('inv-b', 2, DateTime(2026, 1, 11), 'gig-b'),
+    );
+
+    final result = await InvoiceRepository.instance.renumberInvoicesManually(
+      fiscalYear: 2026,
+      newNumbersByInvoiceId: const {'inv-a': 2, 'inv-b': 1},
+    );
+
+    expect(result.changes.length, 2);
+    expect((await InvoiceRepository.instance.getById('inv-a'))?.numero, 2);
+    expect((await InvoiceRepository.instance.getById('inv-b'))?.numero, 1);
+  });
 }
 
 Invoice _invoice(String id, int number, DateTime date, String gigId) {

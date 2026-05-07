@@ -43,6 +43,8 @@ void _clearAllInvoiceFilters(WidgetRef ref) {
 enum InvoiceSortOption {
   fechaDesc,
   fechaAsc,
+  numeroDesc,
+  numeroAsc,
   clienteAsc,
   clienteDesc,
   precioDesc,
@@ -154,6 +156,10 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
                         return b.fecha.compareTo(a.fecha);
                       case InvoiceSortOption.fechaAsc:
                         return a.fecha.compareTo(b.fecha);
+                      case InvoiceSortOption.numeroDesc:
+                        return b.numero.compareTo(a.numero);
+                      case InvoiceSortOption.numeroAsc:
+                        return a.numero.compareTo(b.numero);
                       case InvoiceSortOption.clienteAsc:
                         final clientA = clientsMap[a.clientId]?.alias ?? '';
                         final clientB = clientsMap[b.clientId]?.alias ?? '';
@@ -553,6 +559,21 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
                   InvoiceSortOption.fechaAsc,
                   'Fecha (antigua)',
                   Icons.arrow_upward,
+                ),
+                const PopupMenuDivider(),
+                _buildSortMenuItem(
+                  context,
+                  sortOption,
+                  InvoiceSortOption.numeroDesc,
+                  'Número (mayor)',
+                  Icons.pin_outlined,
+                ),
+                _buildSortMenuItem(
+                  context,
+                  sortOption,
+                  InvoiceSortOption.numeroAsc,
+                  'Número (menor)',
+                  Icons.pin,
                 ),
                 const PopupMenuDivider(),
                 _buildSortMenuItem(
@@ -1667,79 +1688,102 @@ class _InvoiceTile extends ConsumerWidget {
 }
 
 Future<void> _showRenumberDialog(BuildContext context, WidgetRef ref) async {
-  final selectedYear = ref.read(_invoiceYearFilterProvider);
-  final year = selectedYear ?? DateTime.now().year;
+  final selectedYear = ref.read(_invoiceYearFilterProvider) ?? DateTime.now().year;
+  final invoices = await ref.read(invoicesProvider.future);
+  final years = invoices
+      .map((invoice) => invoice.fecha.year)
+      .toSet()
+      .toList(growable: false)
+    ..sort((a, b) => b.compareTo(a));
+  final availableYears = years.isEmpty ? <int>[selectedYear] : years;
 
-  final shouldRenumber = await showDialog<bool>(
+  if (!context.mounted) return;
+  await showDialog<void>(
     context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text('Reenumerar facturas'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Text(
-            'Esto reenumerará las facturas del año seleccionado en orden cronológico.',
-            style: TextStyle(fontSize: 14),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Año: $year',
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.orange.shade50,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.orange.shade200),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.warning_amber_rounded,
-                  color: Colors.orange.shade700,
-                ),
-                const SizedBox(width: 8),
-                const Expanded(
-                  child: Text(
-                    'Esta acción modificará solo los números de factura de ese año y empezará en 1.',
-                    style: TextStyle(fontSize: 12),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (selectedYear == null) ...[
-            const SizedBox(height: 8),
-            Text(
-              'No hay filtro de año activo, se usará $year.',
-              style: TextStyle(fontSize: 12, color: Colors.grey[700]),
-            ),
-          ],
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(ctx),
-          child: const Text('Cancelar'),
-        ),
-        ElevatedButton(
-          onPressed: () => Navigator.pop(ctx, true),
-          child: const Text('Reenumerar'),
-        ),
-      ],
+    barrierDismissible: false,
+    builder: (_) => _ManualRenumberDialog(
+      initialYear: selectedYear,
+      availableYears: availableYears,
     ),
   );
+}
 
-  if (shouldRenumber == true && context.mounted) {
-    // Confirmación adicional
+class _ManualRenumberDialog extends ConsumerStatefulWidget {
+  final int initialYear;
+  final List<int> availableYears;
+
+  const _ManualRenumberDialog({
+    required this.initialYear,
+    required this.availableYears,
+  });
+
+  @override
+  ConsumerState<_ManualRenumberDialog> createState() =>
+      _ManualRenumberDialogState();
+}
+
+class _ManualRenumberDialogState extends ConsumerState<_ManualRenumberDialog> {
+  late int _selectedYear;
+  final _reasonController = TextEditingController();
+  bool _saving = false;
+  final Map<String, TextEditingController> _numberControllers = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedYear = widget.availableYears.contains(widget.initialYear)
+        ? widget.initialYear
+        : widget.availableYears.first;
+  }
+
+  @override
+  void dispose() {
+    for (final controller in _numberControllers.values) {
+      controller.dispose();
+    }
+    _reasonController.dispose();
+    super.dispose();
+  }
+
+  TextEditingController _controllerFor(Invoice invoice) {
+    return _numberControllers.putIfAbsent(
+      invoice.id,
+      () => TextEditingController(text: invoice.numero.toString()),
+    );
+  }
+
+  Future<void> _save(List<Invoice> invoices, Map<String, Client> clientMap) async {
+    final parsed = <String, int>{};
+    final seen = <int>{};
+    for (final invoice in invoices) {
+      final raw = _controllerFor(invoice).text.trim();
+      final number = int.tryParse(raw);
+      if (number == null || number <= 0) {
+        throw StateError('Todos los nuevos números deben ser enteros positivos.');
+      }
+      if (!seen.add(number)) {
+        throw StateError('Hay números duplicados en la nueva numeración.');
+      }
+      if (invoice.fecha.year != _selectedYear) {
+        throw StateError('Todas las facturas deben pertenecer al mismo año fiscal.');
+      }
+      parsed[invoice.id] = number;
+    }
+
+    final changed = invoices
+        .where((invoice) => parsed[invoice.id] != invoice.numero)
+        .toList(growable: false);
+    if (changed.isEmpty) {
+      throw StateError('No hay cambios para guardar.');
+    }
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('¿Confirmar reenumeración?'),
+        title: const Text('Confirmar reenumeración fiscal'),
         content: Text(
-          'Las facturas de $year se reenumerarán del 1 en adelante, ordenadas por fecha.',
+          'Vas a modificar la numeración fiscal de ${changed.length} facturas. '
+          'Esta acción debe hacerse solo para corregir errores.',
         ),
         actions: [
           TextButton(
@@ -1747,25 +1791,186 @@ Future<void> _showRenumberDialog(BuildContext context, WidgetRef ref) async {
             child: const Text('Cancelar'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Confirmar'),
+            child: const Text('Guardar cambios'),
           ),
         ],
       ),
     );
+    if (confirm != true || !mounted) return;
 
-    if (confirm == true && context.mounted) {
-      await ref.read(invoicesProvider.notifier).renumberYear(year);
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Facturas de $year reenumeradas correctamente'),
+    setState(() => _saving = true);
+    try {
+      await ref.read(invoicesProvider.notifier).renumberInvoicesManually(
+        fiscalYear: _selectedYear,
+        newNumbersByInvoiceId: parsed,
+        reason: _reasonController.text.trim().isEmpty
+            ? null
+            : _reasonController.text.trim(),
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Reenumeración manual aplicada en ${changed.length} facturas.',
           ),
-        );
-      }
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final invoicesAsync = ref.watch(invoicesByFiscalYearProvider(_selectedYear));
+    final clientsAsync = ref.watch(clientsProvider);
+    final clients = clientsAsync.valueOrNull ?? const <Client>[];
+    final clientMap = {for (final client in clients) client.id: client};
+
+    return AlertDialog(
+      title: const Text('Reenumeración manual de facturas'),
+      content: SizedBox(
+        width: 860,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Text('Año fiscal:'),
+                const SizedBox(width: 12),
+                DropdownButton<int>(
+                  value: _selectedYear,
+                  items: widget.availableYears
+                      .map(
+                        (year) => DropdownMenuItem<int>(
+                          value: year,
+                          child: Text(year.toString()),
+                        ),
+                      )
+                      .toList(growable: false),
+                  onChanged: _saving
+                      ? null
+                      : (value) {
+                          if (value == null) return;
+                          setState(() => _selectedYear = value);
+                        },
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _reasonController,
+              enabled: !_saving,
+              decoration: const InputDecoration(
+                labelText: 'Motivo (opcional)',
+                hintText: 'Ej: intercambio de numeración por error de emisión',
+              ),
+            ),
+            const SizedBox(height: 12),
+            Flexible(
+              child: invoicesAsync.when(
+                loading: () =>
+                    const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                error: (error, _) => Text('Error cargando facturas: $error'),
+                data: (invoices) {
+                  if (invoices.isEmpty) {
+                    return const Text('No hay facturas en ese año fiscal.');
+                  }
+                  return Scrollbar(
+                    child: SingleChildScrollView(
+                      child: DataTable(
+                        columns: const [
+                          DataColumn(label: Text('Nº actual')),
+                          DataColumn(label: Text('Fecha emisión')),
+                          DataColumn(label: Text('Cliente')),
+                          DataColumn(label: Text('Total')),
+                          DataColumn(label: Text('Estado')),
+                          DataColumn(label: Text('Nuevo nº')),
+                        ],
+                        rows: invoices.map((invoice) {
+                          final client = clientMap[invoice.clientId];
+                          final clientName =
+                              client?.alias.isNotEmpty == true
+                                  ? client!.alias
+                                  : client?.nombre ?? invoice.clientId;
+                          final controller = _controllerFor(invoice);
+                          return DataRow(
+                            cells: [
+                              DataCell(Text(invoice.numero.toString())),
+                              DataCell(
+                                Text(DateFormat('dd/MM/yyyy').format(invoice.fecha)),
+                              ),
+                              DataCell(
+                                SizedBox(
+                                  width: 180,
+                                  child: Text(
+                                    clientName,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ),
+                              DataCell(
+                                Text(CurrencyFormatter.format(invoice.total)),
+                              ),
+                              DataCell(Text(invoice.status.label)),
+                              DataCell(
+                                SizedBox(
+                                  width: 90,
+                                  child: TextField(
+                                    controller: controller,
+                                    enabled: !_saving,
+                                    keyboardType: TextInputType.number,
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
+                        }).toList(growable: false),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+        ElevatedButton(
+          onPressed: _saving
+              ? null
+              : () async {
+                  final messenger = ScaffoldMessenger.of(context);
+                  final invoices = await ref.read(
+                    invoicesByFiscalYearProvider(_selectedYear).future,
+                  );
+                  try {
+                    await _save(invoices, clientMap);
+                  } catch (error) {
+                    if (!mounted) return;
+                    messenger.showSnackBar(
+                      SnackBar(content: Text(error.toString())),
+                    );
+                  }
+                },
+          child: _saving
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Guardar'),
+        ),
+      ],
+    );
   }
 }
 

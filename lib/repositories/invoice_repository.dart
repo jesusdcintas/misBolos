@@ -66,6 +66,18 @@ class InvoiceRepository {
     return maps.map((m) => Invoice.fromMap(m)).toList();
   }
 
+  Future<List<Invoice>> getByFiscalYear(int year) async {
+    final db = await DatabaseHelper.instance.database;
+    final maps = await db.query(
+      'invoices',
+      where:
+          "CAST(strftime('%Y', fecha) AS INTEGER) = ? AND deleted_at IS NULL",
+      whereArgs: [year],
+      orderBy: 'numero ASC, fecha ASC, created_at ASC, id ASC',
+    );
+    return maps.map((m) => Invoice.fromMap(m)).toList();
+  }
+
   Future<int> getNextNumber() async {
     return getNextNumberForYear(DateTime.now().year);
   }
@@ -340,6 +352,133 @@ class InvoiceRepository {
       return updated;
     });
   }
+
+  Future<ManualRenumberResult> renumberInvoicesManually({
+    required int fiscalYear,
+    required Map<String, int> newNumbersByInvoiceId,
+  }) async {
+    if (newNumbersByInvoiceId.isEmpty) {
+      throw StateError('No hay facturas para reenumerar.');
+    }
+
+    final targetIds = newNumbersByInvoiceId.keys.toList(growable: false);
+    final targetNumbers = newNumbersByInvoiceId.values.toList(growable: false);
+    for (final number in targetNumbers) {
+      if (number <= 0) {
+        throw StateError('Todos los nuevos números deben ser enteros positivos.');
+      }
+    }
+    if (targetNumbers.toSet().length != targetNumbers.length) {
+      throw StateError('Hay números duplicados en la nueva numeración.');
+    }
+
+    final db = await DatabaseHelper.instance.database;
+    return db.transaction((txn) async {
+      final placeholdersIds = List.filled(targetIds.length, '?').join(',');
+      final rows = await txn.rawQuery(
+        '''
+        SELECT *
+        FROM invoices
+        WHERE id IN ($placeholdersIds)
+          AND deleted_at IS NULL
+        ''',
+        targetIds,
+      );
+
+      if (rows.length != targetIds.length) {
+        throw StateError('Alguna factura del lote no existe o está eliminada.');
+      }
+
+      for (final row in rows) {
+        final invoiceYear = _yearFromIso(row['fecha'] as String);
+        if (invoiceYear != fiscalYear) {
+          throw StateError(
+            'Todas las facturas deben pertenecer al año fiscal $fiscalYear.',
+          );
+        }
+      }
+
+      final placeholdersNumbers = List.filled(targetNumbers.length, '?').join(
+        ',',
+      );
+      final outsideCollision = await txn.rawQuery(
+        '''
+        SELECT id, numero
+        FROM invoices
+        WHERE CAST(strftime('%Y', fecha) AS INTEGER) = ?
+          AND deleted_at IS NULL
+          AND numero IN ($placeholdersNumbers)
+          AND id NOT IN ($placeholdersIds)
+        LIMIT 1
+        ''',
+        <Object?>[fiscalYear, ...targetNumbers, ...targetIds],
+      );
+      if (outsideCollision.isNotEmpty) {
+        final numero = outsideCollision.first['numero'];
+        throw StateError(
+          'El número $numero choca con una factura fuera del lote.',
+        );
+      }
+
+      final oldById = <String, int>{};
+      for (final row in rows) {
+        oldById[row['id'] as String] = row['numero'] as int;
+      }
+
+      final now = DateTime.now().toIso8601String();
+      for (var i = 0; i < targetIds.length; i++) {
+        await txn.update(
+          'invoices',
+          {'numero': -9000000 - i, 'updated_at': now},
+          where: 'id = ?',
+          whereArgs: [targetIds[i]],
+        );
+      }
+
+      for (final id in targetIds) {
+        final newNumber = newNumbersByInvoiceId[id]!;
+        await txn.update(
+          'invoices',
+          {'numero': newNumber, 'updated_at': now},
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+      }
+
+      final updatedRows = await txn.rawQuery(
+        '''
+        SELECT *
+        FROM invoices
+        WHERE id IN ($placeholdersIds)
+        ''',
+        targetIds,
+      );
+      final updatedInvoices = updatedRows
+          .map((row) => Invoice.fromMap(row))
+          .toList(growable: false);
+
+      final changes = <ManualRenumberChange>[];
+      for (final updated in updatedInvoices) {
+        final oldNumber = oldById[updated.id];
+        if (oldNumber == null) continue;
+        changes.add(
+          ManualRenumberChange(
+            invoiceId: updated.id,
+            oldNumber: oldNumber,
+            newNumber: updated.numero,
+          ),
+        );
+      }
+
+      return ManualRenumberResult(
+        fiscalYear: fiscalYear,
+        updatedInvoices: updatedInvoices,
+        changes: changes,
+      );
+    });
+  }
+
+  int _yearFromIso(String isoDate) => DateTime.parse(isoDate).year;
 }
 
 class InvoiceGapPreviewItem {
@@ -353,5 +492,29 @@ class InvoiceGapPreviewItem {
     required this.fromNumber,
     required this.toNumber,
     required this.fecha,
+  });
+}
+
+class ManualRenumberChange {
+  final String invoiceId;
+  final int oldNumber;
+  final int newNumber;
+
+  ManualRenumberChange({
+    required this.invoiceId,
+    required this.oldNumber,
+    required this.newNumber,
+  });
+}
+
+class ManualRenumberResult {
+  final int fiscalYear;
+  final List<Invoice> updatedInvoices;
+  final List<ManualRenumberChange> changes;
+
+  ManualRenumberResult({
+    required this.fiscalYear,
+    required this.updatedInvoices,
+    required this.changes,
   });
 }

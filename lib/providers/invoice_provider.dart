@@ -543,6 +543,58 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
     await refreshFromCloud(reason: 'local_renumber_year', force: true);
   }
 
+  Future<void> renumberInvoicesManually({
+    required int fiscalYear,
+    required Map<String, int> newNumbersByInvoiceId,
+    String? reason,
+  }) async {
+    final userId = SupabaseService.instance.userId;
+    if (userId == null || userId.isEmpty) {
+      throw StateError('Debes iniciar sesión para reenumerar facturas.');
+    }
+
+    _markLocalMutation();
+    final repository = ref.read(invoiceRepositoryProvider);
+    final result = await repository.renumberInvoicesManually(
+      fiscalYear: fiscalYear,
+      newNumbersByInvoiceId: newNumbersByInvoiceId,
+    );
+
+    for (final invoice in result.updatedInvoices) {
+      await SyncQueueRepository.instance.enqueue(
+        entityType: SyncEntityType.invoice,
+        entityId: invoice.id,
+        operation: SyncOperation.update,
+        payload: invoice.toMap(),
+      );
+    }
+    await SyncQueueProcessor.instance.processPending(
+      reason: 'invoice_manual_renumber',
+    );
+
+    final createdAt = DateTime.now().toIso8601String();
+    for (final change in result.changes) {
+      await AppEventRepository.instance.insert(
+        AppEvent(
+          entityType: 'invoice',
+          entityId: change.invoiceId,
+          eventType: 'invoice_manual_renumbered',
+          payload: {
+            'invoice_id': change.invoiceId,
+            'old_number': change.oldNumber,
+            'new_number': change.newNumber,
+            'user_id': userId,
+            'created_at': createdAt,
+            'reason': reason,
+          },
+        ),
+      );
+    }
+
+    await SupabaseService.instance.renumberInvoices(result.updatedInvoices);
+    await reloadLocal();
+  }
+
   Future<List<InvoiceGapPreviewItem>> previewCloseGapsYear(
     int year, {
     bool includeDrafts = false,
@@ -625,4 +677,12 @@ final nextInvoiceNumberProvider = FutureProvider.family<int, int>((ref, year) {
   // Escuchar cambios en invoicesProvider para refrescar automáticamente
   ref.watch(invoicesProvider);
   return ref.read(invoiceRepositoryProvider).getNextNumberForYear(year);
+});
+
+final invoicesByFiscalYearProvider = FutureProvider.family<List<Invoice>, int>((
+  ref,
+  year,
+) {
+  ref.watch(invoicesProvider);
+  return ref.read(invoiceRepositoryProvider).getByFiscalYear(year);
 });
