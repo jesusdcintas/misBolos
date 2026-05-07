@@ -811,7 +811,9 @@ class SupabaseService {
 
   Future<List<Expense>> downloadExpenses() async {
     if (!isAuthenticated) return [];
-    final data = await _client!.from('expenses').select();
+    final uid = userId;
+    final query = _client!.from('expenses').select();
+    final data = uid == null ? await query : await query.eq('user_id', uid);
     final result = (data as List).map((e) => _expenseFromSupabase(e)).toList();
     debugPrint('[Supabase] Downloaded ${result.length} expenses');
     return result;
@@ -882,7 +884,9 @@ class SupabaseService {
 
   Future<List<Asset>> downloadAssets() async {
     if (!isAuthenticated) return [];
-    final data = await _client!.from('assets').select();
+    final uid = userId;
+    final query = _client!.from('assets').select();
+    final data = uid == null ? await query : await query.eq('user_id', uid);
     final result = (data as List).map((e) => _assetFromSupabase(e)).toList();
     debugPrint('[Supabase] Downloaded ${result.length} assets');
     return result;

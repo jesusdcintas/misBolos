@@ -18,11 +18,32 @@ final _assetSortProvider = StateProvider<AssetSortOption>(
   (ref) => AssetSortOption.fechaDesc,
 );
 
-class AssetsScreen extends ConsumerWidget {
+class AssetsScreen extends ConsumerStatefulWidget {
   const AssetsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AssetsScreen> createState() => _AssetsScreenState();
+}
+
+class _AssetsScreenState extends ConsumerState<AssetsScreen> {
+  bool _entered = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_entered) return;
+    _entered = true;
+    Future.microtask(() => ref.read(assetsProvider.notifier).enterScreen());
+  }
+
+  @override
+  void dispose() {
+    ref.read(assetsProvider.notifier).leaveScreen();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final assetsAsync = ref.watch(assetsProvider);
     final categoriaFilter = ref.watch(_assetCategoryFilterProvider);
     final showInactivos = ref.watch(_showInactivosProvider);

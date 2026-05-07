@@ -1,6 +1,12 @@
+import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
+import '../database/database_helper.dart';
 import '../models/asset.dart';
 import '../repositories/asset_repository.dart';
+import '../services/supabase_service.dart';
 
 final assetRepositoryProvider = Provider((ref) => AssetRepository.instance);
 
@@ -9,23 +15,201 @@ final assetsProvider = AsyncNotifierProvider<AssetsNotifier, List<Asset>>(
 );
 
 class AssetsNotifier extends AsyncNotifier<List<Asset>> {
+  RealtimeChannel? _assetsChannel;
+  StreamSubscription<AuthState>? _authSubscription;
+  bool _realtimeStarted = false;
+  bool _initialPullDone = false;
+  bool _isPulling = false;
+  bool _isApplyingRemoteChange = false;
+
   @override
   Future<List<Asset>> build() async {
     return ref.read(assetRepositoryProvider).getAll();
   }
 
+  Future<void> enterScreen() async {
+    await pullInitialFromCloud();
+    _startRealtimeIfNeeded();
+  }
+
+  void leaveScreen() {
+    _disposeRealtime();
+  }
+
+  Future<void> pullInitialFromCloud({bool force = false}) async {
+    final supabase = SupabaseService.instance;
+    if (!supabase.isAuthenticated) return;
+    if (!force && _initialPullDone) return;
+    if (_isPulling) return;
+
+    _isPulling = true;
+    try {
+      debugPrint('[AssetsSync] Pull inicial assets (Supabase -> SQLite)');
+      final remote = await supabase.downloadAssets();
+      _isApplyingRemoteChange = true;
+      try {
+        for (final asset in remote) {
+          await ref.read(assetRepositoryProvider).upsertByCloudId(asset);
+        }
+      } finally {
+        _isApplyingRemoteChange = false;
+      }
+      _initialPullDone = true;
+      await reloadLocal();
+    } catch (e) {
+      debugPrint('[AssetsSync] Pull inicial error: $e');
+    } finally {
+      _isPulling = false;
+    }
+  }
+
+  void _startRealtimeIfNeeded() {
+    if (_realtimeStarted) return;
+    _realtimeStarted = true;
+
+    final supabase = SupabaseService.instance;
+    if (!supabase.isAuthenticated || supabase.userId == null) {
+      debugPrint('[AssetsSync] Realtime no iniciado: sin sesión');
+      return;
+    }
+
+    _authSubscription?.cancel();
+    _authSubscription = supabase.authStateChanges?.listen((event) {
+      if (event.event == AuthChangeEvent.signedOut) {
+        _disposeRealtime();
+      }
+    });
+
+    final client = Supabase.instance.client;
+    _assetsChannel = client
+        .channel('public:assets:user:${supabase.userId}')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'assets',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'user_id',
+            value: supabase.userId!,
+          ),
+          callback: _handleRealtimeEvent,
+        )
+        .subscribe();
+
+    debugPrint('[AssetsSync] Realtime suscrito (assets)');
+  }
+
+  void _disposeRealtime() {
+    final channel = _assetsChannel;
+    _assetsChannel = null;
+    _realtimeStarted = false;
+    if (channel != null) {
+      Supabase.instance.client.removeChannel(channel);
+      debugPrint('[AssetsSync] Realtime desuscrito (assets)');
+    }
+    _authSubscription?.cancel();
+    _authSubscription = null;
+  }
+
+  Asset? _assetFromRealtimeRecord(Map<String, dynamic> m) {
+    final cloudId = m['id']?.toString();
+    final userId = m['user_id']?.toString();
+    final descripcion = m['descripcion']?.toString();
+    final fechaCompraRaw = m['fecha_compra']?.toString();
+    final importeTotalRaw = m['importe_total'];
+    final createdAtRaw = m['created_at']?.toString();
+    if (cloudId == null ||
+        userId == null ||
+        descripcion == null ||
+        fechaCompraRaw == null ||
+        importeTotalRaw == null ||
+        createdAtRaw == null) {
+      return null;
+    }
+
+    try {
+      return Asset(
+        cloudId: cloudId,
+        userId: userId,
+        descripcion: descripcion,
+        fechaCompra: DateTime.parse(fechaCompraRaw),
+        importeTotal: (importeTotalRaw as num).toDouble(),
+        importeConIva: (m['importe_con_iva'] as num? ?? 0).toDouble(),
+        ivaRate: (m['iva_rate'] as num? ?? 21).toDouble(),
+        ivaAmount: (m['iva_amount'] as num? ?? 0).toDouble(),
+        valorResidual: (m['valor_residual'] as num? ?? 0).toDouble(),
+        vidaUtilAnos: (m['vida_util_anos'] as num?)?.toInt() ?? 1,
+        metodoAmortizacion: (m['metodo_amortizacion'] ?? 'lineal').toString(),
+        categoria: AssetCategory.fromDb((m['categoria'] ?? 'otros').toString()),
+        documentoPath: m['documento_path']?.toString(),
+        notas: m['notas']?.toString(),
+        activo: m['activo'] as bool? ?? true,
+        synced: true,
+        createdAt: DateTime.parse(createdAtRaw),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _handleRealtimeEvent(PostgresChangePayload payload) async {
+    if (_isPulling || _isApplyingRemoteChange) return;
+
+    final event = payload.eventType;
+    final id =
+        (payload.newRecord['id'] ?? payload.oldRecord['id'])?.toString() ??
+        'unknown';
+
+    try {
+      _isApplyingRemoteChange = true;
+      if (event == PostgresChangeEvent.delete) {
+        final cloudId = payload.oldRecord['id']?.toString();
+        if (cloudId != null) {
+          await ref.read(assetRepositoryProvider).deleteByCloudId(cloudId);
+        }
+      } else {
+        final asset = _assetFromRealtimeRecord(payload.newRecord);
+        if (asset == null) return;
+        await ref.read(assetRepositoryProvider).upsertByCloudId(asset);
+      }
+      await reloadLocal();
+      debugPrint('[AssetsSync] Realtime ${event.name.toUpperCase()} asset_id=$id');
+    } catch (e) {
+      debugPrint('[AssetsSync] Realtime error asset_id=$id: $e');
+    } finally {
+      _isApplyingRemoteChange = false;
+    }
+  }
+
+  Future<void> reloadLocal() async {
+    final assets = await ref.read(assetRepositoryProvider).getAll();
+    state = AsyncData(assets);
+  }
+
   Future<void> add(Asset asset) async {
-    await ref.read(assetRepositoryProvider).insert(asset);
+    final repo = ref.read(assetRepositoryProvider);
+    final localId = await repo.insert(asset.copyWith(synced: false));
     ref.invalidateSelf();
+    unawaited(_tryUploadAsset(localId));
   }
 
   Future<void> updateAsset(Asset asset) async {
-    await ref.read(assetRepositoryProvider).update(asset);
+    final repo = ref.read(assetRepositoryProvider);
+    await repo.update(asset.copyWith(synced: false));
     ref.invalidateSelf();
+    if (asset.id != null) {
+      unawaited(_tryUploadAsset(asset.id!));
+    }
   }
 
   Future<void> remove(int id) async {
-    await ref.read(assetRepositoryProvider).delete(id);
+    final repo = ref.read(assetRepositoryProvider);
+    final existing = await repo.getById(id);
+    if (existing?.cloudId != null) {
+      await DatabaseHelper.instance.addPendingDeletion('assets', existing!.cloudId!);
+      unawaited(SupabaseService.instance.deleteAsset(existing.cloudId!));
+    }
+    await repo.delete(id);
     ref.invalidateSelf();
   }
 
@@ -34,6 +218,29 @@ class AssetsNotifier extends AsyncNotifier<List<Asset>> {
     if (asset == null) return;
     await ref.read(assetRepositoryProvider).update(asset.copyWith(activo: false));
     ref.invalidateSelf();
+  }
+
+  Future<void> _tryUploadAsset(int localId) async {
+    final supabase = SupabaseService.instance;
+    if (!supabase.isAuthenticated) return;
+    final repo = ref.read(assetRepositoryProvider);
+    final asset = await repo.getById(localId);
+    if (asset == null) return;
+
+    var updated = asset;
+    if (updated.cloudId == null) {
+      final cloudId = const Uuid().v4();
+      await repo.saveCloudId(localId, cloudId);
+      updated = updated.copyWith(cloudId: cloudId);
+    }
+
+    try {
+      await supabase.uploadAssets([updated.copyWith(synced: true)]);
+      await repo.update(updated.copyWith(synced: true));
+      await reloadLocal();
+    } catch (e) {
+      debugPrint('[AssetsSync] Upload directo error: $e');
+    }
   }
 }
 

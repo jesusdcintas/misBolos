@@ -21,11 +21,32 @@ final _expenseSortProvider = StateProvider<ExpenseSortOption>(
   (ref) => ExpenseSortOption.fechaDesc,
 );
 
-class ExpensesScreen extends ConsumerWidget {
+class ExpensesScreen extends ConsumerStatefulWidget {
   const ExpensesScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ExpensesScreen> createState() => _ExpensesScreenState();
+}
+
+class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
+  bool _entered = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_entered) return;
+    _entered = true;
+    Future.microtask(() => ref.read(expensesProvider.notifier).enterScreen());
+  }
+
+  @override
+  void dispose() {
+    ref.read(expensesProvider.notifier).leaveScreen();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final expensesAsync = ref.watch(expensesProvider);
     final categoriaFilter = ref.watch(_expenseCategoryFilterProvider);
     final monthFilter = ref.watch(_expenseMonthFilterProvider);
