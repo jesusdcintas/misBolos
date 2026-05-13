@@ -229,7 +229,7 @@ class DashboardScreen extends ConsumerWidget {
             const SizedBox(width: 12),
             Expanded(
               child: SummaryCard(
-                title: 'Pendiente',
+                title: 'Pendiente de cobro',
                 value: CurrencyFormatter.format(stats.pendiente),
                 numericValue: stats.pendiente,
                 color: AppColors.warning,
@@ -245,7 +245,7 @@ class DashboardScreen extends ConsumerWidget {
                 ),
                 onInfoTap: () => _showMetricInfo(
                   context,
-                  'Pendiente',
+                  'Pendiente de cobro',
                   'Trabajo realizado con factura enviada\nal cliente, a la espera de que paguen.\nNo incluye bolos sin factura emitida.',
                 ),
               ),
@@ -254,10 +254,10 @@ class DashboardScreen extends ConsumerWidget {
         ),
         const SizedBox(height: 8),
 
-        // PREVISTO (solo si > 0)
+        // CONFIRMADO (solo si > 0)
         if (stats.previsto > 0) ...[
           SummaryCard(
-            title: 'Previsto',
+            title: 'Confirmado',
             value: CurrencyFormatter.format(stats.previsto),
             numericValue: stats.previsto,
             color: AppColors.primary,
@@ -267,9 +267,9 @@ class DashboardScreen extends ConsumerWidget {
               '(${stats.previstoCount} bolo${stats.previstoCount == 1 ? '' : 's'} confirmado${stats.previstoCount == 1 ? '' : 's'} en agenda\n aún no realizado${stats.previstoCount == 1 ? '' : 's'} ni facturado${stats.previstoCount == 1 ? '' : 's'})',
               style: const TextStyle(fontSize: 11, color: Color(0xFF8C95A6)),
             ),
-            onInfoTap: () => _showMetricInfo(
+                onInfoTap: () => _showMetricInfo(
               context,
-              'Previsto',
+              'Confirmado',
               'Bolos que tienes en agenda confirmados\npero que aún no has realizado ni facturado.\nEs dinero esperado, puede cambiar.',
             ),
           ),
@@ -287,7 +287,7 @@ class DashboardScreen extends ConsumerWidget {
                 color: const Color(0xFF0F5C3A),
                 icon: Icons.account_balance,
                 subtitle: Text(
-                  '(cobrado oficial ${CurrencyFormatter.format(stats.cobradoOficial)}\n + pendiente ${CurrencyFormatter.format(stats.pendiente)})',
+                  '(cobrado oficial ${CurrencyFormatter.format(stats.cobradoOficial)}\n + pendiente de cobro ${CurrencyFormatter.format(stats.pendiente)})',
                   style: const TextStyle(
                     fontSize: 11,
                     color: Color(0xFF8C95A6),
@@ -296,14 +296,14 @@ class DashboardScreen extends ConsumerWidget {
                 onInfoTap: () => _showMetricInfo(
                   context,
                   'Acumulado',
-                  'Todo el trabajo ya ejecutado:\n· Cobrado: dinero recibido\n· Pendiente: facturas emitidas sin cobrar\nEs lo que has ganado hasta hoy.',
+                  'Todo el trabajo ya ejecutado:\n· Cobrado: dinero recibido\n· Pendiente de cobro: facturas emitidas sin cobrar\nEs lo que has ganado hasta hoy.',
                 ),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: SummaryCard(
-                title: 'Total previsto',
+                title: 'Proyección oficial',
                 value: CurrencyFormatter.format(stats.totalPrevisto),
                 numericValue: stats.totalPrevisto,
                 color: const Color(0xFF5F5E5A),
@@ -330,7 +330,7 @@ class DashboardScreen extends ConsumerWidget {
                 ),
                 onInfoTap: () => _showMetricInfo(
                   context,
-                  'Total previsto',
+                  'Proyección oficial',
                   'Proyección máxima del período:\n· Acumulado: trabajo ya hecho\n· Previsto: bolos futuros en agenda\nSolo se cumple si cobras todo y\nrealizas todos los bolos confirmados.',
                 ),
               ),
@@ -400,7 +400,7 @@ class DashboardScreen extends ConsumerWidget {
             const SizedBox(width: 12),
             Expanded(
               child: SummaryCard(
-                title: 'Pendiente en B',
+                title: 'Pendiente de cobro en B',
                 value: CurrencyFormatter.format(stats.pendienteEnB),
                 numericValue: stats.pendienteEnB,
                 color: AppColors.purple,
@@ -408,7 +408,7 @@ class DashboardScreen extends ConsumerWidget {
                 showChevron: true,
                 onTap: () => context.push('/financial'),
                 subtitle: Text(
-                  '(${stats.pendienteEnBCount} pendiente${stats.pendienteEnBCount == 1 ? '' : 's'} en B)',
+                  '(${stats.pendienteEnBCount} realizado${stats.pendienteEnBCount == 1 ? '' : 's'} en B sin cobrar)',
                   style: const TextStyle(
                     fontSize: 11,
                     color: Color(0xFF8C95A6),
@@ -421,7 +421,7 @@ class DashboardScreen extends ConsumerWidget {
         const SizedBox(height: 8),
         if (stats.previstoEnB > 0) ...[
           SummaryCard(
-            title: 'Previsto en B',
+            title: 'Confirmado en B',
             value: CurrencyFormatter.format(stats.previstoEnB),
             numericValue: stats.previstoEnB,
             color: AppColors.purple,
@@ -431,6 +431,11 @@ class DashboardScreen extends ConsumerWidget {
               '(${stats.previstoEnBCount} bolo${stats.previstoEnBCount == 1 ? '' : 's'} futuro${stats.previstoEnBCount == 1 ? '' : 's'} en B)',
               style: const TextStyle(fontSize: 11, color: Color(0xFF8C95A6)),
             ),
+            onInfoTap: () => _showMetricInfo(
+              context,
+              'Confirmado en B',
+              'Bolos en B ya cerrados en agenda pero aún no realizados. Es importe previsto, no cobrado.',
+            ),
           ),
           const SizedBox(height: 8),
         ],
@@ -438,34 +443,44 @@ class DashboardScreen extends ConsumerWidget {
           children: [
             Expanded(
               child: SummaryCard(
-                title: 'Acumulado en B',
-                value: CurrencyFormatter.format(stats.acumuladoEnB),
-                numericValue: stats.acumuladoEnB,
+                title: 'Confirmado en B',
+                value: CurrencyFormatter.format(stats.previstoEnB),
+                numericValue: stats.previstoEnB,
                 color: AppColors.purple,
                 icon: Icons.account_balance,
                 subtitle: Text(
-                  '(cobrado ${CurrencyFormatter.format(stats.cobradoEnB)}\n + pendiente ${CurrencyFormatter.format(stats.pendienteEnB)})',
+                  '(${stats.previstoEnBCount} bolo${stats.previstoEnBCount == 1 ? '' : 's'} cerrado${stats.previstoEnBCount == 1 ? '' : 's'} en B)',
                   style: const TextStyle(
                     fontSize: 11,
                     color: Color(0xFF8C95A6),
                   ),
+                ),
+                onInfoTap: () => _showMetricInfo(
+                  context,
+                  'Confirmado en B',
+                  'Importe de bolos en B cerrados en agenda y aún no realizados (estado confirmado_b).',
                 ),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: SummaryCard(
-                title: 'Total previsto B',
+                title: 'Proyección B',
                 value: CurrencyFormatter.format(stats.totalPrevistoEnB),
                 numericValue: stats.totalPrevistoEnB,
                 color: AppColors.purple,
                 icon: Icons.trending_up,
                 subtitle: Text(
-                  '(acumulado ${CurrencyFormatter.format(stats.acumuladoEnB)}\n + previsto ${CurrencyFormatter.format(stats.previstoEnB)})',
+                  '(cobrado ${CurrencyFormatter.format(stats.cobradoEnB)}\n + pendiente ${CurrencyFormatter.format(stats.pendienteEnB)}\n + confirmado ${CurrencyFormatter.format(stats.previstoEnB)})',
                   style: const TextStyle(
                     fontSize: 11,
                     color: Color(0xFF8C95A6),
                   ),
+                ),
+                onInfoTap: () => _showMetricInfo(
+                  context,
+                  'Proyección B',
+                  'Suma total proyectada en B del período:\n· Cobrado en B\n· Realizado en B pendiente de cobro\n· Confirmado en B',
                 ),
               ),
             ),
@@ -474,7 +489,7 @@ class DashboardScreen extends ConsumerWidget {
         const SizedBox(height: 20),
 
         Text(
-          'Facturable + B',
+          'Global',
           style: Theme.of(
             context,
           ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
@@ -496,22 +511,32 @@ class DashboardScreen extends ConsumerWidget {
                     color: Color(0xFF8C95A6),
                   ),
                 ),
+                onInfoTap: () => _showMetricInfo(
+                  context,
+                  'Cobrado total',
+                  'Total ya cobrado en el período sumando oficial y B.',
+                ),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: SummaryCard(
-                title: 'Pendiente total',
-                value: CurrencyFormatter.format(stats.pendienteTotal),
-                numericValue: stats.pendienteTotal,
+                title: 'Proyección global',
+                value: CurrencyFormatter.format(stats.totalPrevistoGlobal),
+                numericValue: stats.totalPrevistoGlobal,
                 color: AppColors.warning,
                 icon: Icons.schedule,
                 subtitle: Text(
-                  '(oficial ${CurrencyFormatter.format(stats.pendiente)}\n + B ${CurrencyFormatter.format(stats.pendienteEnB)})',
+                  '(acumulado ${CurrencyFormatter.format(stats.acumuladoTotal)}\n + confirmado ${CurrencyFormatter.format(stats.previstoTotal)})',
                   style: const TextStyle(
                     fontSize: 11,
                     color: Color(0xFF8C95A6),
                   ),
+                ),
+                onInfoTap: () => _showMetricInfo(
+                  context,
+                  'Proyección global',
+                  'Proyección combinada oficial + B:\n· Acumulado total (cobrado + pendiente de cobro)\n· Confirmado total (aún por realizar)',
                 ),
               ),
             ),
@@ -520,7 +545,7 @@ class DashboardScreen extends ConsumerWidget {
         const SizedBox(height: 8),
         if (stats.previstoTotal > 0) ...[
           SummaryCard(
-            title: 'Previsto total',
+            title: 'Confirmado total',
             value: CurrencyFormatter.format(stats.previstoTotal),
             numericValue: stats.previstoTotal,
             color: AppColors.primary,
@@ -529,6 +554,11 @@ class DashboardScreen extends ConsumerWidget {
             subtitle: Text(
               '(oficial ${CurrencyFormatter.format(stats.previsto)} + B ${CurrencyFormatter.format(stats.previstoEnB)})',
               style: const TextStyle(fontSize: 11, color: Color(0xFF8C95A6)),
+            ),
+            onInfoTap: () => _showMetricInfo(
+              context,
+              'Confirmado total',
+              'Suma de bolos confirmados aún no realizados en oficial y en B.',
             ),
           ),
           const SizedBox(height: 8),
@@ -542,16 +572,26 @@ class DashboardScreen extends ConsumerWidget {
                 numericValue: stats.acumuladoTotal,
                 color: const Color(0xFF0F5C3A),
                 icon: Icons.account_balance,
+                onInfoTap: () => _showMetricInfo(
+                  context,
+                  'Acumulado total',
+                  'Trabajo ya realizado en oficial y B:\n· Cobrado total\n· Pendiente de cobro total',
+                ),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: SummaryCard(
-                title: 'Total previsto global',
+                title: 'Proyección global (máxima)',
                 value: CurrencyFormatter.format(stats.totalPrevistoGlobal),
                 numericValue: stats.totalPrevistoGlobal,
                 color: const Color(0xFF5F5E5A),
                 icon: Icons.trending_up,
+                onInfoTap: () => _showMetricInfo(
+                  context,
+                  'Proyección global (máxima)',
+                  'Escenario máximo si cobras todo lo realizado y además realizas todos los bolos confirmados.',
+                ),
               ),
             ),
           ],
@@ -566,6 +606,11 @@ class DashboardScreen extends ConsumerWidget {
           icon: Icons.music_note_outlined,
           showChevron: true,
           onTap: () => context.go('/calendar'),
+          onInfoTap: () => _showMetricInfo(
+            context,
+            'Bolos en el período',
+            'Cuenta total de bolos del período, excluyendo cancelados.',
+          ),
         ),
       ],
     );
@@ -886,7 +931,7 @@ class _FinancialBanner extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: _BannerMini(
-                      label: 'Pendiente',
+                      label: 'Pendiente de cobro',
                       subtitle: '(oficial + B)',
                       value: stats.pendienteTotal,
                       color: Colors.amber[200]!,
@@ -1015,7 +1060,7 @@ class _GigTile extends ConsumerWidget {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
-        trailing: StatusBadge(status: gig.status),
+        trailing: StatusBadge(status: gig.status, facturable: gig.facturable),
       ),
     );
   }

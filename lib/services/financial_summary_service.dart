@@ -76,7 +76,7 @@ class FinancialSummaryService {
         .where(
           (gig) =>
               gig.facturable &&
-              gig.status == GigStatus.pagado &&
+              gig.status == GigStatus.cobrado &&
               (gig.invoiceId == null || gig.invoiceId!.isEmpty) &&
               _isWithin(gig.fecha, from, to),
         )

@@ -6,7 +6,13 @@ import 'package:path_provider/path_provider.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/services/drive_backup_service.dart';
+import '../../core/services/drive_document_sync_service.dart';
+import '../../core/services/google_drive_service.dart';
 import '../../models/app_settings.dart';
+import '../../providers/assets_provider.dart';
+import '../../providers/expenses_provider.dart';
+import '../../providers/invoice_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/sync_provider.dart';
 import '../../services/google_auth_service.dart';
@@ -30,8 +36,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   final _emailController = TextEditingController();
   final _telefonoController = TextEditingController();
   final _ibanController = TextEditingController();
+  final _driveSearchController = TextEditingController(text: 'MisBolos Test');
   String _logoPath = '';
   bool _loaded = false;
+  List<DriveFolderResult> _driveFolderResults = [];
+  bool _driveBusy = false;
 
   @override
   void dispose() {
@@ -44,6 +53,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     _emailController.dispose();
     _telefonoController.dispose();
     _ibanController.dispose();
+    _driveSearchController.dispose();
     super.dispose();
   }
 
@@ -86,6 +96,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             children: [
               // ── Cuenta Google ──
               _GoogleSection(auth: googleAuth),
+              const SizedBox(height: 16),
+
+              // ── Archivo documental ──
+              _buildGoogleDriveSection(settings),
               const SizedBox(height: 16),
 
               // ── Sincronización Cloud ──
@@ -213,6 +227,395 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
+  Widget _buildGoogleDriveSection(AppSettings settings) {
+    final connected = settings.driveConnected;
+    final rootName = settings.driveRootFolderName;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  connected ? Icons.add_to_drive : Icons.add_to_drive_outlined,
+                  color: connected ? AppColors.success : AppColors.primary,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Google Drive',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        connected
+                            ? 'Archivo documental conectado'
+                            : 'Backup documental sin configurar',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: connected
+                              ? AppColors.success
+                              : AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (_driveBusy)
+                  const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _driveInfoRow('Estado', connected ? 'Conectado' : 'No conectado'),
+            _driveInfoRow(
+              'Cuenta',
+              settings.driveAccountEmail?.isNotEmpty == true
+                  ? settings.driveAccountEmail!
+                  : 'Sin cuenta conectada',
+            ),
+            _driveInfoRow(
+              'Carpeta de trabajo',
+              rootName?.isNotEmpty == true ? rootName! : 'Sin seleccionar',
+            ),
+            _driveInfoRow(
+              'Último backup',
+              _formatDriveDate(settings.lastDriveBackupAt),
+            ),
+            _driveInfoRow(
+              'Última sincronización',
+              _formatDriveDate(settings.lastDriveSyncAt),
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: _driveBusy ? null : _connectDrive,
+                  icon: const Icon(Icons.login),
+                  label: const Text('Conectar Google Drive'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: (!_driveBusy && settings.driveRootFolderId != null)
+                      ? () => _openDriveFolder(settings.driveRootFolderId!)
+                      : null,
+                  icon: const Icon(Icons.open_in_new),
+                  label: const Text('Ver carpeta'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _driveBusy ? null : _disconnectDrive,
+                  icon: const Icon(Icons.logout),
+                  label: const Text('Desconectar'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _driveSearchController,
+              decoration: InputDecoration(
+                labelText: 'Buscar carpeta',
+                hintText: 'MisBolos Test',
+                suffixIcon: IconButton(
+                  tooltip: 'Buscar',
+                  onPressed: _driveBusy ? null : _searchDriveFolders,
+                  icon: const Icon(Icons.search),
+                ),
+                border: const OutlineInputBorder(),
+              ),
+              onSubmitted: (_) => _searchDriveFolders(),
+            ),
+            if (_driveFolderResults.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              ..._driveFolderResults.map(
+                (folder) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.folder_outlined),
+                  title: Text(folder.name),
+                  subtitle: Text(
+                    folder.id,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: TextButton(
+                    onPressed: _driveBusy
+                        ? null
+                        : () => _selectDriveFolder(folder),
+                    child: const Text('Seleccionar'),
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: (!_driveBusy && settings.driveRootFolderId != null)
+                      ? () => _createDriveStructure(DateTime.now().year)
+                      : null,
+                  icon: const Icon(Icons.create_new_folder_outlined),
+                  label: const Text('Crear estructura'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: (!_driveBusy && settings.driveRootFolderId != null)
+                      ? _syncDriveDocuments
+                      : null,
+                  icon: const Icon(Icons.cloud_sync_outlined),
+                  label: const Text('Sincronizar documentos'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: (!_driveBusy && settings.driveRootFolderId != null)
+                      ? _retryPendingDriveSync
+                      : null,
+                  icon: const Icon(Icons.refresh_outlined),
+                  label: const Text('Reintentar pendientes'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: (!_driveBusy && settings.driveRootFolderId != null)
+                      ? _createDriveBackupNow
+                      : null,
+                  icon: const Icon(Icons.backup_outlined),
+                  label: const Text('Crear backup ahora'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            FutureBuilder<int>(
+              future: DriveDocumentSyncService.instance.getPendingQueueCount(),
+              builder: (context, snapshot) {
+                final pending = snapshot.data ?? 0;
+                return Text(
+                  pending > 0
+                      ? 'Pendientes Drive: $pending (máx ${DriveDocumentSyncService.maxRetryAttempts} intentos)'
+                      : 'Sin pendientes en cola de Drive',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: pending > 0
+                        ? AppColors.warning
+                        : AppColors.textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 6),
+            FutureBuilder<List<Map<String, Object?>>>(
+              future: DriveDocumentSyncService.instance.getRecentQueueErrors(),
+              builder: (context, snapshot) {
+                final rows = snapshot.data ?? const <Map<String, Object?>>[];
+                if (rows.isEmpty) return const SizedBox.shrink();
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: rows.take(3).map((row) {
+                    final type = row['entity_type'] ?? '-';
+                    final id = row['entity_id'] ?? '-';
+                    final attempts = row['attempts'] ?? 0;
+                    final err = row['last_error'] ?? 'Error desconocido';
+                    return Text(
+                      '• $type/$id (intentos: $attempts): $err',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textSecondary,
+                      ),
+                    );
+                  }).toList(),
+                );
+              },
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'La app solo creará o reutilizará carpetas dentro de la carpeta seleccionada. No borra, mueve ni renombra archivos.',
+              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _driveInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 150,
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Expanded(child: Text(value)),
+        ],
+      ),
+    );
+  }
+
+  String _formatDriveDate(DateTime? date) {
+    if (date == null) return 'Sin datos';
+    final local = date.toLocal();
+    String two(int value) => value.toString().padLeft(2, '0');
+    return '${two(local.day)}/${two(local.month)}/${local.year} '
+        '${two(local.hour)}:${two(local.minute)}';
+  }
+
+  Future<void> _connectDrive() async {
+    await _runDriveAction(
+      () async {
+        await GoogleDriveService.instance.signIn();
+        ref.invalidate(settingsProvider);
+      },
+      successMessage: 'Google Drive conectado',
+      errorPrefix: 'No se pudo conectar con Google Drive',
+    );
+  }
+
+  Future<void> _disconnectDrive() async {
+    await _runDriveAction(
+      () async {
+        await GoogleDriveService.instance.signOut();
+        _driveFolderResults = [];
+        ref.invalidate(settingsProvider);
+      },
+      successMessage: 'Google Drive desconectado',
+      errorPrefix: 'No se pudo desconectar Google Drive',
+    );
+  }
+
+  Future<void> _searchDriveFolders() async {
+    await _runDriveAction(
+      () async {
+        final results = await GoogleDriveService.instance.searchFoldersByName(
+          _driveSearchController.text,
+        );
+        setState(() => _driveFolderResults = results);
+        if (results.isEmpty) {
+          throw Exception('No se encontraron carpetas con ese nombre.');
+        }
+      },
+      successMessage: 'Carpetas encontradas',
+      errorPrefix: 'No se pudo buscar la carpeta',
+    );
+  }
+
+  Future<void> _selectDriveFolder(DriveFolderResult folder) async {
+    await _runDriveAction(
+      () async {
+        await GoogleDriveService.instance.selectRootFolder(folder);
+        ref.invalidate(settingsProvider);
+      },
+      successMessage: 'Carpeta de trabajo seleccionada',
+      errorPrefix: 'No se pudo seleccionar la carpeta',
+    );
+  }
+
+  Future<void> _createDriveStructure(int year) async {
+    await _runDriveAction(
+      () async {
+        await GoogleDriveService.instance.createFullYearStructure(year);
+      },
+      successMessage:
+          'Estructura creada correctamente. Si ya existía, se ha reutilizado.',
+      errorPrefix: 'No se pudo crear la estructura de Drive',
+    );
+  }
+
+  Future<void> _openDriveFolder(String folderId) async {
+    await _runDriveAction(() async {
+      await GoogleDriveService.instance.openFolder(folderId);
+    }, errorPrefix: 'No se pudo abrir la carpeta de Drive');
+  }
+
+  Future<void> _syncDriveDocuments() async {
+    await _runDriveAction(() async {
+      final result = await DriveDocumentSyncService.instance
+          .syncExistingDocuments();
+      ref.invalidate(settingsProvider);
+      ref.invalidate(invoicesProvider);
+      ref.invalidate(expensesProvider);
+      ref.invalidate(assetsProvider);
+      _showDriveMessage(
+        'Documentos sincronizados: ${result.uploaded} subidos/actualizados, '
+        '${result.skipped} omitidos, ${result.failed} pendientes.',
+      );
+    }, errorPrefix: 'No se pudo sincronizar documentos');
+  }
+
+  Future<void> _createDriveBackupNow() async {
+    await _runDriveAction(() async {
+      final result = await DriveBackupService.instance.createBackupNow();
+      ref.invalidate(settingsProvider);
+      _showDriveMessage('Backup creado correctamente: ${result.fileName}');
+    }, errorPrefix: 'No se pudo crear el backup');
+  }
+
+  Future<void> _retryPendingDriveSync() async {
+    await _runDriveAction(() async {
+      final result = await DriveDocumentSyncService.instance
+          .retryPendingDriveSync();
+      ref.invalidate(settingsProvider);
+      ref.invalidate(invoicesProvider);
+      ref.invalidate(expensesProvider);
+      ref.invalidate(assetsProvider);
+      if (!mounted) return;
+      final extra = result.recentErrors.isEmpty
+          ? ''
+          : '\nErrores: ${result.recentErrors.join(' | ')}';
+      _showDriveMessage(
+        'Reintento Drive: ${result.succeeded} ok, ${result.failed} fallos, '
+        '${result.skippedByMaxAttempts} al límite.$extra',
+      );
+    }, errorPrefix: 'No se pudieron reintentar pendientes de Drive');
+  }
+
+  Future<void> _runDriveAction(
+    Future<void> Function() action, {
+    String? successMessage,
+    required String errorPrefix,
+  }) async {
+    if (_driveBusy) return;
+    setState(() => _driveBusy = true);
+    try {
+      await action();
+      if (mounted && successMessage != null) {
+        _showDriveMessage(successMessage);
+      }
+    } catch (e) {
+      if (mounted) {
+        _showDriveMessage('$errorPrefix: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _driveBusy = false);
+      }
+    }
+  }
+
+  void _showDriveMessage(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   Future<void> _pickLogo() async {
     final picker = ImagePicker();
     final image = await picker.pickImage(source: ImageSource.gallery);
@@ -228,7 +631,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   Future<void> _save() async {
     // Preserve settings that aren't edited here
     final current = await ref.read(settingsProvider.future);
-    final settings = AppSettings(
+    final settings = current.copyWith(
       logoPath: _logoPath,
       emisorNombre: _nombreController.text.trim(),
       emisorNIF: _nifController.text.trim(),
@@ -239,9 +642,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       emisorEmail: _emailController.text.trim(),
       emisorTelefono: _telefonoController.text.trim(),
       iban: _ibanController.text.trim(),
-      ivaDefault: current.ivaDefault,
-      notificacionesActivas: current.notificacionesActivas,
-      diasRecordatorio: current.diasRecordatorio,
     );
 
     await ref.read(settingsProvider.notifier).save(settings);

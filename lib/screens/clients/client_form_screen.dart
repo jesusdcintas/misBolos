@@ -245,7 +245,8 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
             TextFormField(
               controller: _whatsappController,
               decoration: const InputDecoration(
-                labelText: AppStrings.whatsapp,
+                labelText: 'Teléfono WhatsApp',
+                hintText: 'Número para mensajes de WhatsApp',
                 prefixIcon: Icon(Icons.chat_outlined),
               ),
               keyboardType: TextInputType.phone,
@@ -298,7 +299,8 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
       final whatsappPhone = _whatsappController.text.trim();
 
       if (_existingClient != null) {
-        final updated = _existingClient!.copyWith(
+        final updated = Client(
+          id: _existingClient!.id,
           nombre: _nombreController.text.trim(),
           alias: _aliasController.text.trim(),
           aliases: _aliases,
@@ -310,8 +312,11 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
           email: email.isEmpty ? null : email,
           telefono: telefono.isEmpty ? null : telefono,
           whatsappPhone: whatsappPhone.isEmpty ? null : whatsappPhone,
+          createdAt: _existingClient!.createdAt,
+          updatedAt: DateTime.now(),
         );
         await ref.read(clientsProvider.notifier).updateClient(updated);
+        ref.invalidate(clientByIdProvider(updated.id));
       } else {
         final client = Client(
           nombre: _nombreController.text.trim(),
@@ -327,6 +332,7 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
           whatsappPhone: whatsappPhone.isEmpty ? null : whatsappPhone,
         );
         await ref.read(clientsProvider.notifier).add(client);
+        ref.invalidate(clientByIdProvider(client.id));
       }
 
       ref.invalidate(clientsProvider);

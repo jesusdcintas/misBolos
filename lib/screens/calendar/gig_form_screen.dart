@@ -333,12 +333,31 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
       Gig savedGig;
 
       if (_existingGig != null) {
+        GigStatus status = _existingGig!.status;
+        if (_existingGig!.facturable != _facturable) {
+          // Adaptar estado al cambiar entre facturable y en B.
+          if (_facturable) {
+            if (status == GigStatus.confirmadoB ||
+                status == GigStatus.realizadoB) {
+              status = GigStatus.confirmado;
+            } else if (status == GigStatus.cobradoB) {
+              status = GigStatus.cobrado;
+            }
+          } else {
+            if (status == GigStatus.confirmado || status == GigStatus.facturado) {
+              status = GigStatus.confirmadoB;
+            } else if (status == GigStatus.cobrado) {
+              status = GigStatus.cobradoB;
+            }
+          }
+        }
         savedGig = _existingGig!.copyWith(
           fecha: _fecha,
           clientId: _clientId,
           cachet: cachet,
           notas: notas.isEmpty ? null : notas,
           facturable: _facturable,
+          status: status,
         );
         await ref.read(gigsProvider.notifier).updateGig(savedGig);
       } else {
@@ -348,6 +367,7 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
           cachet: cachet,
           notas: notas.isEmpty ? null : notas,
           facturable: _facturable,
+          status: _facturable ? GigStatus.confirmado : GigStatus.confirmadoB,
         );
         await ref.read(gigsProvider.notifier).add(savedGig);
       }

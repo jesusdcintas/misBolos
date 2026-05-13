@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS gigs (
   notas TEXT,
   cachet REAL,
   facturable INTEGER NOT NULL DEFAULT 1,
-  status TEXT NOT NULL DEFAULT 'pendiente',
+  status TEXT NOT NULL DEFAULT 'confirmado',
   invoice_id TEXT,
   created_at TEXT NOT NULL,
   FOREIGN KEY (client_id) REFERENCES clients(id)

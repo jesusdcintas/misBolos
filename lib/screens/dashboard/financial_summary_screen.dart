@@ -425,7 +425,7 @@ class _SummaryCard extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              '${summary.numBolos} bolos · ${summary.numFacturasPagadas} facturas cobradas · ${summary.pendienteCount} pendientes',
+              '${summary.numBolos} bolos · ${summary.numFacturasPagadas} facturas cobradas · ${summary.pendienteCount} pendientes de cobro',
               style: const TextStyle(
                 fontSize: 12,
                 color: AppColors.textSecondary,
@@ -456,7 +456,7 @@ class _SummaryCard extends StatelessWidget {
             _statRow(
               icon: Icons.schedule,
               color: AppColors.warning,
-              label: 'Pendiente',
+              label: 'Pendiente de cobro',
               value: summary.pendiente,
             ),
             const SizedBox(height: 14),
@@ -474,7 +474,7 @@ class _SummaryCard extends StatelessWidget {
               _statRow(
                 icon: Icons.hourglass_empty,
                 color: AppColors.purple,
-                label: 'Pendiente en B',
+                label: 'Pendiente de cobro en B',
                 value: summary.pendienteEnB,
               ),
             ],
@@ -1268,11 +1268,15 @@ class _SubPeriodCard extends StatelessWidget {
                     stats.cobradoHistorico,
                     AppColors.success,
                   ),
-                _detailRow('Pendiente', stats.pendiente, AppColors.warning),
+                _detailRow(
+                  'Pendiente de cobro',
+                  stats.pendiente,
+                  AppColors.warning,
+                ),
                 _detailRow('Cobrado en B', stats.cobradoEnB, AppColors.purple),
                 if (stats.pendienteEnB > 0)
                   _detailRow(
-                    'Pendiente en B',
+                    'Pendiente de cobro en B',
                     stats.pendienteEnB,
                     AppColors.purple,
                   ),
@@ -1404,16 +1408,18 @@ class _SubPeriodCard extends StatelessWidget {
     Color bg;
     Color text;
     switch (status) {
-      case GigStatus.pagado:
+      case GigStatus.cobrado:
         bg = AppColors.successBg;
         text = AppColors.success;
         break;
-      case GigStatus.cobradoEnB:
+      case GigStatus.cobradoB:
         bg = AppColors.purpleBg;
         text = AppColors.purple;
         break;
-      case GigStatus.facturaEnviada:
-      case GigStatus.facturaGenerada:
+      case GigStatus.facturado:
+      case GigStatus.confirmado:
+      case GigStatus.confirmadoB:
+      case GigStatus.realizadoB:
         bg = AppColors.warningBg;
         text = AppColors.warning;
         break;
@@ -1421,9 +1427,6 @@ class _SubPeriodCard extends StatelessWidget {
         bg = AppColors.errorBg;
         text = AppColors.error;
         break;
-      default:
-        bg = AppColors.primaryLight;
-        text = AppColors.primary;
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -1476,7 +1479,7 @@ class _GigsList extends StatelessWidget {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: gig.status == GigStatus.cobradoEnB
+                  color: gig.status == GigStatus.cobradoB
                       ? AppColors.purpleBg
                       : AppColors.primaryLight,
                   borderRadius: BorderRadius.circular(10),
@@ -1484,7 +1487,7 @@ class _GigsList extends StatelessWidget {
                 child: Icon(
                   Icons.music_note_outlined,
                   size: 20,
-                  color: gig.status == GigStatus.cobradoEnB
+                  color: gig.status == GigStatus.cobradoB
                       ? AppColors.purple
                       : AppColors.primary,
                 ),
@@ -1530,16 +1533,18 @@ class _GigsList extends StatelessWidget {
     Color bg;
     Color text;
     switch (status) {
-      case GigStatus.pagado:
+      case GigStatus.cobrado:
         bg = AppColors.successBg;
         text = AppColors.success;
         break;
-      case GigStatus.cobradoEnB:
+      case GigStatus.cobradoB:
         bg = AppColors.purpleBg;
         text = AppColors.purple;
         break;
-      case GigStatus.facturaEnviada:
-      case GigStatus.facturaGenerada:
+      case GigStatus.facturado:
+      case GigStatus.confirmado:
+      case GigStatus.confirmadoB:
+      case GigStatus.realizadoB:
         bg = AppColors.warningBg;
         text = AppColors.warning;
         break;
@@ -1547,9 +1552,6 @@ class _GigsList extends StatelessWidget {
         bg = AppColors.errorBg;
         text = AppColors.error;
         break;
-      default:
-        bg = AppColors.primaryLight;
-        text = AppColors.primary;
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),

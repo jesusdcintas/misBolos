@@ -61,6 +61,25 @@ class ExpenseRepository {
     );
   }
 
+  Future<void> updateDriveMetadata({
+    required int id,
+    required String driveFileId,
+    required String? driveFileUrl,
+    required DateTime driveSyncedAt,
+  }) async {
+    final db = await DatabaseHelper.instance.database;
+    await db.update(
+      'expenses',
+      {
+        'drive_file_id': driveFileId,
+        'drive_file_url': driveFileUrl,
+        'drive_synced_at': driveSyncedAt.toIso8601String(),
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
   Future<void> delete(int id) async {
     final db = await DatabaseHelper.instance.database;
     await db.delete('expenses', where: 'id = ?', whereArgs: [id]);

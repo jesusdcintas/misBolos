@@ -19,6 +19,7 @@ Fecha de actualización: 2026-05-07
 
 ## Pendiente inmediato
 
+- Retirar opción "Cambio de concepto masivo" en Facturas (marcada como temporal).
 - Exponer en UI de uso diario:
   - redacción IA de WhatsApp para facturas/clientes
   - redacción IA de email para facturas

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/services/drive_document_sync_service.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../models/invoice.dart';
 import '../../models/client.dart';
@@ -132,7 +133,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                 cantidad: 1,
                 descripcion: _gig!.notas?.isNotEmpty == true
                     ? _gig!.notas!.toUpperCase()
-                    : 'SONORIZACION',
+                    : 'DJ SET',
                 precioUnitario: _gig!.cachet ?? 0,
               ),
             ];
@@ -142,7 +143,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
 
       if (_items.isEmpty) {
         _items = [
-          _LineItemState(cantidad: 1, descripcion: '', precioUnitario: 0),
+          _LineItemState(cantidad: 1, descripcion: 'DJ SET', precioUnitario: 0),
         ];
       }
     } finally {
@@ -723,6 +724,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
           total: total,
         );
         await ref.read(invoicesProvider.notifier).updateInvoice(updatedInvoice);
+        await _tryAutoSyncInvoiceToDrive(updatedInvoice.id);
       } else {
         // Crear nueva factura
         final nextNum = await ref.read(
@@ -742,6 +744,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
           total: total,
         );
         await ref.read(invoicesProvider.notifier).addAndLinkToGig(invoice);
+        await _tryAutoSyncInvoiceToDrive(invoice.id);
       }
 
       if (mounted) {
@@ -760,6 +763,27 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
       if (mounted) {
         setState(() => _isSaving = false);
       }
+    }
+  }
+
+  Future<void> _tryAutoSyncInvoiceToDrive(String invoiceId) async {
+    final settings = await ref.read(settingsProvider.future);
+    final hasDriveRoot = (settings.driveRootFolderId ?? '').isNotEmpty;
+    if (!settings.driveConnected || !hasDriveRoot) return;
+
+    try {
+      await DriveDocumentSyncService.instance.syncInvoiceById(invoiceId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Factura subida a Drive.')));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No se pudo subir a Drive. Se añadirá a pendientes.'),
+        ),
+      );
     }
   }
 }

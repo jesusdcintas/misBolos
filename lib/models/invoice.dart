@@ -9,7 +9,7 @@ extension InvoiceStatusExtension on InvoiceStatus {
       case InvoiceStatus.borrador:
         return 'Borrador';
       case InvoiceStatus.enviada:
-        return 'Pendiente';
+        return 'Pendiente de cobro';
       case InvoiceStatus.pagada:
         return 'Cobrada';
     }
@@ -80,6 +80,9 @@ class Invoice {
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? deletedAt;
+  final String? driveFileId;
+  final String? driveFileUrl;
+  final DateTime? driveSyncedAt;
 
   Invoice({
     String? id,
@@ -98,6 +101,9 @@ class Invoice {
     DateTime? createdAt,
     DateTime? updatedAt,
     this.deletedAt,
+    this.driveFileId,
+    this.driveFileUrl,
+    this.driveSyncedAt,
   }) : id = id ?? const Uuid().v4(),
        ivaAmount = ivaAmount ?? (subtotal * ivaRate),
        irpfAmount = irpfAmount ?? (subtotal * irpfRate),
@@ -124,6 +130,10 @@ class Invoice {
     InvoiceStatus? status,
     DateTime? updatedAt,
     DateTime? deletedAt,
+    String? driveFileId,
+    String? driveFileUrl,
+    DateTime? driveSyncedAt,
+    bool clearDriveFile = false,
   }) {
     return Invoice(
       id: id,
@@ -142,6 +152,11 @@ class Invoice {
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
+      driveFileId: clearDriveFile ? null : driveFileId ?? this.driveFileId,
+      driveFileUrl: clearDriveFile ? null : driveFileUrl ?? this.driveFileUrl,
+      driveSyncedAt: clearDriveFile
+          ? null
+          : driveSyncedAt ?? this.driveSyncedAt,
     );
   }
 
@@ -165,6 +180,9 @@ class Invoice {
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
       'deleted_at': deletedAt?.toIso8601String(),
+      'drive_file_id': driveFileId,
+      'drive_file_url': driveFileUrl,
+      'drive_synced_at': driveSyncedAt?.toIso8601String(),
     };
   }
 
@@ -192,6 +210,11 @@ class Invoice {
       ),
       deletedAt: map['deleted_at'] != null
           ? DateTime.parse(map['deleted_at'] as String)
+          : null,
+      driveFileId: map['drive_file_id'] as String?,
+      driveFileUrl: map['drive_file_url'] as String?,
+      driveSyncedAt: map['drive_synced_at'] != null
+          ? DateTime.tryParse(map['drive_synced_at'] as String)
           : null,
     );
   }

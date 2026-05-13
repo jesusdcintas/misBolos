@@ -346,8 +346,6 @@ class _ScaffoldWithNavBar extends StatefulWidget {
 }
 
 class _ScaffoldWithNavBarState extends State<_ScaffoldWithNavBar> {
-  late final PageController _pageController;
-
   static const _paths = ['/', '/calendar', '/finanzas', '/clients', '/profile'];
 
   static int _indexFromLocation(String location) {
@@ -359,49 +357,10 @@ class _ScaffoldWithNavBarState extends State<_ScaffoldWithNavBar> {
     return 0;
   }
 
-  int _currentIndex = 0;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final newIndex = _indexFromLocation(GoRouterState.of(context).uri.path);
-    if (newIndex != _currentIndex) {
-      _currentIndex = newIndex;
-      if (_pageController.hasClients) {
-        _pageController.jumpToPage(newIndex);
-      }
-    }
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _pageController = PageController();
-  }
-
-  @override
-  void dispose() {
-    _pageController.dispose();
-    super.dispose();
-  }
-
-  void _onPageChanged(int index) {
-    if (index != _currentIndex) {
-      HapticFeedback.selectionClick();
-      _currentIndex = index;
-      context.go(_paths[index]);
-    }
-  }
-
   void _onNavTapped(int index) {
     HapticFeedback.selectionClick();
-    if (index == _currentIndex) return;
-    _currentIndex = index;
-    _pageController.animateToPage(
-      index,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
-    );
+    final selectedIndex = _indexFromLocation(GoRouterState.of(context).uri.path);
+    if (index == selectedIndex) return;
     context.go(_paths[index]);
   }
 
@@ -412,18 +371,7 @@ class _ScaffoldWithNavBarState extends State<_ScaffoldWithNavBar> {
     );
 
     return Scaffold(
-      body: PageView(
-        controller: _pageController,
-        onPageChanged: _onPageChanged,
-        physics: const NeverScrollableScrollPhysics(),
-        children: const [
-          DashboardScreen(),
-          CalendarScreen(),
-          FinanzasScreen(),
-          ClientsListScreen(),
-          ProfileScreen(),
-        ],
-      ),
+      body: widget.child,
       bottomNavigationBar: NavigationBar(
         selectedIndex: selectedIndex,
         onDestinationSelected: _onNavTapped,

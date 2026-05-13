@@ -107,7 +107,7 @@ class GigRepository {
     final maps = await db.query(
       'gigs',
       where: 'facturable = 1 AND status = ? AND deleted_at IS NULL',
-      whereArgs: ['factura_enviada'],
+      whereArgs: [GigStatus.facturado.dbValue],
     );
     return maps.map((m) => Gig.fromMap(m)).toList();
   }
@@ -140,7 +140,7 @@ class GigRepository {
       where: 'id = ?',
       whereArgs: [id],
     );
-    // Si alguien marca un bolo como "factura generada/enviada/pagado" sin que
+    // Si alguien marca un bolo como "facturado/cobrado" sin que
     // exista la factura, crear una mínima para mantener consistencia.
     final gig = await getById(id);
     if (gig != null) {
@@ -154,9 +154,9 @@ class GigRepository {
 
     for (final invoice in invoices) {
       final expectedStatus = switch (invoice.status) {
-        InvoiceStatus.borrador => GigStatus.facturaGenerada,
-        InvoiceStatus.enviada => GigStatus.facturaEnviada,
-        InvoiceStatus.pagada => GigStatus.pagado,
+        InvoiceStatus.borrador => GigStatus.facturado,
+        InvoiceStatus.enviada => GigStatus.facturado,
+        InvoiceStatus.pagada => GigStatus.cobrado,
       };
 
       final count = await db.update(
@@ -184,7 +184,7 @@ class GigRepository {
     final db = await DatabaseHelper.instance.database;
     await db.update(
       'gigs',
-      {'invoice_id': invoiceId, 'status': GigStatus.facturaGenerada.dbValue},
+      {'invoice_id': invoiceId, 'status': GigStatus.facturado.dbValue},
       where: 'id = ?',
       whereArgs: [gigId],
     );
@@ -369,16 +369,15 @@ class GigRepository {
 
   Future<void> _ensureInvoiceConsistency(Database db, Gig gig) async {
     if (!gig.facturable) return;
-    if (gig.status == GigStatus.pendiente ||
+    if (gig.status == GigStatus.confirmado ||
         gig.status == GigStatus.cancelado ||
-        gig.status == GigStatus.cobradoEnB) {
+        gig.status == GigStatus.cobradoB) {
       return;
     }
 
     final desiredInvoiceStatus = switch (gig.status) {
-      GigStatus.facturaGenerada => InvoiceStatus.borrador,
-      GigStatus.facturaEnviada => InvoiceStatus.enviada,
-      GigStatus.pagado => InvoiceStatus.pagada,
+      GigStatus.facturado => InvoiceStatus.enviada,
+      GigStatus.cobrado => InvoiceStatus.pagada,
       _ => InvoiceStatus.borrador,
     };
 
@@ -440,7 +439,7 @@ class GigRepository {
 
     final description = (gig.notas?.trim().isNotEmpty ?? false)
         ? gig.notas!.trim().toUpperCase()
-        : 'SONORIZACION';
+        : 'DJ SET';
     final subtotal = gig.cachet ?? 0.0;
     final items = [
       InvoiceLineItem(

@@ -135,7 +135,11 @@ class _GigDetailContent extends ConsumerWidget {
             children: [
               FacturableBadge(facturable: gig.facturable, large: true),
               const SizedBox(width: 12),
-              StatusBadge(status: gig.status, large: true),
+              StatusBadge(
+                status: gig.status,
+                facturable: gig.facturable,
+                large: true,
+              ),
             ],
           ),
 
@@ -158,7 +162,7 @@ class _GigDetailContent extends ConsumerWidget {
 
     if (gig.facturable) {
       switch (gig.status) {
-        case GigStatus.pendiente:
+        case GigStatus.confirmado:
           actions.add(
             _ActionButton(
               label: AppStrings.generarFactura,
@@ -168,24 +172,7 @@ class _GigDetailContent extends ConsumerWidget {
             ),
           );
           break;
-        case GigStatus.facturaGenerada:
-          actions.addAll([
-            _ActionButton(
-              label: AppStrings.verPDF,
-              icon: Icons.picture_as_pdf,
-              color: AppColors.primary,
-              onPressed: () => _viewPdf(context, ref, gig),
-            ),
-            const SizedBox(height: 8),
-            _ActionButton(
-              label: AppStrings.marcarEnviada,
-              icon: Icons.send,
-              color: AppColors.accentOrange,
-              onPressed: () => _markAsSent(context, ref, gig),
-            ),
-          ]);
-          break;
-        case GigStatus.facturaEnviada:
+        case GigStatus.facturado:
           actions.addAll([
             _ActionButton(
               label: AppStrings.verPDF,
@@ -209,7 +196,7 @@ class _GigDetailContent extends ConsumerWidget {
             ),
           ]);
           break;
-        case GigStatus.pagado:
+        case GigStatus.cobrado:
           actions.add(
             _ActionButton(
               label: AppStrings.verPDF,
@@ -224,7 +211,16 @@ class _GigDetailContent extends ConsumerWidget {
       }
     } else {
       // No facturable
-      if (gig.status == GigStatus.pendiente) {
+      if (gig.status == GigStatus.confirmadoB) {
+        actions.add(
+          _ActionButton(
+            label: 'Marcar realizado en B',
+            icon: Icons.task_alt,
+            color: AppColors.purple,
+            onPressed: () => _markAsRealizadoEnB(context, ref, gig),
+          ),
+        );
+      } else if (gig.status == GigStatus.realizadoB) {
         actions.add(
           CobradoConfettiButton(
             label: AppStrings.marcarCobradoEnB,
@@ -237,8 +233,8 @@ class _GigDetailContent extends ConsumerWidget {
     }
 
     if (gig.status != GigStatus.cancelado &&
-        gig.status != GigStatus.pagado &&
-        gig.status != GigStatus.cobradoEnB) {
+        gig.status != GigStatus.cobrado &&
+        gig.status != GigStatus.cobradoB) {
       actions.addAll([
         const SizedBox(height: 16),
         _ActionButton(
@@ -251,16 +247,18 @@ class _GigDetailContent extends ConsumerWidget {
       ]);
     }
 
-    actions.addAll([
-      const SizedBox(height: 8),
-      _ActionButton(
-        label: 'Enviar por WhatsApp',
-        icon: Icons.chat_outlined,
-        color: AppColors.success,
-        onPressed: () => _openWhatsAppForGig(context, ref, gig),
-        outlined: true,
-      ),
-    ]);
+    if (gig.facturable) {
+      actions.addAll([
+        const SizedBox(height: 8),
+        _ActionButton(
+          label: 'Enviar por WhatsApp',
+          icon: Icons.chat_outlined,
+          color: AppColors.success,
+          onPressed: () => _openWhatsAppForGig(context, ref, gig),
+          outlined: true,
+        ),
+      ]);
+    }
 
     // Siempre mostrar opción de eliminar
     actions.addAll([
@@ -340,7 +338,7 @@ class _GigDetailContent extends ConsumerWidget {
         '${gig.cachet != null ? ' por ${CurrencyFormatter.format(gig.cachet!)}' : ''}.';
 
     final ok = await const WhatsAppService().openChat(
-      phone: client.whatsappPhone ?? client.telefono,
+      phone: client.whatsappPhone,
       message: message,
     );
     if (!ok && context.mounted) {
@@ -387,53 +385,11 @@ class _GigDetailContent extends ConsumerWidget {
     }
   }
 
-  Future<void> _markAsSent(BuildContext context, WidgetRef ref, Gig gig) async {
-    await ref
-        .read(gigsProvider.notifier)
-        .updateStatus(gig.id, GigStatus.facturaEnviada);
-    if (gig.invoiceId != null) {
-      await ref
-          .read(invoicesProvider.notifier)
-          .updateStatus(gig.invoiceId!, InvoiceStatus.enviada);
-    }
-
-    // Programar recordatorio
-    final settings = await ref.read(settingsProvider.future);
-    if (settings.notificacionesActivas) {
-      final client = await ref.read(clientByIdProvider(gig.clientId).future);
-      final invoice = gig.invoiceId != null
-          ? await ref.read(invoiceByIdProvider(gig.invoiceId!).future)
-          : null;
-      if (client != null && invoice != null) {
-        await NotificationService.instance.schedulePaymentReminder(
-          id: invoice.numero,
-          clientName: client.nombre,
-          total: invoice.total,
-          invoiceNumber: invoice.numero,
-          scheduledDate: DateTime.now().add(
-            Duration(days: settings.diasRecordatorio),
-          ),
-        );
-      }
-    }
-
-    // Sync status to Google Calendar
-    final updatedGig = gig.copyWith(status: GigStatus.facturaEnviada);
-    await _syncGigToCalendar(ref, updatedGig);
-
-    ref.invalidate(gigByIdProvider(gig.id));
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Factura marcada como pendiente')),
-      );
-    }
-  }
-
   Future<void> _markAsPaid(BuildContext context, WidgetRef ref, Gig gig) async {
     HapticFeedback.heavyImpact();
     await ref
         .read(gigsProvider.notifier)
-        .updateStatus(gig.id, GigStatus.pagado);
+        .updateStatus(gig.id, GigStatus.cobrado);
     if (gig.invoiceId != null) {
       await ref
           .read(invoicesProvider.notifier)
@@ -447,7 +403,7 @@ class _GigDetailContent extends ConsumerWidget {
       }
     }
     // Sync status to Google Calendar
-    final updatedGig = gig.copyWith(status: GigStatus.pagado);
+    final updatedGig = gig.copyWith(status: GigStatus.cobrado);
     await _syncGigToCalendar(ref, updatedGig);
 
     ref.invalidate(gigByIdProvider(gig.id));
@@ -466,11 +422,28 @@ class _GigDetailContent extends ConsumerWidget {
     HapticFeedback.heavyImpact();
     await ref
         .read(gigsProvider.notifier)
-        .updateStatus(gig.id, GigStatus.cobradoEnB);
+        .updateStatus(gig.id, GigStatus.cobradoB);
     ref.invalidate(gigByIdProvider(gig.id));
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Marcado como cobrado en B')),
+      );
+    }
+  }
+
+  Future<void> _markAsRealizadoEnB(
+    BuildContext context,
+    WidgetRef ref,
+    Gig gig,
+  ) async {
+    HapticFeedback.mediumImpact();
+    await ref
+        .read(gigsProvider.notifier)
+        .updateStatus(gig.id, GigStatus.realizadoB);
+    ref.invalidate(gigByIdProvider(gig.id));
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Marcado como realizado en B')),
       );
     }
   }

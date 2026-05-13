@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:googleapis/calendar/v3.dart' as gcal;
+import 'package:googleapis/drive/v3.dart' as gdrive;
 import 'package:googleapis_auth/auth_io.dart' as auth;
 import 'package:http/http.dart' as http;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,12 +18,14 @@ const String _googleClientSecret = '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';
 const String _prefsKeyCredentials = 'google_auth_credentials';
 const String _prefsKeyEmail = 'google_auth_email';
 // Claves para persistir el estado de Calendar en móvil
-const String _prefsKeyMobileCalendarConnected = 'google_calendar_connected_mobile';
+const String _prefsKeyMobileCalendarConnected =
+    'google_calendar_connected_mobile';
 const String _prefsKeyMobileEmail = 'google_calendar_email_mobile';
 
 final _scopes = [
   gcal.CalendarApi.calendarScope,
   gcal.CalendarApi.calendarEventsScope,
+  gdrive.DriveApi.driveScope,
   'email',
   'profile',
 ];
@@ -47,14 +50,12 @@ class GoogleAuthService {
       debugPrint('[GoogleAuth] signIn() called…');
       final clientId = auth.ClientId(_googleClientId, _googleClientSecret);
 
-      _authClient = await auth.clientViaUserConsent(
-        clientId,
-        _scopes,
-        (String url) async {
-          debugPrint('[GoogleAuth] Opening browser: $url');
-          await launchUrl(Uri.parse(url));
-        },
-      );
+      _authClient = await auth.clientViaUserConsent(clientId, _scopes, (
+        String url,
+      ) async {
+        debugPrint('[GoogleAuth] Opening browser: $url');
+        await launchUrl(Uri.parse(url));
+      });
 
       // Obtener email real via userinfo
       await _fetchUserEmail();
@@ -100,8 +101,11 @@ class GoogleAuthService {
 
       final clientId = auth.ClientId(_googleClientId, _googleClientSecret);
       final baseClient = http.Client();
-      _authClient =
-          auth.autoRefreshingClient(clientId, credentials, baseClient);
+      _authClient = auth.autoRefreshingClient(
+        clientId,
+        credentials,
+        baseClient,
+      );
       _email = prefs.getString(_prefsKeyEmail);
 
       // Verificar que las credenciales funcionan y actualizar email
@@ -158,8 +162,9 @@ class GoogleAuthService {
         Uri.parse('https://www.googleapis.com/oauth2/v2/userinfo'),
       );
       if (response.statusCode == 200) {
-        final emailMatch =
-            RegExp(r'"email"\s*:\s*"([^"]+)"').firstMatch(response.body);
+        final emailMatch = RegExp(
+          r'"email"\s*:\s*"([^"]+)"',
+        ).firstMatch(response.body);
         if (emailMatch != null) _email = emailMatch.group(1);
       }
     } catch (e) {
@@ -202,8 +207,8 @@ class GoogleAuthService {
 /// Provider para el estado de sesión de Google
 final googleAuthProvider =
     StateNotifierProvider<GoogleAuthNotifier, GoogleAuthState>((ref) {
-  return GoogleAuthNotifier();
-});
+      return GoogleAuthNotifier();
+    });
 
 class GoogleAuthState {
   final bool isSignedIn;
@@ -248,7 +253,8 @@ class GoogleAuthNotifier extends StateNotifier<GoogleAuthState> {
   Future<void> _tryAutoSignIn() async {
     if (_isMobile) {
       final prefs = await SharedPreferences.getInstance();
-      final wasConnected = prefs.getBool(_prefsKeyMobileCalendarConnected) ?? false;
+      final wasConnected =
+          prefs.getBool(_prefsKeyMobileCalendarConnected) ?? false;
       final savedEmail = prefs.getString(_prefsKeyMobileEmail);
 
       final success = await PlatformAuthService.instance.signInSilently();
@@ -309,8 +315,8 @@ class GoogleAuthNotifier extends StateNotifier<GoogleAuthState> {
     } else {
       final currentUser = GoogleAuthService.instance.isSignedIn;
       if (currentUser) {
-        final hasAccess =
-            await GoogleAuthService.instance.checkCalendarAccess();
+        final hasAccess = await GoogleAuthService.instance
+            .checkCalendarAccess();
         if (hasAccess) {
           state = state.copyWith(calendarConnected: true);
           return true;
@@ -336,7 +342,10 @@ class GoogleAuthNotifier extends StateNotifier<GoogleAuthState> {
   Future<void> _saveMobileCalendarState() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_prefsKeyMobileCalendarConnected, state.calendarConnected);
+      await prefs.setBool(
+        _prefsKeyMobileCalendarConnected,
+        state.calendarConnected,
+      );
       if (state.email != null) {
         await prefs.setString(_prefsKeyMobileEmail, state.email!);
       }
@@ -356,8 +365,7 @@ class GoogleAuthNotifier extends StateNotifier<GoogleAuthState> {
   }
 
   Future<void> _updateStateFromDesktop() async {
-    final calendarOk =
-        await GoogleAuthService.instance.checkCalendarAccess();
+    final calendarOk = await GoogleAuthService.instance.checkCalendarAccess();
     state = GoogleAuthState(
       isSignedIn: true,
       calendarConnected: calendarOk,

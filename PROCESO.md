@@ -411,8 +411,7 @@ coherente.
 ### Fase 2 — Envío de facturas por email
 **Objetivo:** reutilizar el PDF existente, enviarlo al cliente, registrar log y
 cambiar factura a enviada.
-**Estado:** implementada en cliente y Edge Function base. Pendiente desplegar
-la función y configurar secretos del proveedor en Supabase.
+**Estado:** completada (cliente + backend desplegado y operativo).
 
 **Avance implementado**
 - Añadido log local `invoice_email_logs` con migración v15.
@@ -463,21 +462,9 @@ la función y configurar secretos del proveedor en Supabase.
 - Si se usa Brevo, adaptar la Edge Function y usar secrets equivalentes:
   `BREVO_API_KEY` e `INVOICE_FROM_EMAIL`.
 
-**Tareas manuales pendientes**
-1. Elegir proveedor de email: Resend o Brevo.
-2. Crear/verificar dominio o remitente en el proveedor elegido.
-3. Configurar DNS del dominio si el proveedor lo pide:
-   SPF, DKIM y, si aplica, DMARC.
-4. Crear API key del proveedor.
-5. Configurar secrets en Supabase:
-   - Resend: `RESEND_API_KEY`, `INVOICE_FROM_EMAIL`.
-   - Brevo: `BREVO_API_KEY`, `INVOICE_FROM_EMAIL`.
-6. Si se elige Brevo, adaptar
-   `supabase/functions/send-invoice-email/index.ts` al endpoint de Brevo.
-7. Desplegar la Edge Function `send-invoice-email`.
-8. Probar con una factura real y un cliente con email propio/controlado.
-9. Revisar que el email llega con PDF adjunto y que no cae en spam.
-10. Confirmar en la app que la factura pasa a pendiente y se crea log local.
+**Cierre**
+- Flujo de envío en producción y verificado.
+- Estado de factura y log local confirmados tras envío.
 
 **Riesgos**
 - Cliente sin email.

@@ -34,7 +34,11 @@ class ClientDetailScreen extends ConsumerWidget {
             actions: [
               IconButton(
                 icon: const Icon(Icons.edit),
-                onPressed: () => context.push('/client/edit/${client.id}'),
+                onPressed: () async {
+                  await context.push('/client/edit/${client.id}');
+                  ref.invalidate(clientByIdProvider(client.id));
+                  ref.invalidate(clientsProvider);
+                },
               ),
             ],
           ),
@@ -76,7 +80,7 @@ class ClientDetailScreen extends ConsumerWidget {
                       if (client.whatsappPhone != null &&
                           client.whatsappPhone!.isNotEmpty)
                         _InfoRow(
-                          label: AppStrings.whatsapp,
+                          label: 'Teléfono WhatsApp',
                           value: client.whatsappPhone!,
                         ),
                     ],
@@ -92,10 +96,10 @@ class ClientDetailScreen extends ConsumerWidget {
                   double totalEnB = 0;
                   for (final g in gigs) {
                     final c = g.cachet ?? 0;
-                    if (g.facturable && (g.status == GigStatus.pagado)) {
+                    if (g.facturable && (g.status == GigStatus.cobrado)) {
                       totalOficial += c;
                     } else if (!g.facturable &&
-                        g.status == GigStatus.cobradoEnB) {
+                        g.status == GigStatus.cobradoB) {
                       totalEnB += c;
                     }
                   }
@@ -186,7 +190,10 @@ class ClientDetailScreen extends ConsumerWidget {
                                 children: [
                                   FacturableBadge(facturable: g.facturable),
                                   const SizedBox(width: 4),
-                                  StatusBadge(status: g.status),
+                                  StatusBadge(
+                                    status: g.status,
+                                    facturable: g.facturable,
+                                  ),
                                 ],
                               ),
                             ),

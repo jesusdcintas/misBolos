@@ -290,7 +290,7 @@ PeriodDashboardStats _calcPeriodStats(
   int cobradoHistoricoCount = 0;
   for (final gig in gigsInPeriod) {
     if (gig.facturable &&
-        gig.status == GigStatus.pagado &&
+        gig.status == GigStatus.cobrado &&
         (gig.invoiceId == null || gig.invoiceId!.isEmpty)) {
       cobradoHistorico += gig.cachet ?? 0;
       cobradoHistoricoCount++;
@@ -305,14 +305,13 @@ PeriodDashboardStats _calcPeriodStats(
     final gigDate = DateTime(gig.fecha.year, gig.fecha.month, gig.fecha.day);
     if (gig.facturable &&
         !gigDate.isBefore(today) &&
-        (gig.status == GigStatus.pendiente ||
-            gig.status == GigStatus.facturaGenerada)) {
+        gig.status == GigStatus.confirmado) {
       previsto += cachet;
       previstoCount++;
     }
   }
 
-  // Cobrado en B + Pendiente en B
+  // Cobrado en B + Pendiente de cobro en B + Previsto en B
   double cobradoEnB = 0;
   double pendienteEnB = 0;
   int pendienteEnBCount = 0;
@@ -321,19 +320,17 @@ PeriodDashboardStats _calcPeriodStats(
   int numBolosB = 0;
   for (final gig in gigsInPeriod) {
     final cachet = gig.cachet ?? 0;
-    final gigDate = DateTime(gig.fecha.year, gig.fecha.month, gig.fecha.day);
     if (!gig.facturable) {
-      if (gig.status == GigStatus.cobradoEnB) {
+      if (gig.status == GigStatus.cobradoB) {
         cobradoEnB += cachet;
         numBolosB++;
-      } else if (gig.status == GigStatus.pendiente) {
-        if (gigDate.isAfter(today)) {
-          previstoEnB += cachet;
-          previstoEnBCount++;
-        } else {
-          pendienteEnB += cachet;
-          pendienteEnBCount++;
-        }
+      } else if (gig.status == GigStatus.realizadoB) {
+        pendienteEnB += cachet;
+        pendienteEnBCount++;
+        numBolosB++;
+      } else if (gig.status == GigStatus.confirmadoB) {
+        previstoEnB += cachet;
+        previstoEnBCount++;
         numBolosB++;
       }
     }
@@ -451,11 +448,6 @@ final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
   final invoicesPrev = allInvoices
       .where((i) => i.fecha.year == prevYear && i.fecha.month == prevMonth)
       .toList();
-  final allGigs = await ref.watch(gigsProvider.future);
-  final gigsPrev = allGigs
-      .where((g) => g.fecha.year == prevYear && g.fecha.month == prevMonth)
-      .toList();
-
   double cobradoOficial = 0;
   double pendienteOficial = 0;
   int facturasEnviadas = 0;
@@ -472,19 +464,14 @@ final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
     }
   }
 
-  // Añadir bolos facturables que aún no tienen factura pagada/enviada (pendientes de facturar)
+  // En oficial pendiente solo cuentan facturas emitidas y no cobradas.
   for (final gig in gigs) {
     final cachet = gig.cachet ?? 0;
-    if (gig.facturable) {
-      if (gig.status == GigStatus.facturaGenerada ||
-          gig.status == GigStatus.pendiente) {
-        pendienteOficial += cachet;
-      }
-    } else {
+    if (!gig.facturable) {
       // Ingresos en B - siguen basándose en el gig
-      if (gig.status == GigStatus.cobradoEnB) {
+      if (gig.status == GigStatus.cobradoB) {
         cobradoEnB += cachet;
-      } else if (gig.status == GigStatus.pendiente) {
+      } else if (gig.status == GigStatus.realizadoB) {
         pendienteEnB += cachet;
       }
     }
@@ -500,15 +487,7 @@ final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
       pendienteOficialPrev += inv.total;
     }
   }
-  for (final gig in gigsPrev) {
-    final cachet = gig.cachet ?? 0;
-    if (gig.facturable) {
-      if (gig.status == GigStatus.facturaGenerada ||
-          gig.status == GigStatus.pendiente) {
-        pendienteOficialPrev += cachet;
-      }
-    }
-  }
+  // Mantenemos la misma regla en mes anterior: pendiente oficial = facturas enviadas.
 
   return DashboardStats(
     cobradoOficialMes: cobradoOficial,
@@ -552,9 +531,9 @@ final yearlyStatsProvider = FutureProvider.family<List<MonthlyIncome>, int>((
     for (final gig in allGigs) {
       if (gig.fecha.year == year && gig.fecha.month == m) {
         final cachet = gig.cachet ?? 0;
-        if (gig.facturable && gig.status == GigStatus.pagado) {
+        if (gig.facturable && gig.status == GigStatus.cobrado) {
           oficial += cachet;
-        } else if (!gig.facturable && gig.status == GigStatus.cobradoEnB) {
+        } else if (!gig.facturable && gig.status == GigStatus.cobradoB) {
           enB += cachet;
         }
       }
@@ -738,7 +717,7 @@ final yearlyVatDetailProvider =
                   g.fecha.month >= startM &&
                   g.fecha.month <= endM &&
                   g.facturable &&
-                  g.status == GigStatus.pagado &&
+                  g.status == GigStatus.cobrado &&
                   (g.invoiceId == null || g.invoiceId!.isEmpty),
             )
             .toList();
@@ -1031,18 +1010,17 @@ final financialStatsProvider = FutureProvider.family<FinancialStats, int>((
   // Cobrado en B: gigs del año marcados como cobrado en B
   double cobradoEnBTotal = 0;
   for (final gig in gigsYear) {
-    if (!gig.facturable && gig.status == GigStatus.cobradoEnB) {
+    if (!gig.facturable && gig.status == GigStatus.cobradoB) {
       cobradoEnBTotal += gig.cachet ?? 0;
     }
   }
 
   // Estimado: cobrado + pendiente + bolos cerrados sin facturar del año
-  // Bolos cerrados sin facturar = facturables con status pendiente/factura_generada
+  // Bolos cerrados sin facturar = facturables con status confirmado
   double bolosSinFacturar = 0;
   for (final gig in gigsYear) {
     if (gig.facturable &&
-        (gig.status == GigStatus.pendiente ||
-            gig.status == GigStatus.facturaGenerada)) {
+        gig.status == GigStatus.confirmado) {
       bolosSinFacturar += gig.cachet ?? 0;
     }
   }
@@ -1073,7 +1051,7 @@ final financialStatsProvider = FutureProvider.family<FinancialStats, int>((
 
     double cobradoEnBMes = 0;
     for (final gig in gigsMonth) {
-      if (!gig.facturable && gig.status == GigStatus.cobradoEnB) {
+      if (!gig.facturable && gig.status == GigStatus.cobradoB) {
         cobradoEnBMes += gig.cachet ?? 0;
       }
     }
@@ -1081,8 +1059,7 @@ final financialStatsProvider = FutureProvider.family<FinancialStats, int>((
     double sinFacturarMes = 0;
     for (final gig in gigsMonth) {
       if (gig.facturable &&
-          (gig.status == GigStatus.pendiente ||
-              gig.status == GigStatus.facturaGenerada)) {
+          gig.status == GigStatus.confirmado) {
         sinFacturarMes += gig.cachet ?? 0;
       }
     }
@@ -1486,7 +1463,7 @@ final financialPeriodSummaryProvider =
                     g.fecha.month >= sM &&
                     g.fecha.month <= eM &&
                     g.facturable &&
-                    g.status == GigStatus.pagado &&
+                    g.status == GigStatus.cobrado &&
                     (g.invoiceId == null || g.invoiceId!.isEmpty),
               )
               .toList();
@@ -1585,25 +1562,22 @@ final financialPeriodSummaryProvider =
             );
             // Bolos históricos facturables cobrados sin factura
             if (gig.facturable &&
-                gig.status == GigStatus.pagado &&
+                gig.status == GigStatus.cobrado &&
                 (gig.invoiceId == null || gig.invoiceId!.isEmpty)) {
               cobradoHist += cachet;
             }
             if (gig.facturable &&
                 !gigDate.isBefore(today) &&
-                (gig.status == GigStatus.pendiente ||
-                    gig.status == GigStatus.facturaGenerada)) {
+                gig.status == GigStatus.confirmado) {
               previsto += cachet;
             }
             if (!gig.facturable) {
-              if (gig.status == GigStatus.cobradoEnB) {
+              if (gig.status == GigStatus.cobradoB) {
                 enB += cachet;
-              } else if (gig.status == GigStatus.pendiente) {
-                if (gigDate.isAfter(today)) {
-                  previstoEnB += cachet;
-                } else {
-                  pendienteEnB += cachet;
-                }
+              } else if (gig.status == GigStatus.realizadoB) {
+                pendienteEnB += cachet;
+              } else if (gig.status == GigStatus.confirmadoB) {
+                previstoEnB += cachet;
               }
             }
           }

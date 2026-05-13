@@ -20,6 +20,8 @@ import 'migrations/v17_invoice_number_unique_by_year.dart';
 import 'migrations/v18_sync_queue_soft_delete.dart';
 import 'migrations/v19_client_whatsapp_phone.dart';
 import 'migrations/v20_invoice_number_changes.dart';
+import 'migrations/v21_gig_status_refactor.dart';
+import 'migrations/v22_google_drive_integration.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._internal();
@@ -39,7 +41,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 20,
+      version: 22,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       onConfigure: (db) async {
@@ -114,6 +116,12 @@ class DatabaseHelper {
     if (version >= 20) {
       await _applyMigration(db, v20InvoiceNumberChanges);
     }
+    if (version >= 21) {
+      await _applyMigration(db, v21GigStatusRefactor);
+    }
+    if (version >= 22) {
+      await _applyMigration(db, v22GoogleDriveIntegration);
+    }
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -173,6 +181,12 @@ class DatabaseHelper {
     }
     if (oldVersion < 20) {
       await _applyMigration(db, v20InvoiceNumberChanges);
+    }
+    if (oldVersion < 21) {
+      await _applyMigration(db, v21GigStatusRefactor);
+    }
+    if (oldVersion < 22) {
+      await _applyMigration(db, v22GoogleDriveIntegration);
     }
   }
 

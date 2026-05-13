@@ -35,14 +35,15 @@ CREATE TABLE IF NOT EXISTS gigs (
   notas TEXT,
   cachet REAL,
   facturable BOOLEAN NOT NULL DEFAULT TRUE,
-  status TEXT NOT NULL DEFAULT 'pendiente'
+  status TEXT NOT NULL DEFAULT 'confirmado'
     CHECK (status IN (
-      'pendiente',
-      'factura_generada',
-      'factura_enviada',
-      'pagado',
+      'confirmado',
+      'facturado',
+      'cobrado',
+      'confirmado_b',
+      'realizado_b',
+      'cobrado_b',
       'cancelado',
-      'cobrado_en_b'
     )),
   invoice_id UUID,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),

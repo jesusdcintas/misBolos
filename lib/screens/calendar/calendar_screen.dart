@@ -28,7 +28,7 @@ final _viewModeProvider = StateProvider<bool>(
 
 // ─── Filtros vista lista ───
 final _statusFilterProvider = StateProvider<GigStatus?>((ref) => null);
-final _yearFilterProvider = StateProvider<int?>((ref) => null);
+final _yearFilterProvider = StateProvider<int?>((ref) => DateTime.now().year);
 final _monthFilterProvider = StateProvider<int?>((ref) => null);
 final _clientFilterProvider = StateProvider<String?>((ref) => null);
 final _facturableFilterProvider = StateProvider<bool?>((ref) => null);
@@ -51,7 +51,7 @@ final _gigSortProvider = StateProvider<GigSortOption>(
 
 void _clearAllListFilters(WidgetRef ref) {
   ref.read(_statusFilterProvider.notifier).state = null;
-  ref.read(_yearFilterProvider.notifier).state = null;
+  ref.read(_yearFilterProvider.notifier).state = DateTime.now().year;
   ref.read(_monthFilterProvider.notifier).state = null;
   ref.read(_clientFilterProvider.notifier).state = null;
   ref.read(_facturableFilterProvider.notifier).state = null;
@@ -62,29 +62,49 @@ class CalendarScreen extends ConsumerWidget {
 
   Color _markerColor(Gig gig) {
     if (gig.status == GigStatus.cancelado) return AppColors.error;
-    if (gig.status == GigStatus.pagado || gig.status == GigStatus.cobradoEnB) {
+    if (gig.status == GigStatus.cobrado || gig.status == GigStatus.cobradoB) {
       return AppColors.success;
     }
-    if (gig.status == GigStatus.facturaEnviada) return AppColors.warning;
+    if (gig.status == GigStatus.facturado) return AppColors.warning;
     if (!gig.facturable) return AppColors.purple;
     return AppColors.primary;
   }
 
-  Future<void> _syncToGoogleCalendar(WidgetRef ref, List<Gig> gigs) async {
+  Future<void> _syncToGoogleCalendar(
+    BuildContext context,
+    WidgetRef ref,
+    List<Gig> gigs,
+  ) async {
     ref.read(_syncingProvider.notifier).state = true;
+    int synced = 0;
+    int failed = 0;
     try {
       final service = GoogleCalendarService();
       for (final gig in gigs) {
-        final client = await ref.read(clientByIdProvider(gig.clientId).future);
-        await service.syncGig(
-          gig: gig,
-          clientName: client?.nombre ?? 'Cliente',
-          cachet: gig.cachet,
-        );
+        try {
+          final client = await ref.read(clientByIdProvider(gig.clientId).future);
+          await service.syncGig(
+            gig: gig,
+            clientName: client?.nombre ?? 'Cliente',
+            cachet: gig.cachet,
+          );
+          synced++;
+        } catch (e) {
+          failed++;
+          debugPrint('[CalendarScreen] Error syncing gig ${gig.id}: $e');
+        }
       }
     } finally {
       ref.read(_syncingProvider.notifier).state = false;
     }
+
+    if (!context.mounted) return;
+    final message = failed == 0
+        ? 'Google Calendar sincronizado ($synced bolos)'
+        : 'Sincronizados $synced bolos · $failed con error';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   /// Repara estados de bolos según sus facturas vinculadas.
@@ -109,13 +129,13 @@ class CalendarScreen extends ConsumerWidget {
       GigStatus expectedStatus;
       switch (invoice.status) {
         case InvoiceStatus.pagada:
-          expectedStatus = GigStatus.pagado;
+          expectedStatus = GigStatus.cobrado;
           break;
         case InvoiceStatus.enviada:
-          expectedStatus = GigStatus.facturaEnviada;
+          expectedStatus = GigStatus.facturado;
           break;
         case InvoiceStatus.borrador:
-          expectedStatus = GigStatus.facturaGenerada;
+          expectedStatus = GigStatus.facturado;
           break;
       }
 
@@ -209,7 +229,7 @@ class CalendarScreen extends ConsumerWidget {
                     tooltip: 'Sincronizar con Google Calendar',
                     onPressed: () {
                       final gigs = gigsAsync.valueOrNull;
-                      if (gigs != null) _syncToGoogleCalendar(ref, gigs);
+                      if (gigs != null) _syncToGoogleCalendar(context, ref, gigs);
                     },
                   ),
           if (!isCalendarView)
@@ -365,15 +385,15 @@ class CalendarScreen extends ConsumerWidget {
                 children: [
                   _LegendItem(
                     color: AppColors.primary,
-                    label: 'Pendiente facturable',
+                    label: 'Confirmado',
                   ),
                   _LegendItem(
                     color: AppColors.accentPurple,
-                    label: 'Pendiente no facturable',
+                    label: 'Confirmado/Realizado en B',
                   ),
                   _LegendItem(
                     color: AppColors.accentOrange,
-                    label: 'Pdte cobro',
+                    label: 'Facturado',
                   ),
                   _LegendItem(color: AppColors.accentGreen, label: 'Cobrado'),
                   _LegendItem(color: AppColors.accentRed, label: 'Cancelado'),
@@ -435,8 +455,6 @@ class CalendarScreen extends ConsumerWidget {
       data: (allGigs) {
         final clients = clientsAsync.valueOrNull ?? [];
         final clientMap = {for (final c in clients) c.id: c};
-
-        final totalCount = allGigs.length;
 
         // Aplicar filtros
         final filteredGigs = allGigs.where((gig) {
@@ -559,16 +577,14 @@ class CalendarScreen extends ConsumerWidget {
                       color: AppColors.primary,
                     ),
                   ),
-                  if (hasActiveFilters) ...[
-                    const SizedBox(width: 8),
-                    Text(
-                      '[de $totalCount]',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: AppColors.textSecondary,
-                      ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'IVA no incluido',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textSecondary,
                     ),
-                  ],
+                  ),
                 ],
               ),
             ),
@@ -654,32 +670,46 @@ class CalendarScreen extends ConsumerWidget {
                           ref.read(_statusFilterProvider.notifier).state = null,
                     ),
                     _StatusChip(
-                      label: GigStatus.pendiente.label,
-                      selected: statusFilter == GigStatus.pendiente,
+                      label: GigStatus.confirmado.label,
+                      selected: statusFilter == GigStatus.confirmado,
                       onTap: () =>
                           ref.read(_statusFilterProvider.notifier).state =
-                              GigStatus.pendiente,
+                              GigStatus.confirmado,
                     ),
                     _StatusChip(
-                      label: GigStatus.facturaEnviada.label,
-                      selected: statusFilter == GigStatus.facturaEnviada,
+                      label: GigStatus.facturado.label,
+                      selected: statusFilter == GigStatus.facturado,
                       onTap: () =>
                           ref.read(_statusFilterProvider.notifier).state =
-                              GigStatus.facturaEnviada,
+                              GigStatus.facturado,
                     ),
                     _StatusChip(
-                      label: GigStatus.pagado.label,
-                      selected: statusFilter == GigStatus.pagado,
+                      label: GigStatus.cobrado.label,
+                      selected: statusFilter == GigStatus.cobrado,
                       onTap: () =>
                           ref.read(_statusFilterProvider.notifier).state =
-                              GigStatus.pagado,
+                              GigStatus.cobrado,
                     ),
                     _StatusChip(
-                      label: GigStatus.cobradoEnB.label,
-                      selected: statusFilter == GigStatus.cobradoEnB,
+                      label: GigStatus.confirmadoB.label,
+                      selected: statusFilter == GigStatus.confirmadoB,
                       onTap: () =>
                           ref.read(_statusFilterProvider.notifier).state =
-                              GigStatus.cobradoEnB,
+                              GigStatus.confirmadoB,
+                    ),
+                    _StatusChip(
+                      label: GigStatus.realizadoB.label,
+                      selected: statusFilter == GigStatus.realizadoB,
+                      onTap: () =>
+                          ref.read(_statusFilterProvider.notifier).state =
+                              GigStatus.realizadoB,
+                    ),
+                    _StatusChip(
+                      label: GigStatus.cobradoB.label,
+                      selected: statusFilter == GigStatus.cobradoB,
+                      onTap: () =>
+                          ref.read(_statusFilterProvider.notifier).state =
+                              GigStatus.cobradoB,
                     ),
                     _StatusChip(
                       label: GigStatus.cancelado.label,
@@ -1514,7 +1544,10 @@ class _GigListTile extends ConsumerWidget {
                       children: [
                         FacturableBadge(facturable: gig.facturable),
                         const SizedBox(width: 6),
-                        StatusBadge(status: gig.status),
+                        StatusBadge(
+                          status: gig.status,
+                          facturable: gig.facturable,
+                        ),
                       ],
                     ),
                   ],
@@ -1601,23 +1634,23 @@ class _BulkGigsActionsBar extends ConsumerWidget {
               label: 'Cobrar',
               fgColor: AppColors.success,
               bgColor: AppColors.successBg,
-              onTap: () => setStatus(GigStatus.pagado),
+              onTap: () => setStatus(GigStatus.cobrado),
             ),
             const SizedBox(width: 8),
             _BulkActionButton(
               icon: Icons.hourglass_empty,
-              label: 'Pendiente',
+              label: 'Confirmado',
               fgColor: AppColors.primary,
               bgColor: AppColors.primaryLight,
-              onTap: () => setStatus(GigStatus.pendiente),
+              onTap: () => setStatus(GigStatus.confirmado),
             ),
             const SizedBox(width: 8),
             _BulkActionButton(
               icon: Icons.schedule,
-              label: 'Pdte cobro',
+              label: 'Facturado',
               fgColor: AppColors.warning,
               bgColor: AppColors.warningBg,
-              onTap: () => setStatus(GigStatus.facturaEnviada),
+              onTap: () => setStatus(GigStatus.facturado),
             ),
             const SizedBox(width: 8),
             _BulkActionButton(
@@ -1798,7 +1831,7 @@ class _CalendarGigTile extends ConsumerWidget {
           children: [
             FacturableBadge(facturable: gig.facturable),
             const SizedBox(width: 4),
-            StatusBadge(status: gig.status),
+            StatusBadge(status: gig.status, facturable: gig.facturable),
           ],
         ),
       ),

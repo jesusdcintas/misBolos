@@ -1,65 +1,83 @@
 import 'package:uuid/uuid.dart';
 
 enum GigStatus {
-  pendiente,
-  facturaGenerada,
-  facturaEnviada,
-  pagado,
+  confirmado,
+  facturado,
+  cobrado,
+  confirmadoB,
+  realizadoB,
+  cobradoB,
   cancelado,
-  cobradoEnB,
 }
 
 extension GigStatusExtension on GigStatus {
   String get label {
-    switch (this) {
-      case GigStatus.pendiente:
-        return 'Pendiente';
-      case GigStatus.facturaGenerada:
-        return 'Factura generada';
-      case GigStatus.facturaEnviada:
-        return 'Pdte cobro';
-      case GigStatus.pagado:
+      switch (this) {
+      case GigStatus.confirmado:
+        return 'Confirmado';
+      case GigStatus.facturado:
+        return 'Facturado';
+      case GigStatus.cobrado:
         return 'Cobrado';
+      case GigStatus.confirmadoB:
+        return 'Confirmado en B';
+      case GigStatus.realizadoB:
+        return 'Realizado en B';
+      case GigStatus.cobradoB:
+        return 'Cobrado en B';
       case GigStatus.cancelado:
         return 'Cancelado';
-      case GigStatus.cobradoEnB:
-        return 'Cobrado en B';
     }
   }
 
   String get dbValue {
     switch (this) {
-      case GigStatus.pendiente:
-        return 'pendiente';
-      case GigStatus.facturaGenerada:
-        return 'factura_generada';
-      case GigStatus.facturaEnviada:
-        return 'factura_enviada';
-      case GigStatus.pagado:
-        return 'pagado';
+      case GigStatus.confirmado:
+        return 'confirmado';
+      case GigStatus.facturado:
+        return 'facturado';
+      case GigStatus.cobrado:
+        return 'cobrado';
+      case GigStatus.confirmadoB:
+        return 'confirmado_b';
+      case GigStatus.realizadoB:
+        return 'realizado_b';
+      case GigStatus.cobradoB:
+        return 'cobrado_b';
       case GigStatus.cancelado:
         return 'cancelado';
-      case GigStatus.cobradoEnB:
-        return 'cobrado_en_b';
     }
   }
 
   static GigStatus fromDb(String value) {
     switch (value) {
+      case 'confirmado':
+        return GigStatus.confirmado;
+      case 'facturado':
+        return GigStatus.facturado;
+      case 'cobrado':
+        return GigStatus.cobrado;
+      case 'confirmado_b':
+        return GigStatus.confirmadoB;
+      case 'realizado_b':
+        return GigStatus.realizadoB;
+      case 'cobrado_b':
+        return GigStatus.cobradoB;
+      // Compatibilidad estados antiguos
       case 'pendiente':
-        return GigStatus.pendiente;
+        return GigStatus.confirmado;
       case 'factura_generada':
-        return GigStatus.facturaGenerada;
+        return GigStatus.confirmado;
       case 'factura_enviada':
-        return GigStatus.facturaEnviada;
+        return GigStatus.facturado;
       case 'pagado':
-        return GigStatus.pagado;
+        return GigStatus.cobrado;
       case 'cancelado':
         return GigStatus.cancelado;
       case 'cobrado_en_b':
-        return GigStatus.cobradoEnB;
+        return GigStatus.cobradoB;
       default:
-        return GigStatus.pendiente;
+        return GigStatus.confirmado;
     }
   }
 }
@@ -84,7 +102,7 @@ class Gig {
     this.notas,
     this.cachet,
     this.facturable = true,
-    this.status = GigStatus.pendiente,
+    this.status = GigStatus.confirmado,
     this.invoiceId,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -138,14 +156,21 @@ class Gig {
   }
 
   factory Gig.fromMap(Map<String, dynamic> map) {
+    final facturable = (map['facturable'] as int) == 1;
+    var status = GigStatusExtension.fromDb(map['status'] as String);
+    // Compatibilidad con datos antiguos: "pendiente" en bolos en B
+    // debe leerse como "confirmado_b".
+    if (!facturable && status == GigStatus.confirmado) {
+      status = GigStatus.confirmadoB;
+    }
     return Gig(
       id: map['id'] as String,
       fecha: DateTime.parse(map['fecha'] as String),
       clientId: map['client_id'] as String,
       notas: map['notas'] as String?,
       cachet: map['cachet'] != null ? (map['cachet'] as num).toDouble() : null,
-      facturable: (map['facturable'] as int) == 1,
-      status: GigStatusExtension.fromDb(map['status'] as String),
+      facturable: facturable,
+      status: status,
       invoiceId: map['invoice_id'] as String?,
       createdAt: DateTime.parse(map['created_at'] as String),
       updatedAt: DateTime.parse(

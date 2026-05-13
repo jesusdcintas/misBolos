@@ -190,7 +190,7 @@ class InvoiceRepository {
         'gigs',
         {
           'invoice_id': invoice.id,
-          'status': GigStatus.facturaGenerada.dbValue,
+          'status': GigStatus.facturado.dbValue,
           'updated_at': now,
         },
         where: 'id = ?',
@@ -238,6 +238,26 @@ class InvoiceRepository {
     );
   }
 
+  Future<void> updateDriveMetadata({
+    required String id,
+    required String driveFileId,
+    required String? driveFileUrl,
+    required DateTime driveSyncedAt,
+  }) async {
+    final db = await DatabaseHelper.instance.database;
+    await db.update(
+      'invoices',
+      {
+        'drive_file_id': driveFileId,
+        'drive_file_url': driveFileUrl,
+        'drive_synced_at': driveSyncedAt.toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
   Future<void> delete(String id) async {
     final db = await DatabaseHelper.instance.database;
     final now = DateTime.now().toIso8601String();
@@ -263,7 +283,7 @@ class InvoiceRepository {
         'gigs',
         {
           'invoice_id': null,
-          'status': GigStatus.pendiente.dbValue,
+          'status': GigStatus.confirmado.dbValue,
           'updated_at': DateTime.now().toIso8601String(),
         },
         where: 'id = ? AND invoice_id = ?',

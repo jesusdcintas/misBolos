@@ -44,6 +44,25 @@ class AssetRepository {
     );
   }
 
+  Future<void> updateDriveMetadata({
+    required int id,
+    required String driveFileId,
+    required String? driveFileUrl,
+    required DateTime driveSyncedAt,
+  }) async {
+    final db = await DatabaseHelper.instance.database;
+    await db.update(
+      'assets',
+      {
+        'drive_file_id': driveFileId,
+        'drive_file_url': driveFileUrl,
+        'drive_synced_at': driveSyncedAt.toIso8601String(),
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
   Future<void> delete(int id) async {
     final db = await DatabaseHelper.instance.database;
     await db.delete('assets', where: 'id = ?', whereArgs: [id]);
@@ -93,8 +112,11 @@ class AssetRepository {
       whereArgs: [asset.cloudId],
     );
     if (existing.isEmpty) {
-      await db.insert('assets', asset.toMap(),
-          conflictAlgorithm: ConflictAlgorithm.replace);
+      await db.insert(
+        'assets',
+        asset.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
     } else {
       final localId = existing.first['id'] as int;
       await db.update(

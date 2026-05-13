@@ -348,15 +348,15 @@ class ImportService {
           // Determine status
           GigStatus status;
           if (isEnB) {
-            status = GigStatus.cobradoEnB;
+            status = GigStatus.cobradoB;
           } else {
             switch (mapping.defaultStatus) {
               case ImportDefaultStatus.cobrado:
-                status = GigStatus.pagado;
+                status = GigStatus.cobrado;
               case ImportDefaultStatus.pendienteCobro:
-                status = GigStatus.facturaEnviada;
+                status = GigStatus.facturado;
               case ImportDefaultStatus.borrador:
-                status = GigStatus.facturaGenerada;
+                status = GigStatus.facturado;
             }
           }
 
@@ -386,9 +386,11 @@ class ImportService {
 
           if (!isEnB) {
             final desiredInvoiceStatus = switch (status) {
-              GigStatus.facturaGenerada => InvoiceStatus.borrador,
-              GigStatus.facturaEnviada => InvoiceStatus.enviada,
-              GigStatus.pagado => InvoiceStatus.pagada,
+              GigStatus.facturado => mapping.defaultStatus ==
+                      ImportDefaultStatus.borrador
+                  ? InvoiceStatus.borrador
+                  : InvoiceStatus.enviada,
+              GigStatus.cobrado => InvoiceStatus.pagada,
               _ => InvoiceStatus.borrador,
             };
 

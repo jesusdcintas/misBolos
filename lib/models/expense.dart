@@ -59,6 +59,9 @@ class Expense {
   final String? notas;
   final bool synced;
   final DateTime createdAt;
+  final String? driveFileId;
+  final String? driveFileUrl;
+  final DateTime? driveSyncedAt;
 
   Expense({
     this.id,
@@ -78,6 +81,9 @@ class Expense {
     this.notas,
     this.synced = false,
     DateTime? createdAt,
+    this.driveFileId,
+    this.driveFileUrl,
+    this.driveSyncedAt,
   }) : createdAt = createdAt ?? DateTime.now();
 
   double get importeDeducible => importeBase * (porcentajeDeduccion / 100);
@@ -100,6 +106,10 @@ class Expense {
     String? notas,
     bool? synced,
     DateTime? createdAt,
+    String? driveFileId,
+    String? driveFileUrl,
+    DateTime? driveSyncedAt,
+    bool clearDriveFile = false,
   }) {
     return Expense(
       id: id ?? this.id,
@@ -119,6 +129,11 @@ class Expense {
       notas: notas ?? this.notas,
       synced: synced ?? this.synced,
       createdAt: createdAt ?? this.createdAt,
+      driveFileId: clearDriveFile ? null : driveFileId ?? this.driveFileId,
+      driveFileUrl: clearDriveFile ? null : driveFileUrl ?? this.driveFileUrl,
+      driveSyncedAt: clearDriveFile
+          ? null
+          : driveSyncedAt ?? this.driveSyncedAt,
     );
   }
 
@@ -141,6 +156,9 @@ class Expense {
       'notas': notas,
       'synced': synced ? 1 : 0,
       'created_at': createdAt.toIso8601String(),
+      'drive_file_id': driveFileId,
+      'drive_file_url': driveFileUrl,
+      'drive_synced_at': driveSyncedAt?.toIso8601String(),
     };
   }
 
@@ -163,6 +181,11 @@ class Expense {
       notas: map['notas'] as String?,
       synced: (map['synced'] as int) == 1,
       createdAt: DateTime.parse(map['created_at'] as String),
+      driveFileId: map['drive_file_id'] as String?,
+      driveFileUrl: map['drive_file_url'] as String?,
+      driveSyncedAt: map['drive_synced_at'] != null
+          ? DateTime.tryParse(map['drive_synced_at'] as String)
+          : null,
     );
   }
 }

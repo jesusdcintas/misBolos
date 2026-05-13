@@ -1,18 +1,54 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:googleapis/calendar/v3.dart' as gcal;
+import 'package:googleapis_auth/auth_io.dart' as gauth;
+import 'package:http/http.dart' as http;
 import '../models/gig.dart';
 import 'google_auth_service.dart';
+import 'platform_auth_service.dart';
 
 /// Servicio para sincronizar bolos con Google Calendar.
 class GoogleCalendarService {
   static const String _calendarSummary = 'MisBolos';
   String? _calendarId;
+  static const _calendarScopes = <String>[
+    gcal.CalendarApi.calendarScope,
+    gcal.CalendarApi.calendarEventsScope,
+  ];
+
+  Future<gcal.CalendarApi> _getApi() async {
+    // En iOS/Android usamos token de google_sign_in.
+    if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
+      final token = await PlatformAuthService.instance.getAccessToken();
+      if (token == null || token.isEmpty) {
+        throw StateError('No hay access token de Google en móvil');
+      }
+      final creds = gauth.AccessCredentials(
+        gauth.AccessToken(
+          'Bearer',
+          token,
+          DateTime.now().toUtc().add(const Duration(minutes: 30)),
+        ),
+        null,
+        _calendarScopes,
+      );
+      final client = gauth.authenticatedClient(http.Client(), creds);
+      return gcal.CalendarApi(client);
+    }
+
+    // En escritorio seguimos con el cliente OAuth persistido.
+    final desktopApi = GoogleAuthService.instance.calendarApi;
+    if (desktopApi == null) {
+      throw StateError('No hay sesión de Google activa');
+    }
+    return desktopApi;
+  }
 
   /// Obtiene o crea el calendario "MisBolos" en la cuenta del usuario.
   Future<String> _ensureCalendar() async {
     if (_calendarId != null) return _calendarId!;
 
-    final api = GoogleAuthService.instance.calendarApi;
-    if (api == null) throw StateError('No hay sesión de Google activa');
+    final api = await _getApi();
     final list = await api.calendarList.list();
 
     // Buscar calendario existente
@@ -36,18 +72,19 @@ class GoogleCalendarService {
     required String clientName,
     required double? cachet,
   }) async {
-
     final calId = await _ensureCalendar();
-    final api = GoogleAuthService.instance.calendarApi!;
+    final api = await _getApi();
+    final startDate = DateTime(gig.fecha.year, gig.fecha.month, gig.fecha.day);
+    final endDate = startDate.add(const Duration(days: 1));
 
     final event = gcal.Event()
       ..summary = '🎧 Bolo: $clientName'
       ..description = _buildDescription(gig, cachet)
       ..start = gcal.EventDateTime(
-        date: DateTime(gig.fecha.year, gig.fecha.month, gig.fecha.day),
+        date: startDate,
       )
       ..end = gcal.EventDateTime(
-        date: DateTime(gig.fecha.year, gig.fecha.month, gig.fecha.day + 1),
+        date: endDate,
       )
       ..extendedProperties = gcal.EventExtendedProperties(
         private: {'misbolos_gig_id': gig.id},
@@ -69,7 +106,7 @@ class GoogleCalendarService {
   /// Elimina el evento de un bolo de Google Calendar.
   Future<void> deleteGig(String gigId) async {
     final calId = await _ensureCalendar();
-    final api = GoogleAuthService.instance.calendarApi!;
+    final api = await _getApi();
 
     final existingId = await _findEventByGigId(calId, gigId);
     if (existingId != null) {
@@ -83,7 +120,7 @@ class GoogleCalendarService {
     required DateTime to,
   }) async {
     final calId = await _ensureCalendar();
-    final api = GoogleAuthService.instance.calendarApi!;
+    final api = await _getApi();
 
     final events = await api.events.list(
       calId,
@@ -110,23 +147,23 @@ class GoogleCalendarService {
   /// Ref: https://developers.google.com/calendar/api/v3/reference/colors
   String _colorIdForStatus(GigStatus status) {
     switch (status) {
-      case GigStatus.pendiente:
+      case GigStatus.confirmado:
         return '9'; // azul
-      case GigStatus.facturaGenerada:
-        return '7'; // cyan
-      case GigStatus.facturaEnviada:
+      case GigStatus.facturado:
         return '5'; // amarillo/naranja
-      case GigStatus.pagado:
+      case GigStatus.confirmadoB:
+      case GigStatus.realizadoB:
+      case GigStatus.cobradoB:
+        return '3'; // púrpura
+      case GigStatus.cobrado:
         return '10'; // verde
       case GigStatus.cancelado:
         return '11'; // rojo
-      case GigStatus.cobradoEnB:
-        return '3'; // púrpura (no debería llegar aquí)
     }
   }
 
   Future<String?> _findEventByGigId(String calId, String gigId) async {
-    final api = GoogleAuthService.instance.calendarApi!;
+    final api = await _getApi();
 
     try {
       final events = await api.events.list(

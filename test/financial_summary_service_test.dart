@@ -85,7 +85,7 @@ void main() {
             clientId: 'client-1',
             cachet: 1210,
             facturable: true,
-            status: GigStatus.pagado,
+            status: GigStatus.cobrado,
           ),
         ],
       );

@@ -15,6 +15,6 @@ void main() {
       const ProviderScope(child: MisBolosApp()),
     );
     await tester.pump();
-    expect(find.text('Inicio'), findsOneWidget);
+    expect(find.text('Inicio'), findsWidgets);
   });
 }

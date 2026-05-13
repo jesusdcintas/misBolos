@@ -4,7 +4,7 @@ class AppStrings {
   static const String appName = 'MisBolos';
 
   // Navegación
-  static const String dashboard = 'Dashboard';
+  static const String dashboard = 'Inicio';
   static const String calendario = 'Calendario';
   static const String clientes = 'Clientes';
   static const String facturas = 'Facturas';
@@ -24,16 +24,16 @@ class AppStrings {
   static const String no = 'NO';
 
   // Estados de bolo
-  static const String pendiente = 'Pendiente';
-  static const String facturaGenerada = 'Factura generada';
-  static const String facturaEnviada = 'Pdte cobro';
+  static const String pendiente = 'Confirmado';
+  static const String facturaGenerada = 'Facturado';
+  static const String facturaEnviada = 'Facturado';
   static const String pagado = 'Cobrado';
   static const String cancelado = 'Cancelado';
   static const String cobradoEnB = 'Cobrado en B';
 
   // Acciones
   static const String generarFactura = 'Generar factura';
-  static const String marcarEnviada = 'Marcar como pendiente';
+  static const String marcarEnviada = 'Marcar como facturado';
   static const String marcarPagado = 'Marcar como cobrado';
   static const String marcarCobradoEnB = 'Marcar como cobrado en B';
   static const String cancelarBolo = 'Cancelar bolo';
@@ -48,7 +48,7 @@ class AppStrings {
   static const String factura = 'Factura';
   static const String todas = 'Todas';
   static const String borrador = 'Borrador';
-  static const String enviada = 'Pendiente';
+  static const String enviada = 'Pendiente de cobro';
   static const String pagada = 'Cobrada';
   static const String subtotal = 'Subtotal';
   static const String iva = 'IVA';
@@ -70,10 +70,10 @@ class AppStrings {
   static const String ingresosOficiales = 'Ingresos oficiales';
   static const String ingresosEnB = 'Ingresos en B';
   static const String cobradoEsteMes = 'Cobrado este mes';
-  static const String pendienteCobro = 'Pendiente';
-  static const String facturasEnviadas = 'Facturas pendientes';
+  static const String pendienteCobro = 'Pendiente de cobro';
+  static const String facturasEnviadas = 'Facturas pendientes de cobro';
   static const String cobradoEnBEsteMes = 'Cobrado en B este mes';
-  static const String pendienteCobroB = 'Pendiente cobrar en B';
+  static const String pendienteCobroB = 'Pendiente de cobro en B';
   static const String totalBolosMes = 'Bolos este mes';
   static const String proximoBolo = 'Próximo bolo';
   static const String ultimosBolos = 'Últimos bolos';

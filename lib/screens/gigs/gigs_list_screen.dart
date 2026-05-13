@@ -407,32 +407,46 @@ class _GigsListScreenState extends ConsumerState<GigsListScreen> {
                                   null,
                         ),
                         _StatusChip(
-                          label: GigStatus.pendiente.label,
-                          selected: statusFilter == GigStatus.pendiente,
+                          label: GigStatus.confirmado.label,
+                          selected: statusFilter == GigStatus.confirmado,
                           onTap: () =>
                               ref.read(gigStatusFilterProvider.notifier).state =
-                                  GigStatus.pendiente,
+                                  GigStatus.confirmado,
                         ),
                         _StatusChip(
-                          label: GigStatus.facturaEnviada.label,
-                          selected: statusFilter == GigStatus.facturaEnviada,
+                          label: GigStatus.facturado.label,
+                          selected: statusFilter == GigStatus.facturado,
                           onTap: () =>
                               ref.read(gigStatusFilterProvider.notifier).state =
-                                  GigStatus.facturaEnviada,
+                                  GigStatus.facturado,
                         ),
                         _StatusChip(
-                          label: GigStatus.pagado.label,
-                          selected: statusFilter == GigStatus.pagado,
+                          label: GigStatus.cobrado.label,
+                          selected: statusFilter == GigStatus.cobrado,
                           onTap: () =>
                               ref.read(gigStatusFilterProvider.notifier).state =
-                                  GigStatus.pagado,
+                                  GigStatus.cobrado,
                         ),
                         _StatusChip(
-                          label: GigStatus.cobradoEnB.label,
-                          selected: statusFilter == GigStatus.cobradoEnB,
+                          label: GigStatus.confirmadoB.label,
+                          selected: statusFilter == GigStatus.confirmadoB,
                           onTap: () =>
                               ref.read(gigStatusFilterProvider.notifier).state =
-                                  GigStatus.cobradoEnB,
+                                  GigStatus.confirmadoB,
+                        ),
+                        _StatusChip(
+                          label: GigStatus.realizadoB.label,
+                          selected: statusFilter == GigStatus.realizadoB,
+                          onTap: () =>
+                              ref.read(gigStatusFilterProvider.notifier).state =
+                                  GigStatus.realizadoB,
+                        ),
+                        _StatusChip(
+                          label: GigStatus.cobradoB.label,
+                          selected: statusFilter == GigStatus.cobradoB,
+                          onTap: () =>
+                              ref.read(gigStatusFilterProvider.notifier).state =
+                                  GigStatus.cobradoB,
                         ),
                         _StatusChip(
                           label: GigStatus.cancelado.label,
@@ -579,19 +593,19 @@ class _GigsListScreenState extends ConsumerState<GigsListScreen> {
                       children: [
                         IconButton(
                           tooltip: 'Cobrado',
-                          onPressed: () => _applyBulkStatus(GigStatus.pagado),
+                          onPressed: () => _applyBulkStatus(GigStatus.cobrado),
                           icon: const Icon(Icons.check_circle_outline),
                         ),
                         IconButton(
-                          tooltip: 'Pendiente',
+                          tooltip: 'Confirmado',
                           onPressed: () =>
-                              _applyBulkStatus(GigStatus.pendiente),
+                              _applyBulkStatus(GigStatus.confirmado),
                           icon: const Icon(Icons.hourglass_empty),
                         ),
                         IconButton(
                           tooltip: 'En B',
                           onPressed: () =>
-                              _applyBulkStatus(GigStatus.cobradoEnB),
+                              _applyBulkStatus(GigStatus.cobradoB),
                           icon: const Icon(
                             Icons.account_balance_wallet_outlined,
                           ),
@@ -1346,7 +1360,7 @@ class _GigListTile extends ConsumerWidget {
                     children: [
                       FacturableBadge(facturable: gig.facturable),
                       const SizedBox(height: 4),
-                      StatusBadge(status: gig.status),
+                      StatusBadge(status: gig.status, facturable: gig.facturable),
                     ],
                   ),
             isThreeLine: true,

@@ -765,7 +765,7 @@ class SupabaseService {
     notas: m['notas'],
     cachet: m['cachet'] != null ? (m['cachet'] as num).toDouble() : null,
     facturable: m['facturable'] ?? true,
-    status: GigStatusExtension.fromDb(m['status'] ?? 'pendiente'),
+    status: GigStatusExtension.fromDb(m['status'] ?? 'confirmado'),
     invoiceId: m['invoice_id'],
     createdAt: DateTime.parse(m['created_at']),
     updatedAt: DateTime.parse((m['updated_at'] ?? m['created_at']).toString()),

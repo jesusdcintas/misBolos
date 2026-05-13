@@ -10,6 +10,7 @@ import '../../core/utils/date_formatter.dart';
 import '../../models/invoice.dart';
 import '../../models/gig.dart';
 import '../../providers/invoice_email_log_provider.dart';
+import '../../providers/invoice_list_ui_provider.dart';
 import '../../providers/invoice_provider.dart';
 import '../../providers/client_provider.dart';
 import '../../providers/gig_provider.dart';
@@ -25,42 +26,22 @@ import '../../core/utils/app_haptics.dart';
 import '../../models/client.dart';
 import 'package:share_plus/share_plus.dart';
 
-final _filterProvider = StateProvider<InvoiceStatus?>((ref) => null);
-final _invoiceYearFilterProvider = StateProvider<int?>((ref) => null);
-final _invoiceMonthFilterProvider = StateProvider<int?>((ref) => null);
-final _invoiceClientFilterProvider = StateProvider<String?>((ref) => null);
-
 void _clearAllInvoiceFilters(WidgetRef ref) {
-  ref.read(_filterProvider.notifier).state = null;
-  ref.read(_invoiceYearFilterProvider.notifier).state = null;
-  ref.read(_invoiceMonthFilterProvider.notifier).state = null;
-  ref.read(_invoiceClientFilterProvider.notifier).state = null;
+  ref.read(invoiceStatusFilterProvider.notifier).state = null;
+  ref.read(invoiceYearFilterProvider.notifier).state = DateTime.now().year;
+  ref.read(invoiceMonthFilterProvider.notifier).state = null;
+  ref.read(invoiceClientFilterProvider.notifier).state = null;
 }
 
-enum InvoiceSortOption {
-  fechaDesc,
-  fechaAsc,
-  numeroDesc,
-  numeroAsc,
-  clienteAsc,
-  clienteDesc,
-  precioDesc,
-  precioAsc,
-}
+enum InvoiceViewMode { list, grid }
 
-final _sortProvider = StateProvider<InvoiceSortOption>(
-  (ref) => InvoiceSortOption.fechaDesc,
+final _viewModeProvider = StateProvider<InvoiceViewMode>(
+  (ref) => InvoiceViewMode.list,
 );
 
 // Modo selección masiva
 final _selectionModeProvider = StateProvider<bool>((ref) => false);
 final _selectedInvoicesProvider = StateProvider<Set<String>>((ref) => {});
-
-// Cache para nombres de clientes en ordenación
-final _clientsCacheProvider = FutureProvider<Map<String, Client>>((ref) async {
-  final clients = await ref.watch(clientsProvider.future);
-  return {for (var c in clients) c.id: c};
-});
 
 class InvoicesListScreen extends ConsumerStatefulWidget {
   const InvoicesListScreen({super.key});
@@ -93,14 +74,14 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
   @override
   Widget build(BuildContext context) {
     final invoicesAsync = ref.watch(invoicesProvider);
-    final filter = ref.watch(_filterProvider);
-    final sortOption = ref.watch(_sortProvider);
-    final clientsCacheAsync = ref.watch(_clientsCacheProvider);
+    final filter = ref.watch(invoiceStatusFilterProvider);
+    final sortOption = ref.watch(invoiceSortProvider);
+    final viewMode = ref.watch(_viewModeProvider);
     final selectionMode = ref.watch(_selectionModeProvider);
     final selectedInvoices = ref.watch(_selectedInvoicesProvider);
-    final selectedYear = ref.watch(_invoiceYearFilterProvider);
-    final selectedMonth = ref.watch(_invoiceMonthFilterProvider);
-    final clientFilter = ref.watch(_invoiceClientFilterProvider);
+    final selectedYear = ref.watch(invoiceYearFilterProvider);
+    final selectedMonth = ref.watch(invoiceMonthFilterProvider);
+    final clientFilter = ref.watch(invoiceClientFilterProvider);
     final clientsAsync = ref.watch(clientsProvider);
     final pendingCount =
         ref.watch(syncQueuePendingCountProvider).valueOrNull ?? 0;
@@ -124,57 +105,9 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
                 data: (allInvoices) {
                   final clients = clientsAsync.valueOrNull ?? [];
                   final clientMap = {for (final c in clients) c.id: c};
-                  final clientsMap = clientsCacheAsync.valueOrNull ?? {};
 
-                  // Totales sin filtrar
-                  final totalCount = allInvoices.length;
-
-                  // Aplicar todos los filtros
-                  var filtered = allInvoices.where((inv) {
-                    if (filter != null && inv.status != filter) return false;
-                    if (selectedYear != null &&
-                        inv.fecha.year != selectedYear) {
-                      return false;
-                    }
-                    if (selectedMonth != null &&
-                        inv.fecha.month != selectedMonth) {
-                      return false;
-                    }
-                    if (clientFilter != null && inv.clientId != clientFilter) {
-                      return false;
-                    }
-                    return true;
-                  }).toList();
-
-                  // Aplicar ordenación
-                  filtered.sort((a, b) {
-                    switch (sortOption) {
-                      case InvoiceSortOption.fechaDesc:
-                        return b.fecha.compareTo(a.fecha);
-                      case InvoiceSortOption.fechaAsc:
-                        return a.fecha.compareTo(b.fecha);
-                      case InvoiceSortOption.numeroDesc:
-                        return b.numero.compareTo(a.numero);
-                      case InvoiceSortOption.numeroAsc:
-                        return a.numero.compareTo(b.numero);
-                      case InvoiceSortOption.clienteAsc:
-                        final clientA = clientsMap[a.clientId]?.alias ?? '';
-                        final clientB = clientsMap[b.clientId]?.alias ?? '';
-                        return clientA.toLowerCase().compareTo(
-                          clientB.toLowerCase(),
-                        );
-                      case InvoiceSortOption.clienteDesc:
-                        final clientA = clientsMap[a.clientId]?.alias ?? '';
-                        final clientB = clientsMap[b.clientId]?.alias ?? '';
-                        return clientB.toLowerCase().compareTo(
-                          clientA.toLowerCase(),
-                        );
-                      case InvoiceSortOption.precioDesc:
-                        return b.total.compareTo(a.total);
-                      case InvoiceSortOption.precioAsc:
-                        return a.total.compareTo(b.total);
-                    }
-                  });
+                  // Misma lista compartida para UI y detalle.
+                  final filtered = ref.watch(filteredSortedInvoicesProvider);
 
                   final filteredCount = filtered.length;
                   final filteredTotal = filtered.fold<double>(
@@ -267,22 +200,25 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
                                 color: AppColors.primary,
                               ),
                             ),
-                            if (hasActiveFilters) ...[
-                              const SizedBox(width: 8),
-                              Text(
-                                '[de $totalCount]',
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  color: AppColors.textSecondary,
-                                ),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'IVA incluido',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: AppColors.textSecondary,
                               ),
-                            ],
+                            ),
                           ],
                         ),
                       ),
 
                       if (!selectionMode)
-                        _buildInvoiceActions(context, ref, sortOption),
+                        _buildInvoiceActions(
+                          context,
+                          ref,
+                          sortOption,
+                          viewMode,
+                        ),
 
                       // ── Fila 1: Chips de estado ──
                       Padding(
@@ -296,29 +232,46 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
                                 label: AppStrings.todas,
                                 selected: filter == null,
                                 onTap: () =>
-                                    ref.read(_filterProvider.notifier).state =
+                                    ref
+                                            .read(
+                                              invoiceStatusFilterProvider
+                                                  .notifier,
+                                            )
+                                            .state =
                                         null,
                               ),
                               _FilterChip(
                                 label: AppStrings.borrador,
                                 selected: filter == InvoiceStatus.borrador,
                                 onTap: () =>
-                                    ref.read(_filterProvider.notifier).state =
-                                        InvoiceStatus.borrador,
+                                    ref
+                                        .read(
+                                          invoiceStatusFilterProvider.notifier,
+                                        )
+                                        .state = InvoiceStatus
+                                        .borrador,
                               ),
                               _FilterChip(
                                 label: AppStrings.enviada,
                                 selected: filter == InvoiceStatus.enviada,
                                 onTap: () =>
-                                    ref.read(_filterProvider.notifier).state =
-                                        InvoiceStatus.enviada,
+                                    ref
+                                        .read(
+                                          invoiceStatusFilterProvider.notifier,
+                                        )
+                                        .state = InvoiceStatus
+                                        .enviada,
                               ),
                               _FilterChip(
                                 label: AppStrings.pagada,
                                 selected: filter == InvoiceStatus.pagada,
                                 onTap: () =>
-                                    ref.read(_filterProvider.notifier).state =
-                                        InvoiceStatus.pagada,
+                                    ref
+                                        .read(
+                                          invoiceStatusFilterProvider.notifier,
+                                        )
+                                        .state = InvoiceStatus
+                                        .pagada,
                               ),
                             ],
                           ),
@@ -394,59 +347,13 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
                         )
                       else
                         Expanded(
-                          child: ListView.builder(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                            ).copyWith(bottom: selectionMode ? 16 : 80),
-                            itemCount: filtered.length,
-                            itemBuilder: (context, index) {
-                              final inv = filtered[index];
-                              return _InvoiceTile(
-                                invoice: inv,
-                                selectionMode: selectionMode,
-                                isSelected: selectedInvoices.contains(inv.id),
-                                onSelect: (selected) {
-                                  final current = ref.read(
-                                    _selectedInvoicesProvider,
-                                  );
-                                  if (selected) {
-                                    ref
-                                        .read(
-                                          _selectedInvoicesProvider.notifier,
-                                        )
-                                        .state = {
-                                      ...current,
-                                      inv.id,
-                                    };
-                                  } else {
-                                    ref
-                                        .read(
-                                          _selectedInvoicesProvider.notifier,
-                                        )
-                                        .state = current
-                                        .where((id) => id != inv.id)
-                                        .toSet();
-                                  }
-                                },
-                                onLongPress: () {
-                                  if (!selectionMode) {
-                                    ref
-                                            .read(
-                                              _selectionModeProvider.notifier,
-                                            )
-                                            .state =
-                                        true;
-                                    ref
-                                        .read(
-                                          _selectedInvoicesProvider.notifier,
-                                        )
-                                        .state = {
-                                      inv.id,
-                                    };
-                                  }
-                                },
-                              );
-                            },
+                          child: _buildInvoicesContent(
+                            context,
+                            ref,
+                            filtered,
+                            selectionMode,
+                            selectedInvoices,
+                            viewMode,
                           ),
                         ),
                     ],
@@ -524,6 +431,7 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
     BuildContext context,
     WidgetRef ref,
     InvoiceSortOption sortOption,
+    InvoiceViewMode viewMode,
   ) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
@@ -540,7 +448,7 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
           Expanded(
             child: PopupMenuButton<InvoiceSortOption>(
               onSelected: (value) {
-                ref.read(_sortProvider.notifier).state = value;
+                ref.read(invoiceSortProvider.notifier).state = value;
               },
               itemBuilder: (context) => [
                 _buildSortMenuItem(
@@ -611,6 +519,76 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
           ),
           const SizedBox(width: 8),
           Expanded(
+            child: PopupMenuButton<InvoiceViewMode>(
+              onSelected: (value) {
+                ref.read(_viewModeProvider.notifier).state = value;
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: InvoiceViewMode.list,
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.view_agenda_outlined,
+                        size: 20,
+                        color: viewMode == InvoiceViewMode.list
+                            ? AppColors.primary
+                            : AppColors.textSecondary,
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        'Lista',
+                        style: TextStyle(
+                          color: viewMode == InvoiceViewMode.list
+                              ? AppColors.primary
+                              : AppColors.textPrimary,
+                          fontWeight: viewMode == InvoiceViewMode.list
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: InvoiceViewMode.grid,
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.grid_view_outlined,
+                        size: 20,
+                        color: viewMode == InvoiceViewMode.grid
+                            ? AppColors.primary
+                            : AppColors.textSecondary,
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        'Cuadrícula',
+                        style: TextStyle(
+                          color: viewMode == InvoiceViewMode.grid
+                              ? AppColors.primary
+                              : AppColors.textPrimary,
+                          fontWeight: viewMode == InvoiceViewMode.grid
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              child: _InlineActionButtonContent(
+                icon: viewMode == InvoiceViewMode.grid
+                    ? Icons.grid_view_outlined
+                    : Icons.view_agenda_outlined,
+                label: viewMode == InvoiceViewMode.grid
+                    ? 'Cuadrícula'
+                    : 'Lista',
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
             child: Builder(
               builder: (menuContext) {
                 final isMobile = MediaQuery.of(menuContext).size.width < 430;
@@ -657,6 +635,83 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildInvoicesContent(
+    BuildContext context,
+    WidgetRef ref,
+    List<Invoice> filtered,
+    bool selectionMode,
+    Set<String> selectedInvoices,
+    InvoiceViewMode viewMode,
+  ) {
+    void toggleSelection(Invoice invoice, bool selected) {
+      final current = ref.read(_selectedInvoicesProvider);
+      if (selected) {
+        ref.read(_selectedInvoicesProvider.notifier).state = {
+          ...current,
+          invoice.id,
+        };
+        return;
+      }
+      ref.read(_selectedInvoicesProvider.notifier).state = current
+          .where((id) => id != invoice.id)
+          .toSet();
+    }
+
+    void handleLongPress(Invoice invoice) {
+      if (selectionMode) return;
+      ref.read(_selectionModeProvider.notifier).state = true;
+      ref.read(_selectedInvoicesProvider.notifier).state = {invoice.id};
+    }
+
+    if (viewMode == InvoiceViewMode.list) {
+      return ListView.builder(
+        padding: const EdgeInsets.symmetric(
+          horizontal: 8,
+        ).copyWith(bottom: selectionMode ? 16 : 80),
+        itemCount: filtered.length,
+        itemBuilder: (context, index) {
+          final inv = filtered[index];
+          return _InvoiceTile(
+            invoice: inv,
+            selectionMode: selectionMode,
+            isSelected: selectedInvoices.contains(inv.id),
+            onSelect: (selected) => toggleSelection(inv, selected),
+            onLongPress: () => handleLongPress(inv),
+          );
+        },
+      );
+    }
+
+    final screenWidth = MediaQuery.of(context).size.width;
+    final crossAxisCount = screenWidth >= 1200
+        ? 4
+        : screenWidth >= 900
+        ? 3
+        : 2;
+    return GridView.builder(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 12,
+      ).copyWith(top: 4, bottom: selectionMode ? 16 : 80),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: crossAxisCount,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+        childAspectRatio: 1.42,
+      ),
+      itemCount: filtered.length,
+      itemBuilder: (context, index) {
+        final inv = filtered[index];
+        return _InvoiceGridCard(
+          invoice: inv,
+          selectionMode: selectionMode,
+          isSelected: selectedInvoices.contains(inv.id),
+          onSelect: (selected) => toggleSelection(inv, selected),
+          onLongPress: () => handleLongPress(inv),
+        );
+      },
     );
   }
 
@@ -781,9 +836,25 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
                         ref,
                         selectedInvoices,
                       );
+                    } else if (value == 'editConcept') {
+                      await _showBulkConceptDialog(
+                        actionContext,
+                        ref,
+                        selectedInvoices,
+                      );
                     }
                   },
                   itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'editConcept',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit_note, size: 20),
+                          SizedBox(width: 12),
+                          Text('Cambiar concepto'),
+                        ],
+                      ),
+                    ),
                     const PopupMenuItem(
                       value: 'sendEmail',
                       child: Row(
@@ -800,7 +871,7 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
                         children: [
                           Icon(Icons.send, size: 20),
                           SizedBox(width: 12),
-                          Text('Marcar como pendiente'),
+                          Text('Marcar como facturada'),
                         ],
                       ),
                     ),
@@ -963,7 +1034,7 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
         if (gig != null) {
           await _syncGigToCalendar(
             ref,
-            gig.copyWith(status: GigStatus.facturaEnviada),
+            gig.copyWith(status: GigStatus.facturado),
           );
         }
       } catch (_) {
@@ -979,6 +1050,116 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
         SnackBar(content: Text('Emails enviados: $sent · fallidos: $failed')),
       );
     }
+  }
+
+  Future<void> _showBulkConceptDialog(
+    BuildContext context,
+    WidgetRef ref,
+    Set<String> ids,
+  ) async {
+    if (ids.isEmpty) return;
+    final conceptController = TextEditingController();
+    var replaceAllLines = false;
+
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) => AlertDialog(
+          title: Text('Cambiar concepto en ${ids.length} facturas'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: conceptController,
+                decoration: const InputDecoration(
+                  labelText: 'Nuevo concepto',
+                  hintText: 'Ej: DJ SET',
+                ),
+                textCapitalization: TextCapitalization.characters,
+              ),
+              const SizedBox(height: 12),
+              CheckboxListTile(
+                value: replaceAllLines,
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Reemplazar todas las líneas'),
+                subtitle: const Text(
+                  'Si está desactivado, solo cambia la primera línea.',
+                ),
+                onChanged: (value) {
+                  setModalState(() {
+                    replaceAllLines = value ?? false;
+                  });
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Aplicar'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final newConcept = conceptController.text.trim();
+    conceptController.dispose();
+    if (accepted != true || newConcept.isEmpty) return;
+
+    final invoices = ref.read(invoicesProvider).valueOrNull ?? [];
+    final selected = invoices
+        .where((invoice) => ids.contains(invoice.id))
+        .toList();
+    if (selected.isEmpty) return;
+
+    var updatedCount = 0;
+    var skippedCount = 0;
+    var failedCount = 0;
+
+    for (final invoice in selected) {
+      try {
+        if (invoice.items.isEmpty) {
+          skippedCount++;
+          continue;
+        }
+        final updatedItems = <InvoiceLineItem>[];
+        for (var i = 0; i < invoice.items.length; i++) {
+          final line = invoice.items[i];
+          final shouldReplace = replaceAllLines || i == 0;
+          updatedItems.add(
+            InvoiceLineItem(
+              cantidad: line.cantidad,
+              descripcion: shouldReplace ? newConcept : line.descripcion,
+              precioUnitario: line.precioUnitario,
+              totalLinea: line.totalLinea,
+            ),
+          );
+        }
+
+        await ref
+            .read(invoicesProvider.notifier)
+            .updateInvoice(invoice.copyWith(items: updatedItems));
+        updatedCount++;
+      } catch (_) {
+        failedCount++;
+      }
+    }
+
+    if (!context.mounted) return;
+    final parts = <String>[
+      '$updatedCount actualizadas',
+      if (skippedCount > 0) '$skippedCount sin líneas',
+      if (failedCount > 0) '$failedCount con error',
+    ];
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Concepto masivo: ${parts.join(' · ')}')),
+    );
   }
 
   Future<void> _bulkMarkAs(
@@ -1025,7 +1206,7 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
         if (gig != null) {
           GigStatus newGigStatus;
           if (status == InvoiceStatus.enviada) {
-            newGigStatus = GigStatus.facturaEnviada;
+            newGigStatus = GigStatus.facturado;
             // Programar recordatorio
             final settings = await ref.read(settingsProvider.future);
             if (settings.notificacionesActivas) {
@@ -1045,7 +1226,7 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
               }
             }
           } else {
-            newGigStatus = GigStatus.pagado;
+            newGigStatus = GigStatus.cobrado;
             await NotificationService.instance.cancelNotification(
               invoice.numero,
             );
@@ -1080,7 +1261,9 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('¿Revertir estado de ${ids.length} facturas?'),
-        content: const Text('Cobrada → Pendiente\nPendiente → Borrador'),
+        content: const Text(
+          'Cobrada → Pendiente de cobro\nPendiente de cobro → Borrador',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -1108,10 +1291,10 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
 
         if (invoice.status == InvoiceStatus.pagada) {
           newStatus = InvoiceStatus.enviada;
-          newGigStatus = GigStatus.facturaEnviada;
+          newGigStatus = GigStatus.facturado;
         } else if (invoice.status == InvoiceStatus.enviada) {
           newStatus = InvoiceStatus.borrador;
-          newGigStatus = GigStatus.facturaGenerada;
+          newGigStatus = GigStatus.facturado;
         }
 
         if (newStatus != null) {
@@ -1193,7 +1376,7 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
   ) {
     final sortedYears = yearCounts.keys.toList()
       ..sort((a, b) => b.compareTo(a));
-    final selectedYear = ref.read(_invoiceYearFilterProvider);
+    final selectedYear = ref.read(invoiceYearFilterProvider);
 
     showModalBottomSheet(
       context: context,
@@ -1217,8 +1400,8 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
             RadioGroup<int?>(
               groupValue: selectedYear,
               onChanged: (value) {
-                ref.read(_invoiceYearFilterProvider.notifier).state = value;
-                ref.read(_invoiceMonthFilterProvider.notifier).state = null;
+                ref.read(invoiceYearFilterProvider.notifier).state = value;
+                ref.read(invoiceMonthFilterProvider.notifier).state = null;
                 Navigator.pop(ctx);
               },
               child: Column(
@@ -1249,7 +1432,7 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
     WidgetRef ref,
     Map<int, int> monthsWithData,
   ) {
-    final selectedMonth = ref.read(_invoiceMonthFilterProvider);
+    final selectedMonth = ref.read(invoiceMonthFilterProvider);
 
     showModalBottomSheet(
       context: context,
@@ -1279,7 +1462,7 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
               title: const Text('Todos los meses'),
               contentPadding: EdgeInsets.zero,
               onTap: () {
-                ref.read(_invoiceMonthFilterProvider.notifier).state = null;
+                ref.read(invoiceMonthFilterProvider.notifier).state = null;
                 Navigator.pop(ctx);
               },
             ),
@@ -1304,7 +1487,7 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
                 return GestureDetector(
                   onTap: hasData
                       ? () {
-                          ref.read(_invoiceMonthFilterProvider.notifier).state =
+                          ref.read(invoiceMonthFilterProvider.notifier).state =
                               month;
                           Navigator.pop(ctx);
                         }
@@ -1379,7 +1562,7 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
               (invoiceCounts[b.id] ?? 0).compareTo(invoiceCounts[a.id] ?? 0),
         );
 
-    final selectedClientId = ref.read(_invoiceClientFilterProvider);
+    final selectedClientId = ref.read(invoiceClientFilterProvider);
 
     showModalBottomSheet(
       context: context,
@@ -1398,7 +1581,7 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
           selectedClientId: selectedClientId,
           scrollController: scrollController,
           onSelect: (clientId) {
-            ref.read(_invoiceClientFilterProvider.notifier).state = clientId;
+            ref.read(invoiceClientFilterProvider.notifier).state = clientId;
             Navigator.pop(ctx);
           },
         ),
@@ -1692,9 +1875,180 @@ class _InvoiceTile extends ConsumerWidget {
   }
 }
 
+class _InvoiceGridCard extends ConsumerWidget {
+  final Invoice invoice;
+  final bool selectionMode;
+  final bool isSelected;
+  final ValueChanged<bool>? onSelect;
+  final VoidCallback? onLongPress;
+
+  const _InvoiceGridCard({
+    required this.invoice,
+    this.selectionMode = false,
+    this.isSelected = false,
+    this.onSelect,
+    this.onLongPress,
+  });
+
+  Color get _statusBgColor {
+    switch (invoice.status) {
+      case InvoiceStatus.borrador:
+        return AppColors.draftBg;
+      case InvoiceStatus.enviada:
+        return AppColors.warningBg;
+      case InvoiceStatus.pagada:
+        return AppColors.successBg;
+    }
+  }
+
+  Color get _statusTextColor {
+    switch (invoice.status) {
+      case InvoiceStatus.borrador:
+        return AppColors.draft;
+      case InvoiceStatus.enviada:
+        return AppColors.warning;
+      case InvoiceStatus.pagada:
+        return AppColors.success;
+    }
+  }
+
+  String get _conceptSummary {
+    final lines = invoice.items
+        .map((item) => item.descripcion.trim())
+        .where((text) => text.isNotEmpty)
+        .toList(growable: false);
+    if (lines.isEmpty) return 'Sin concepto';
+    if (lines.length == 1) return lines.first;
+    return '${lines.first} +${lines.length - 1}';
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final clientAsync = ref.watch(clientByIdProvider(invoice.clientId));
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onLongPress: onLongPress,
+        onTap: selectionMode
+            ? () => onSelect?.call(!isSelected)
+            : () {
+                AppHaptics.light();
+                context.push('/invoice/${invoice.id}');
+              },
+        child: Card(
+          margin: EdgeInsets.zero,
+          color: isSelected ? AppColors.primaryLight : AppColors.surface,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    if (selectionMode)
+                      Checkbox(
+                        value: isSelected,
+                        onChanged: (v) => onSelect?.call(v ?? false),
+                        activeColor: AppColors.primary,
+                      )
+                    else
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _statusBgColor,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          '#${invoice.numero}',
+                          style: TextStyle(
+                            color: _statusTextColor,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _statusBgColor,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        invoice.status.label,
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: _statusTextColor,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                clientAsync.when(
+                  data: (c) => Text(
+                    c?.alias.isNotEmpty == true ? c!.alias : c?.nombre ?? '',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  loading: () => const Text('...'),
+                  error: (_, __) => const Text('Error'),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  DateFormatter.dayOfWeekFull(invoice.fecha),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _conceptSummary,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  CurrencyFormatter.format(invoice.total),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 18,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 Future<void> _showRenumberDialog(BuildContext context, WidgetRef ref) async {
   final selectedYear =
-      ref.read(_invoiceYearFilterProvider) ?? DateTime.now().year;
+      ref.read(invoiceYearFilterProvider) ?? DateTime.now().year;
   final invoices = await ref.read(invoicesProvider.future);
   final years =
       invoices

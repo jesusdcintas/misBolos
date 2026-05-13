@@ -105,6 +105,9 @@ class Asset {
   final bool activo;
   final bool synced;
   final DateTime createdAt;
+  final String? driveFileId;
+  final String? driveFileUrl;
+  final DateTime? driveSyncedAt;
 
   const Asset({
     this.id,
@@ -125,12 +128,16 @@ class Asset {
     this.activo = true,
     this.synced = false,
     required this.createdAt,
+    this.driveFileId,
+    this.driveFileUrl,
+    this.driveSyncedAt,
   });
 
   // ── Getters calculados ──────────────────────────────────────────────────────
 
   /// IVA deducible en el trimestre de compra (importe_con_iva - base imponible)
-  double get ivaDeducible => importeConIva > 0 ? importeConIva - importeTotal : 0.0;
+  double get ivaDeducible =>
+      importeConIva > 0 ? importeConIva - importeTotal : 0.0;
 
   int get anosTranscurridos {
     final hoy = DateTime.now();
@@ -144,14 +151,13 @@ class Asset {
 
   int get mesesTranscurridos {
     final hoy = DateTime.now();
-    int meses = (hoy.year - fechaCompra.year) * 12 +
-        (hoy.month - fechaCompra.month);
+    int meses =
+        (hoy.year - fechaCompra.year) * 12 + (hoy.month - fechaCompra.month);
     if (hoy.day < fechaCompra.day) meses--;
     return max(0, meses);
   }
 
-  double get cuotaAnual =>
-      (importeTotal - valorResidual) / vidaUtilAnos;
+  double get cuotaAnual => (importeTotal - valorResidual) / vidaUtilAnos;
 
   double get cuotaMensual => cuotaAnual / 12;
 
@@ -174,10 +180,7 @@ class Asset {
     // El asset debe haberse comprado antes del fin del trimestre
     if (fechaCompra.isAfter(finTrimestre)) return 0.0;
     // Ya estaba completamente amortizado al inicio del trimestre
-    final anosAlInicio = max(
-      0,
-      inicioTrimestre.year - fechaCompra.year,
-    );
+    final anosAlInicio = max(0, inicioTrimestre.year - fechaCompra.year);
     final valorAlInicio = max(
       valorResidual,
       importeTotal - cuotaAnual * anosAlInicio,
@@ -208,6 +211,9 @@ class Asset {
       'activo': activo ? 1 : 0,
       'synced': synced ? 1 : 0,
       'created_at': createdAt.toIso8601String(),
+      'drive_file_id': driveFileId,
+      'drive_file_url': driveFileUrl,
+      'drive_synced_at': driveSyncedAt?.toIso8601String(),
     };
   }
 
@@ -231,6 +237,11 @@ class Asset {
       activo: (map['activo'] as int? ?? 1) == 1,
       synced: (map['synced'] as int? ?? 0) == 1,
       createdAt: DateTime.parse(map['created_at'] as String),
+      driveFileId: map['drive_file_id'] as String?,
+      driveFileUrl: map['drive_file_url'] as String?,
+      driveSyncedAt: map['drive_synced_at'] != null
+          ? DateTime.tryParse(map['drive_synced_at'] as String)
+          : null,
     );
   }
 
@@ -253,6 +264,10 @@ class Asset {
     bool? activo,
     bool? synced,
     DateTime? createdAt,
+    String? driveFileId,
+    String? driveFileUrl,
+    DateTime? driveSyncedAt,
+    bool clearDriveFile = false,
   }) {
     return Asset(
       id: id ?? this.id,
@@ -273,6 +288,11 @@ class Asset {
       activo: activo ?? this.activo,
       synced: synced ?? this.synced,
       createdAt: createdAt ?? this.createdAt,
+      driveFileId: clearDriveFile ? null : driveFileId ?? this.driveFileId,
+      driveFileUrl: clearDriveFile ? null : driveFileUrl ?? this.driveFileUrl,
+      driveSyncedAt: clearDriveFile
+          ? null
+          : driveSyncedAt ?? this.driveSyncedAt,
     );
   }
 }
