@@ -128,7 +128,9 @@ class _GigsListScreenState extends ConsumerState<GigsListScreen> {
   }
 
   Future<void> _refreshGigs() async {
-    await ref.read(syncProvider.notifier).downloadFromCloud();
+    await ref
+        .read(syncProvider.notifier)
+        .downloadFromCloud(reason: 'manual_button');
     ref.invalidate(gigsProvider);
     ref.invalidate(clientsProvider);
   }

@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../core/constants/app_colors.dart';
 import '../../models/expense.dart';
 import '../../providers/expenses_provider.dart';
+import '../../services/ai_attachment_service.dart';
 
 class ExpenseDetailScreen extends ConsumerWidget {
   final int expenseId;
@@ -185,6 +186,31 @@ class _ExpenseDetail extends StatelessWidget {
         // Justificante
         if (expense.documentoPath != null) ...[
           const SizedBox(height: 12),
+          if (_attachmentWarning(expense.documentoPath!) != null)
+            Card(
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: Colors.orange.shade200),
+              ),
+              color: Colors.orange.shade50,
+              child: ListTile(
+                leading: const Icon(
+                  Icons.warning_amber_rounded,
+                  color: Colors.orange,
+                ),
+                title: Text(_attachmentWarning(expense.documentoPath!)!),
+                subtitle: const Text(
+                  'Reasigna el adjunto para sincronizarlo en Drive.',
+                ),
+                trailing: TextButton(
+                  onPressed: () => context.push('/expense/edit/${expense.id}'),
+                  child: const Text('Reasignar'),
+                ),
+              ),
+            ),
+          if (_attachmentWarning(expense.documentoPath!) != null)
+            const SizedBox(height: 12),
           Card(
             elevation: 0,
             shape: RoundedRectangleBorder(
@@ -194,7 +220,8 @@ class _ExpenseDetail extends StatelessWidget {
             child: ListTile(
               leading: const Icon(Icons.attach_file, color: AppColors.primary),
               title: Text(
-                expense.documentoPath!.split('/').last,
+                expense.attachmentDisplayName ??
+                    expense.documentoPath!.split('/').last,
                 overflow: TextOverflow.ellipsis,
               ),
               subtitle: const Text('Justificante adjunto'),
@@ -283,6 +310,20 @@ class _ExpenseDetail extends StatelessWidget {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Archivo: $path')),
     );
+  }
+
+  String? _attachmentWarning(String path) {
+    final normalized = path.trim();
+    if (AiAttachmentService.instance.isCrossDeviceAbsolutePath(normalized)) {
+      return 'Este adjunto viene de otro dispositivo y no está disponible aquí.';
+    }
+    if (AiAttachmentService.instance.isTemporaryPath(normalized)) {
+      return 'Este adjunto usa una ruta temporal y puede haberse borrado.';
+    }
+    if (!File(normalized).existsSync()) {
+      return 'No existe el archivo local de este adjunto.';
+    }
+    return null;
   }
 
   IconData _categoryIcon(ExpenseCategory cat) {

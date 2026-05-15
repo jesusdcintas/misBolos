@@ -80,6 +80,20 @@ class ExpenseRepository {
     );
   }
 
+  Future<void> clearDriveMetadata(int id) async {
+    final db = await DatabaseHelper.instance.database;
+    await db.update(
+      'expenses',
+      {
+        'drive_file_id': null,
+        'drive_file_url': null,
+        'drive_synced_at': null,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
   Future<void> delete(int id) async {
     final db = await DatabaseHelper.instance.database;
     await db.delete('expenses', where: 'id = ?', whereArgs: [id]);
@@ -162,9 +176,43 @@ class ExpenseRepository {
       );
     } else {
       final localId = existing.first['id'] as int;
+      final localExpense = Expense.fromMap(existing.first);
+      final merged = expense.copyWith(
+        id: localId,
+        documentoPath: (expense.documentoPath?.trim().isNotEmpty ?? false)
+            ? expense.documentoPath
+            : localExpense.documentoPath,
+        driveFileId: (expense.driveFileId?.trim().isNotEmpty ?? false)
+            ? expense.driveFileId
+            : localExpense.driveFileId,
+        driveFileUrl: (expense.driveFileUrl?.trim().isNotEmpty ?? false)
+            ? expense.driveFileUrl
+            : localExpense.driveFileUrl,
+        driveSyncedAt: expense.driveSyncedAt ?? localExpense.driveSyncedAt,
+        attachmentStatus: (expense.attachmentStatus.trim().isNotEmpty)
+            ? expense.attachmentStatus
+            : localExpense.attachmentStatus,
+        attachmentError: expense.attachmentError ?? localExpense.attachmentError,
+        attachmentOriginalPath:
+            (expense.attachmentOriginalPath?.trim().isNotEmpty ?? false)
+            ? expense.attachmentOriginalPath
+            : localExpense.attachmentOriginalPath,
+        attachmentOriginalName:
+            (expense.attachmentOriginalName?.trim().isNotEmpty ?? false)
+            ? expense.attachmentOriginalName
+            : localExpense.attachmentOriginalName,
+        attachmentStoredName:
+            (expense.attachmentStoredName?.trim().isNotEmpty ?? false)
+            ? expense.attachmentStoredName
+            : localExpense.attachmentStoredName,
+        attachmentMimeType:
+            (expense.attachmentMimeType?.trim().isNotEmpty ?? false)
+            ? expense.attachmentMimeType
+            : localExpense.attachmentMimeType,
+      );
       await db.update(
         'expenses',
-        expense.copyWith(id: localId).toMap(),
+        merged.toMap(),
         where: 'id = ?',
         whereArgs: [localId],
       );

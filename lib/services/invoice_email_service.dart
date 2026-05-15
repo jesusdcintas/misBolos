@@ -3,6 +3,7 @@ import 'dart:convert';
 import '../models/app_settings.dart';
 import '../models/client.dart';
 import '../models/invoice.dart';
+import '../core/utils/invoice_file_name.dart';
 import 'pdf_service.dart';
 import 'supabase_service.dart';
 
@@ -41,7 +42,10 @@ class InvoiceEmailService {
         'clientId': client.id,
         'recipientEmail': recipient,
         'subject': subject,
-        'fileName': 'factura_${invoice.numero}.pdf',
+        'fileName': buildInvoicePdfFileName(
+          invoice: invoice,
+          clientName: client.nombre,
+        ),
         'pdfBase64': base64Encode(bytes),
       },
     );

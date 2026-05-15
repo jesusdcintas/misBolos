@@ -12,6 +12,7 @@ import '../models/app_settings.dart';
 import '../models/financial_summary.dart';
 import '../models/gig.dart';
 import '../models/pdf_theme.dart';
+import '../core/utils/invoice_file_name.dart';
 import '../providers/stats_provider.dart';
 import '../repositories/app_event_repository.dart';
 
@@ -402,7 +403,11 @@ class PdfService {
     );
 
     final dir = await getApplicationDocumentsDirectory();
-    final file = File('${dir.path}/factura_${invoice.numero}.pdf');
+    final fileName = buildInvoicePdfFileName(
+      invoice: invoice,
+      clientName: client.nombre,
+    );
+    final file = File('${dir.path}/$fileName');
     await file.writeAsBytes(await pdf.save());
     try {
       await AppEventRepository.instance.insert(

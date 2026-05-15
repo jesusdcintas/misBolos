@@ -108,6 +108,12 @@ class Asset {
   final String? driveFileId;
   final String? driveFileUrl;
   final DateTime? driveSyncedAt;
+  final String attachmentStatus;
+  final String? attachmentError;
+  final String? attachmentOriginalPath;
+  final String? attachmentOriginalName;
+  final String? attachmentStoredName;
+  final String? attachmentMimeType;
 
   const Asset({
     this.id,
@@ -131,6 +137,12 @@ class Asset {
     this.driveFileId,
     this.driveFileUrl,
     this.driveSyncedAt,
+    this.attachmentStatus = 'pending_upload',
+    this.attachmentError,
+    this.attachmentOriginalPath,
+    this.attachmentOriginalName,
+    this.attachmentStoredName,
+    this.attachmentMimeType,
   });
 
   // ── Getters calculados ──────────────────────────────────────────────────────
@@ -214,6 +226,12 @@ class Asset {
       'drive_file_id': driveFileId,
       'drive_file_url': driveFileUrl,
       'drive_synced_at': driveSyncedAt?.toIso8601String(),
+      'attachment_status': attachmentStatus,
+      'attachment_error': attachmentError,
+      'attachment_original_path': attachmentOriginalPath,
+      'attachment_original_name': attachmentOriginalName,
+      'attachment_stored_name': attachmentStoredName,
+      'attachment_mime_type': attachmentMimeType,
     };
   }
 
@@ -242,6 +260,13 @@ class Asset {
       driveSyncedAt: map['drive_synced_at'] != null
           ? DateTime.tryParse(map['drive_synced_at'] as String)
           : null,
+      attachmentStatus:
+          map['attachment_status'] as String? ?? 'pending_upload',
+      attachmentError: map['attachment_error'] as String?,
+      attachmentOriginalPath: map['attachment_original_path'] as String?,
+      attachmentOriginalName: map['attachment_original_name'] as String?,
+      attachmentStoredName: map['attachment_stored_name'] as String?,
+      attachmentMimeType: map['attachment_mime_type'] as String?,
     );
   }
 
@@ -267,6 +292,12 @@ class Asset {
     String? driveFileId,
     String? driveFileUrl,
     DateTime? driveSyncedAt,
+    String? attachmentStatus,
+    String? attachmentError,
+    String? attachmentOriginalPath,
+    String? attachmentOriginalName,
+    String? attachmentStoredName,
+    String? attachmentMimeType,
     bool clearDriveFile = false,
   }) {
     return Asset(
@@ -293,6 +324,24 @@ class Asset {
       driveSyncedAt: clearDriveFile
           ? null
           : driveSyncedAt ?? this.driveSyncedAt,
+      attachmentStatus: attachmentStatus ?? this.attachmentStatus,
+      attachmentError: attachmentError ?? this.attachmentError,
+      attachmentOriginalPath:
+          attachmentOriginalPath ?? this.attachmentOriginalPath,
+      attachmentOriginalName:
+          attachmentOriginalName ?? this.attachmentOriginalName,
+      attachmentStoredName: attachmentStoredName ?? this.attachmentStoredName,
+      attachmentMimeType: attachmentMimeType ?? this.attachmentMimeType,
     );
+  }
+
+  String? get attachmentDisplayName {
+    final original = attachmentOriginalName?.trim();
+    if (original != null && original.isNotEmpty) return original;
+    final stored = attachmentStoredName?.trim();
+    if (stored != null && stored.isNotEmpty) return stored;
+    final path = documentoPath?.trim();
+    if (path == null || path.isEmpty) return null;
+    return path.split('/').last;
   }
 }

@@ -7,8 +7,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'core/theme/app_theme.dart';
-import 'providers/invoice_provider.dart';
+import 'providers/settings_provider.dart';
 import 'providers/sync_provider.dart';
+import 'core/services/google_drive_service.dart';
 import 'services/sync_queue_processor.dart';
 import 'screens/dashboard/dashboard_screen.dart';
 import 'screens/calendar/calendar_screen.dart';
@@ -22,6 +23,7 @@ import 'screens/invoices/invoice_preview_screen.dart';
 import 'screens/invoices/invoice_form_screen.dart';
 import 'screens/stats/stats_screen.dart';
 import 'screens/settings/settings_screen.dart';
+import 'screens/settings/broken_attachments_screen.dart';
 import 'screens/dashboard/financial_summary_screen.dart';
 import 'screens/profile/profile_screen.dart';
 import 'screens/expenses/expense_form_screen.dart';
@@ -117,6 +119,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/settings',
         pageBuilder: (context, state) =>
             _slideUpPage(const SettingsScreen(), state),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/attachments/broken',
+        pageBuilder: (context, state) =>
+            _slideUpPage(const BrokenAttachmentsScreen(), state),
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
@@ -274,6 +282,7 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _autoSyncTimer = Timer(const Duration(seconds: 1), _autoSync);
+    Timer(const Duration(milliseconds: 500), _restoreDriveSilently);
     _queueRetryTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       unawaited(
         SyncQueueProcessor.instance.processPending(reason: 'periodic_retry'),
@@ -287,10 +296,18 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp>
     if (!mounted) return;
     final notifier = ref.read(syncProvider.notifier);
     if (notifier.isAuthenticated) {
-      await notifier.syncAll();
-      await ref
-          .read(invoicesProvider.notifier)
-          .refreshFromCloud(reason: 'app_start_sync');
+      await notifier.syncAll(reason: 'app_start');
+    }
+  }
+
+  Future<void> _restoreDriveSilently() async {
+    try {
+      final restored = await GoogleDriveService.instance.restoreSilently();
+      if (restored && mounted) {
+        ref.invalidate(settingsProvider);
+      }
+    } catch (_) {
+      // La UI conserva la carpeta local y las acciones pedirán reconectar si hace falta.
     }
   }
 
@@ -299,11 +316,6 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp>
     if (state != AppLifecycleState.resumed) return;
     unawaited(
       SyncQueueProcessor.instance.processPending(reason: 'app_resumed'),
-    );
-    unawaited(
-      ref
-          .read(invoicesProvider.notifier)
-          .refreshFromCloud(reason: 'app_resumed'),
     );
   }
 
@@ -359,7 +371,9 @@ class _ScaffoldWithNavBarState extends State<_ScaffoldWithNavBar> {
 
   void _onNavTapped(int index) {
     HapticFeedback.selectionClick();
-    final selectedIndex = _indexFromLocation(GoRouterState.of(context).uri.path);
+    final selectedIndex = _indexFromLocation(
+      GoRouterState.of(context).uri.path,
+    );
     if (index == selectedIndex) return;
     context.go(_paths[index]);
   }

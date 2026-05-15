@@ -245,13 +245,30 @@ class InvoiceRepository {
     required DateTime driveSyncedAt,
   }) async {
     final db = await DatabaseHelper.instance.database;
+    final syncedAt = driveSyncedAt.toIso8601String();
     await db.update(
       'invoices',
       {
         'drive_file_id': driveFileId,
         'drive_file_url': driveFileUrl,
-        'drive_synced_at': driveSyncedAt.toIso8601String(),
-        'updated_at': DateTime.now().toIso8601String(),
+        'drive_synced_at': syncedAt,
+        'updated_at': syncedAt,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<void> clearDriveMetadata(String id) async {
+    final db = await DatabaseHelper.instance.database;
+    final now = DateTime.now().toIso8601String();
+    await db.update(
+      'invoices',
+      {
+        'drive_file_id': null,
+        'drive_file_url': null,
+        'drive_synced_at': null,
+        'updated_at': now,
       },
       where: 'id = ?',
       whereArgs: [id],

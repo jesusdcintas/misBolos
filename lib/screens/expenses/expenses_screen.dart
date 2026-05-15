@@ -30,18 +30,20 @@ class ExpensesScreen extends ConsumerStatefulWidget {
 
 class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
   bool _entered = false;
+  ExpensesNotifier? _expensesNotifier;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_entered) return;
     _entered = true;
-    Future.microtask(() => ref.read(expensesProvider.notifier).enterScreen());
+    _expensesNotifier = ref.read(expensesProvider.notifier);
+    Future.microtask(() => _expensesNotifier?.enterScreen());
   }
 
   @override
   void dispose() {
-    ref.read(expensesProvider.notifier).leaveScreen();
+    _expensesNotifier?.leaveScreen();
     super.dispose();
   }
 

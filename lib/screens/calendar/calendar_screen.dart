@@ -159,7 +159,9 @@ class CalendarScreen extends ConsumerWidget {
   }
 
   Future<void> _refreshBolos(WidgetRef ref) async {
-    await ref.read(syncProvider.notifier).downloadFromCloud();
+    await ref
+        .read(syncProvider.notifier)
+        .downloadFromCloud(reason: 'manual_button');
     ref.invalidate(gigsProvider);
     ref.invalidate(invoicesProvider);
     ref.invalidate(clientsProvider);

@@ -63,6 +63,20 @@ class AssetRepository {
     );
   }
 
+  Future<void> clearDriveMetadata(int id) async {
+    final db = await DatabaseHelper.instance.database;
+    await db.update(
+      'assets',
+      {
+        'drive_file_id': null,
+        'drive_file_url': null,
+        'drive_synced_at': null,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
   Future<void> delete(int id) async {
     final db = await DatabaseHelper.instance.database;
     await db.delete('assets', where: 'id = ?', whereArgs: [id]);
@@ -119,9 +133,42 @@ class AssetRepository {
       );
     } else {
       final localId = existing.first['id'] as int;
+      final localAsset = Asset.fromMap(existing.first);
+      final merged = asset.copyWith(
+        id: localId,
+        documentoPath: (asset.documentoPath?.trim().isNotEmpty ?? false)
+            ? asset.documentoPath
+            : localAsset.documentoPath,
+        driveFileId: (asset.driveFileId?.trim().isNotEmpty ?? false)
+            ? asset.driveFileId
+            : localAsset.driveFileId,
+        driveFileUrl: (asset.driveFileUrl?.trim().isNotEmpty ?? false)
+            ? asset.driveFileUrl
+            : localAsset.driveFileUrl,
+        driveSyncedAt: asset.driveSyncedAt ?? localAsset.driveSyncedAt,
+        attachmentStatus: (asset.attachmentStatus.trim().isNotEmpty)
+            ? asset.attachmentStatus
+            : localAsset.attachmentStatus,
+        attachmentError: asset.attachmentError ?? localAsset.attachmentError,
+        attachmentOriginalPath:
+            (asset.attachmentOriginalPath?.trim().isNotEmpty ?? false)
+            ? asset.attachmentOriginalPath
+            : localAsset.attachmentOriginalPath,
+        attachmentOriginalName:
+            (asset.attachmentOriginalName?.trim().isNotEmpty ?? false)
+            ? asset.attachmentOriginalName
+            : localAsset.attachmentOriginalName,
+        attachmentStoredName:
+            (asset.attachmentStoredName?.trim().isNotEmpty ?? false)
+            ? asset.attachmentStoredName
+            : localAsset.attachmentStoredName,
+        attachmentMimeType: (asset.attachmentMimeType?.trim().isNotEmpty ?? false)
+            ? asset.attachmentMimeType
+            : localAsset.attachmentMimeType,
+      );
       await db.update(
         'assets',
-        asset.copyWith(id: localId).toMap(),
+        merged.toMap(),
         where: 'id = ?',
         whereArgs: [localId],
       );

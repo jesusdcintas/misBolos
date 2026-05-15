@@ -33,6 +33,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
   bool _esDeducible = true;
   double _porcentajeDeduccion = 100.0;
   String? _documentoPath;
+  String? _documentoNombreOriginal;
   bool _loading = false;
   bool _extracting = false;
   bool _loaded = false;
@@ -80,6 +81,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
       _esDeducible = expense.esDeducible;
       _porcentajeDeduccion = expense.porcentajeDeduccion;
       _documentoPath = expense.documentoPath;
+      _documentoNombreOriginal = expense.attachmentDisplayName;
       _loaded = true;
     });
   }
@@ -97,7 +99,13 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
   Future<void> _pickDocument() async {
     try {
       final path = await AiAttachmentService.instance.pickPdf();
-      if (path != null && mounted) setState(() => _documentoPath = path);
+      if (path != null && mounted) {
+        setState(() {
+          _documentoPath = path;
+          _documentoNombreOriginal =
+              AiAttachmentService.instance.normalizeOriginalFileName(path);
+        });
+      }
     } catch (e) {
       _showPickerError('No se pudo seleccionar el PDF: $e');
     }
@@ -106,7 +114,13 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
   Future<void> _pickPhoto() async {
     try {
       final path = await AiAttachmentService.instance.pickImageFromGallery();
-      if (path != null && mounted) setState(() => _documentoPath = path);
+      if (path != null && mounted) {
+        setState(() {
+          _documentoPath = path;
+          _documentoNombreOriginal =
+              AiAttachmentService.instance.normalizeOriginalFileName(path);
+        });
+      }
     } catch (e) {
       _showPickerError('No se pudo seleccionar la imagen: $e');
     }
@@ -115,7 +129,13 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
   Future<void> _takePhoto() async {
     try {
       final path = await AiAttachmentService.instance.takePhotoWithCamera();
-      if (path != null && mounted) setState(() => _documentoPath = path);
+      if (path != null && mounted) {
+        setState(() {
+          _documentoPath = path;
+          _documentoNombreOriginal =
+              AiAttachmentService.instance.normalizeOriginalFileName(path);
+        });
+      }
     } catch (e) {
       _showPickerError('No se pudo abrir la cámara: $e');
     }
@@ -147,6 +167,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
       esDeducible: _esDeducible,
       porcentajeDeduccion: _porcentajeDeduccion,
       documentoPath: _documentoPath,
+      attachmentOriginalName: _documentoNombreOriginal,
       notas: _notasController.text.trim().isEmpty
           ? null
           : _notasController.text.trim(),
@@ -507,10 +528,15 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
               Chip(
                 avatar: const Icon(Icons.attach_file, size: 16),
                 label: Text(
-                  _documentoPath!.split('/').last,
+                  (_documentoNombreOriginal?.trim().isNotEmpty == true
+                          ? _documentoNombreOriginal!
+                          : _documentoPath!.split('/').last),
                   overflow: TextOverflow.ellipsis,
                 ),
-                onDeleted: () => setState(() => _documentoPath = null),
+                onDeleted: () => setState(() {
+                  _documentoPath = null;
+                  _documentoNombreOriginal = null;
+                }),
               ),
             const SizedBox(height: 4),
             Wrap(
@@ -542,7 +568,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.auto_awesome_outlined, size: 18),
-                  label: const Text('Extraer IA'),
+                  label: const Text('Extraer información con IA'),
                 ),
               ],
             ),

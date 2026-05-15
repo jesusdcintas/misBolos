@@ -9,6 +9,7 @@ import '../repositories/app_event_repository.dart';
 import '../repositories/gig_repository.dart';
 import '../repositories/invoice_repository.dart';
 import '../repositories/sync_queue_repository.dart';
+import '../core/services/drive_document_sync_service.dart';
 import '../services/supabase_service.dart';
 import '../services/sync_queue_processor.dart';
 import 'gig_provider.dart';
@@ -590,6 +591,10 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
       }
     }
     await SyncQueueProcessor.instance.processPending(reason: 'invoice_delete');
+    await DriveDocumentSyncService.instance.removeQueueForEntity(
+      entityType: 'invoice',
+      entityId: id,
+    );
     await reloadLocal();
     if (invoice != null) {
       ref.invalidate(gigByIdProvider(invoice.gigId));

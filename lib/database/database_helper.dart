@@ -22,6 +22,11 @@ import 'migrations/v19_client_whatsapp_phone.dart';
 import 'migrations/v20_invoice_number_changes.dart';
 import 'migrations/v21_gig_status_refactor.dart';
 import 'migrations/v22_google_drive_integration.dart';
+import 'migrations/v23_cloud_sync_checkpoint.dart';
+import 'migrations/v24_attachment_health.dart';
+import 'migrations/v25_drive_account_name.dart';
+import 'migrations/v26_settings_sync_signature.dart';
+import 'migrations/v27_attachment_file_metadata.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._internal();
@@ -41,7 +46,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 22,
+      version: 27,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       onConfigure: (db) async {
@@ -122,6 +127,21 @@ class DatabaseHelper {
     if (version >= 22) {
       await _applyMigration(db, v22GoogleDriveIntegration);
     }
+    if (version >= 23) {
+      await _applyMigration(db, v23CloudSyncCheckpoint);
+    }
+    if (version >= 24) {
+      await _applyMigration(db, v24AttachmentHealth);
+    }
+    if (version >= 25) {
+      await _applyMigration(db, v25DriveAccountName);
+    }
+    if (version >= 26) {
+      await _applyMigration(db, v26SettingsSyncSignature);
+    }
+    if (version >= 27) {
+      await _applyMigration(db, v27AttachmentFileMetadata);
+    }
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -187,6 +207,21 @@ class DatabaseHelper {
     }
     if (oldVersion < 22) {
       await _applyMigration(db, v22GoogleDriveIntegration);
+    }
+    if (oldVersion < 23) {
+      await _applyMigration(db, v23CloudSyncCheckpoint);
+    }
+    if (oldVersion < 24) {
+      await _applyMigration(db, v24AttachmentHealth);
+    }
+    if (oldVersion < 25) {
+      await _applyMigration(db, v25DriveAccountName);
+    }
+    if (oldVersion < 26) {
+      await _applyMigration(db, v26SettingsSyncSignature);
+    }
+    if (oldVersion < 27) {
+      await _applyMigration(db, v27AttachmentFileMetadata);
     }
   }
 

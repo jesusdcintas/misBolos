@@ -53,6 +53,7 @@ class SyncState {
 
 class SyncNotifier extends StateNotifier<SyncState> {
   final Ref _ref;
+  static Future<void>? _globalSyncInFlight;
 
   SyncNotifier(this._ref) : super(const SyncState());
 
@@ -87,7 +88,19 @@ class SyncNotifier extends StateNotifier<SyncState> {
   }
 
   /// Sincroniza datos locales a la nube
-  Future<void> uploadToCloud() async {
+  Future<void> uploadToCloud({
+    String reason = 'manual_button',
+    bool useGlobalLock = true,
+  }) async {
+    if (useGlobalLock) {
+      return _runWithGlobalSyncLock(
+        reason: reason,
+        action: () async {
+          debugPrint('[SYNC][DATA] start');
+          await uploadToCloud(reason: reason, useGlobalLock: false);
+        },
+      );
+    }
     if (!_supabase.isAuthenticated) {
       state = state.copyWith(
         status: SyncStatus.error,
@@ -102,13 +115,38 @@ class SyncNotifier extends StateNotifier<SyncState> {
     );
 
     try {
-      // Primero procesar borrados pendientes para limpiar la nube
-      await processPendingDeletions();
-      await SyncQueueProcessor.instance.processPending(
-        reason: 'upload_to_cloud',
+      final syncStart = Stopwatch()..start();
+      final settingsRepo = SettingsRepository();
+      final settings = await settingsRepo.get();
+      final lastSyncAt = settings.lastCloudSyncAt;
+
+      final clientsWatch = Stopwatch()..start();
+      final clients = await ClientRepository.instance.getAll();
+      final changedClients = lastSyncAt == null
+          ? clients
+          : clients.where((c) => c.updatedAt.isAfter(lastSyncAt)).toList();
+      if (changedClients.isNotEmpty) {
+        await _supabase.uploadClients(changedClients);
+      }
+      clientsWatch.stop();
+      debugPrint(
+        '[SYNC][DATA] clients: count=${clients.length}, downloaded=0, '
+        'uploaded=${changedClients.length}, skipped=${clients.length - changedClients.length}, '
+        'time=${clientsWatch.elapsedMilliseconds} ms',
       );
 
-      final clients = await ClientRepository.instance.getAll();
+      final gigsWatch = Stopwatch()..start();
+      await processPendingDeletions();
+      await SyncQueueProcessor.instance.processPending(
+        reason: 'upload_to_cloud_$reason',
+      );
+      gigsWatch.stop();
+      debugPrint(
+        '[SYNC][DATA] gigs: count=queue, downloaded=0, uploaded=queue, skipped=0, '
+        'time=${gigsWatch.elapsedMilliseconds} ms',
+      );
+
+      final invoicesWatch = Stopwatch()..start();
       final invoices = await InvoiceRepository.instance.getAll();
       final repaired = await GigRepository.instance.repairStatusesFromInvoices(
         invoices,
@@ -117,12 +155,15 @@ class SyncNotifier extends StateNotifier<SyncState> {
         debugPrint(
           '[Sync] Repaired $repaired local gig statuses before upload',
         );
-        _ref.invalidate(gigsProvider);
       }
-      final gigs = await GigRepository.instance.getAll();
-      final settings = await SettingsRepository().get();
+      invoicesWatch.stop();
+      debugPrint(
+        '[SYNC][DATA] invoices: count=${invoices.length}, downloaded=0, uploaded=queue, '
+        'skipped=${invoices.length}, time=${invoicesWatch.elapsedMilliseconds} ms',
+      );
 
       // Asignar cloud_id a expenses sin él
+      final expensesWatch = Stopwatch()..start();
       final uuid = const Uuid();
       var expenses = await ExpenseRepository.instance.getAll();
       for (var i = 0; i < expenses.length; i++) {
@@ -146,17 +187,55 @@ class SyncNotifier extends StateNotifier<SyncState> {
         }
       }
 
-      await _supabase.uploadAll(
-        clients: clients,
-        gigs: gigs,
-        invoices: invoices,
+      final unsyncedExpenses = expenses.where((e) => !e.synced).toList();
+      if (unsyncedExpenses.isNotEmpty) {
+        await _supabase.uploadExpenses(unsyncedExpenses);
+        for (final expense in unsyncedExpenses) {
+          if (expense.id != null) {
+            await ExpenseRepository.instance.update(
+              expense.copyWith(synced: true),
+            );
+          }
+        }
+      }
+      expensesWatch.stop();
+      debugPrint(
+        '[SYNC][DATA] expenses: count=${expenses.length}, downloaded=0, '
+        'uploaded=${unsyncedExpenses.length}, skipped=${expenses.length - unsyncedExpenses.length}, '
+        'time=${expensesWatch.elapsedMilliseconds} ms',
       );
 
-      await _supabase.uploadExpenses(expenses);
-      await _supabase.uploadAssets(assets);
+      final assetsWatch = Stopwatch()..start();
+      final unsyncedAssets = assets.where((a) => !a.synced).toList();
+      if (unsyncedAssets.isNotEmpty) {
+        await _supabase.uploadAssets(unsyncedAssets);
+        for (final asset in unsyncedAssets) {
+          if (asset.id != null) {
+            await AssetRepository.instance.update(asset.copyWith(synced: true));
+          }
+        }
+      }
+      assetsWatch.stop();
+      debugPrint(
+        '[SYNC][DATA] assets: count=${assets.length}, downloaded=0, '
+        'uploaded=${unsyncedAssets.length}, skipped=${assets.length - unsyncedAssets.length}, '
+        'time=${assetsWatch.elapsedMilliseconds} ms',
+      );
 
       // Subir settings (datos de facturación)
       await _supabase.uploadSettings(settings);
+      await settingsRepo.save(
+        (await settingsRepo.get()).copyWith(
+          cloudSettingsSignature: _supabase.settingsSyncSignature(settings),
+        ),
+      );
+
+      debugPrint(
+        '[Sync] Upload incremental done clients=${changedClients.length} '
+        'expenses=${unsyncedExpenses.length} assets=${unsyncedAssets.length} '
+        'elapsedMs=${syncStart.elapsedMilliseconds}',
+      );
+      debugPrint('[SYNC][DATA] total: ${syncStart.elapsedMilliseconds} ms');
 
       state = state.copyWith(
         status: SyncStatus.success,
@@ -170,7 +249,19 @@ class SyncNotifier extends StateNotifier<SyncState> {
   }
 
   /// Descarga datos de la nube y los guarda localmente
-  Future<void> downloadFromCloud() async {
+  Future<void> downloadFromCloud({
+    String reason = 'manual_button',
+    bool useGlobalLock = true,
+  }) async {
+    if (useGlobalLock) {
+      return _runWithGlobalSyncLock(
+        reason: reason,
+        action: () async {
+          debugPrint('[SYNC][DATA] start');
+          await downloadFromCloud(reason: reason, useGlobalLock: false);
+        },
+      );
+    }
     if (!_supabase.isAuthenticated) {
       state = state.copyWith(
         status: SyncStatus.error,
@@ -185,27 +276,68 @@ class SyncNotifier extends StateNotifier<SyncState> {
     );
 
     try {
-      // Primero procesar borrados pendientes para que la nube esté limpia
+      final syncStart = Stopwatch()..start();
       await processPendingDeletions();
       await SyncQueueProcessor.instance.processPending(
-        reason: 'download_from_cloud',
+        reason: 'download_from_cloud_$reason',
       );
+      final settingsRepo = SettingsRepository();
+      final settings = await settingsRepo.get();
+      final lastSyncAt = settings.lastCloudSyncAt;
 
-      // Descargar de Supabase
-      final cloudClients = await _supabase.downloadClients();
-      final cloudGigs = await _supabase.downloadGigs();
-      final cloudInvoices = await _supabase.downloadInvoices();
-      final cloudSettings = await _supabase.downloadSettings();
-      final cloudExpenses = await _supabase.downloadExpenses();
-      final cloudAssets = await _supabase.downloadAssets();
+      // Descargar solo cambios desde Supabase
+      final clientsWatch = Stopwatch()..start();
+      final cloudClients = await _supabase.downloadClientsChangesSince(
+        lastSyncAt,
+      );
+      clientsWatch.stop();
+      final gigsWatch = Stopwatch()..start();
+      final cloudGigs = await _supabase.downloadGigs(changedAfter: lastSyncAt);
+      gigsWatch.stop();
+      final invoicesWatch = Stopwatch()..start();
+      final cloudInvoices = await _supabase.downloadInvoices(
+        changedAfter: lastSyncAt,
+      );
+      invoicesWatch.stop();
+      final cloudSettings = await _supabase.downloadSettings(
+        changedAfter: lastSyncAt,
+      );
+      final expensesWatch = Stopwatch()..start();
+      final cloudExpenses = await _supabase.downloadExpenses(
+        changedAfter: lastSyncAt,
+      );
+      expensesWatch.stop();
+      final assetsWatch = Stopwatch()..start();
+      final cloudAssets = await _supabase.downloadAssets(
+        changedAfter: lastSyncAt,
+      );
+      assetsWatch.stop();
+
+      var clientsChanged = 0;
+      var gigsChanged = 0;
+      var invoicesChanged = 0;
+      var expensesChanged = 0;
+      var assetsChanged = 0;
+      var skippedUnchanged = 0;
 
       // Guardar en local (upsert)
       for (final client in cloudClients) {
-        await ClientRepository.instance.upsert(client);
+        final local = await ClientRepository.instance.getById(client.id);
+        if (local == null || client.updatedAt.isAfter(local.updatedAt)) {
+          await ClientRepository.instance.upsert(client);
+          clientsChanged++;
+        } else {
+          skippedUnchanged++;
+        }
       }
+      debugPrint(
+        '[SYNC][DATA] clients: count=${cloudClients.length}, downloaded=${cloudClients.length}, '
+        'uploaded=0, skipped=${cloudClients.length - clientsChanged}, time=${clientsWatch.elapsedMilliseconds} ms',
+      );
       for (final gig in cloudGigs) {
         if (gig.deletedAt != null) {
           await GigRepository.instance.delete(gig.id);
+          gigsChanged++;
           continue;
         }
         final hasPending = await SyncQueueRepository.instance.hasPending(
@@ -216,11 +348,19 @@ class SyncNotifier extends StateNotifier<SyncState> {
         final local = await GigRepository.instance.getById(gig.id);
         if (local == null || gig.updatedAt.isAfter(local.updatedAt)) {
           await GigRepository.instance.upsert(gig);
+          gigsChanged++;
+        } else {
+          skippedUnchanged++;
         }
       }
+      debugPrint(
+        '[SYNC][DATA] gigs: count=${cloudGigs.length}, downloaded=${cloudGigs.length}, '
+        'uploaded=0, skipped=${cloudGigs.length - gigsChanged}, time=${gigsWatch.elapsedMilliseconds} ms',
+      );
       for (final invoice in cloudInvoices) {
         if (invoice.deletedAt != null) {
           await InvoiceRepository.instance.delete(invoice.id);
+          invoicesChanged++;
           continue;
         }
         final hasPending = await SyncQueueRepository.instance.hasPending(
@@ -250,8 +390,15 @@ class SyncNotifier extends StateNotifier<SyncState> {
             invoice,
             allowedNumberChangeSource: source,
           );
+          invoicesChanged++;
+        } else {
+          skippedUnchanged++;
         }
       }
+      debugPrint(
+        '[SYNC][DATA] invoices: count=${cloudInvoices.length}, downloaded=${cloudInvoices.length}, '
+        'uploaded=0, skipped=${cloudInvoices.length - invoicesChanged}, time=${invoicesWatch.elapsedMilliseconds} ms',
+      );
       final repaired = await GigRepository.instance.repairStatusesFromInvoices(
         cloudInvoices,
       );
@@ -262,71 +409,20 @@ class SyncNotifier extends StateNotifier<SyncState> {
       }
       for (final expense in cloudExpenses) {
         await ExpenseRepository.instance.upsertByCloudId(expense);
+        expensesChanged++;
       }
+      debugPrint(
+        '[SYNC][DATA] expenses: count=${cloudExpenses.length}, downloaded=${cloudExpenses.length}, '
+        'uploaded=0, skipped=${cloudExpenses.length - expensesChanged}, time=${expensesWatch.elapsedMilliseconds} ms',
+      );
       for (final asset in cloudAssets) {
         await AssetRepository.instance.upsertByCloudId(asset);
+        assetsChanged++;
       }
-
-      // Eliminar registros locales que ya no existen en la nube
-      // (fueron eliminados desde otro dispositivo o desde este mismo)
-      final cloudClientIds = cloudClients.map((c) => c.id).toSet();
-      final cloudGigIds = cloudGigs.map((g) => g.id).toSet();
-      final cloudInvoiceIds = cloudInvoices.map((i) => i.id).toSet();
-
-      final localClients = await ClientRepository.instance.getAll();
-      for (final c in localClients) {
-        if (!cloudClientIds.contains(c.id)) {
-          await ClientRepository.instance.delete(c.id);
-          debugPrint('[Sync] Removed local orphan client: ${c.id}');
-        }
-      }
-      final localGigs = await GigRepository.instance.getAll();
-      for (final g in localGigs) {
-        final hasPending = await SyncQueueRepository.instance.hasPending(
-          'gig',
-          g.id,
-        );
-        if (!cloudGigIds.contains(g.id) && !hasPending) {
-          await GigRepository.instance.delete(g.id);
-          debugPrint('[Sync] Removed local orphan gig: ${g.id}');
-        }
-      }
-      final localInvoices = await InvoiceRepository.instance.getAll();
-      for (final i in localInvoices) {
-        final hasPending = await SyncQueueRepository.instance.hasPending(
-          'invoice',
-          i.id,
-        );
-        if (!cloudInvoiceIds.contains(i.id) && !hasPending) {
-          await InvoiceRepository.instance.delete(i.id);
-          debugPrint('[Sync] Removed local orphan invoice: ${i.id}');
-        }
-      }
-
-      // Eliminar expenses y assets locales que ya no existen en la nube
-      final cloudExpenseCloudIds = cloudExpenses
-          .where((e) => e.cloudId != null)
-          .map((e) => e.cloudId!)
-          .toSet();
-      final localExpenses = await ExpenseRepository.instance.getAll();
-      for (final e in localExpenses) {
-        if (e.cloudId != null && !cloudExpenseCloudIds.contains(e.cloudId)) {
-          await ExpenseRepository.instance.deleteByCloudId(e.cloudId!);
-          debugPrint('[Sync] Removed local orphan expense: ${e.cloudId}');
-        }
-      }
-
-      final cloudAssetCloudIds = cloudAssets
-          .where((a) => a.cloudId != null)
-          .map((a) => a.cloudId!)
-          .toSet();
-      final localAssets = await AssetRepository.instance.getAll();
-      for (final a in localAssets) {
-        if (a.cloudId != null && !cloudAssetCloudIds.contains(a.cloudId)) {
-          await AssetRepository.instance.deleteByCloudId(a.cloudId!);
-          debugPrint('[Sync] Removed local orphan asset: ${a.cloudId}');
-        }
-      }
+      debugPrint(
+        '[SYNC][DATA] assets: count=${cloudAssets.length}, downloaded=${cloudAssets.length}, '
+        'uploaded=0, skipped=${cloudAssets.length - assetsChanged}, time=${assetsWatch.elapsedMilliseconds} ms',
+      );
 
       // Guardar settings si existen en la nube
       if (cloudSettings != null) {
@@ -338,23 +434,43 @@ class SyncNotifier extends StateNotifier<SyncState> {
         debugPrint(
           '[Sync] Saving settings with logoPath: ${mergedSettings.logoPath}',
         );
-        await SettingsRepository().save(mergedSettings);
+        await SettingsRepository().save(
+          mergedSettings.copyWith(
+            cloudSettingsSignature: _supabase.settingsSyncSignature(
+              mergedSettings,
+            ),
+          ),
+        );
       }
 
+      final syncEndedAt = DateTime.now();
+      final saveWatch = Stopwatch()..start();
+      await settingsRepo.save(
+        (await settingsRepo.get()).copyWith(lastCloudSyncAt: syncEndedAt),
+      );
+      saveWatch.stop();
+      debugPrint('[SYNC] save lastSyncAt: ${saveWatch.elapsedMilliseconds} ms');
+
       // Invalidar providers para refrescar UI
-      _ref.invalidate(clientsProvider);
-      _ref.invalidate(gigsProvider);
-      _ref.invalidate(invoicesProvider);
+      if (clientsChanged > 0) _ref.invalidate(clientsProvider);
+      if (gigsChanged > 0) _ref.invalidate(gigsProvider);
+      if (invoicesChanged > 0) _ref.invalidate(invoicesProvider);
       _ref.invalidate(settingsProvider);
-      _ref.invalidate(expensesProvider);
-      _ref.invalidate(assetsProvider);
+      if (expensesChanged > 0) _ref.invalidate(expensesProvider);
+      if (assetsChanged > 0) _ref.invalidate(assetsProvider);
+
+      debugPrint(
+        '[Sync] Download incremental done '
+        'clients=$clientsChanged gigs=$gigsChanged invoices=$invoicesChanged '
+        'expenses=$expensesChanged assets=$assetsChanged skipped=$skippedUnchanged '
+        'elapsedMs=${syncStart.elapsedMilliseconds}',
+      );
+      debugPrint('[SYNC][DATA] total: ${syncStart.elapsedMilliseconds} ms');
 
       state = state.copyWith(
         status: SyncStatus.success,
-        message:
-            'Descargados: ${cloudClients.length} clientes, ${cloudGigs.length} bolos, '
-            '${cloudInvoices.length} facturas, ${cloudExpenses.length} gastos, ${cloudAssets.length} inversiones',
-        lastSync: DateTime.now(),
+        message: 'Sincronización incremental completada',
+        lastSync: syncEndedAt,
       );
     } catch (e) {
       debugPrint('[Sync] Download error: $e');
@@ -363,11 +479,48 @@ class SyncNotifier extends StateNotifier<SyncState> {
   }
 
   /// Sincronización bidireccional: sube local, descarga nuevo
-  Future<void> syncAll() async {
-    await uploadToCloud();
-    if (state.status == SyncStatus.success) {
-      await downloadFromCloud();
+  Future<void> syncAll({String reason = 'manual_button'}) async {
+    return _runWithGlobalSyncLock(
+      reason: reason,
+      action: () async {
+        debugPrint('[SYNC][DATA] start');
+        await _syncAllInternal(reason: reason);
+      },
+    );
+  }
+
+  Future<void> _runWithGlobalSyncLock({
+    required String reason,
+    required Future<void> Function() action,
+  }) async {
+    final totalWatch = Stopwatch()..start();
+    debugPrint('[SYNC] start reason=$reason');
+    if (_globalSyncInFlight != null) {
+      debugPrint(
+        '[SYNC] acquire lock: ${totalWatch.elapsedMilliseconds} ms (reused in-flight)',
+      );
+      return _globalSyncInFlight;
     }
+    debugPrint('[SYNC] acquire lock: ${totalWatch.elapsedMilliseconds} ms');
+    _globalSyncInFlight = action();
+    try {
+      await _globalSyncInFlight;
+    } finally {
+      debugPrint(
+        '[SYNC] total: ${totalWatch.elapsedMilliseconds} ms status=${state.status.name}',
+      );
+      _globalSyncInFlight = null;
+    }
+  }
+
+  Future<void> _syncAllInternal({required String reason}) async {
+    final dataWatch = Stopwatch()..start();
+    await uploadToCloud(reason: reason, useGlobalLock: false);
+    if (state.status == SyncStatus.success) {
+      await downloadFromCloud(reason: reason, useGlobalLock: false);
+    }
+    dataWatch.stop();
+    debugPrint('[SYNC][DATA] total: ${dataWatch.elapsedMilliseconds} ms');
   }
 
   void clearStatus() {
@@ -415,6 +568,15 @@ class SyncNotifier extends StateNotifier<SyncState> {
       iban: keepLocalIfCloudEmpty(local.iban, cloud.iban),
       notificacionesActivas: local.notificacionesActivas,
       diasRecordatorio: local.diasRecordatorio,
+      driveConnected: local.driveConnected,
+      driveAccountEmail: local.driveAccountEmail,
+      driveAccountName: local.driveAccountName,
+      driveRootFolderId: local.driveRootFolderId,
+      driveRootFolderName: local.driveRootFolderName,
+      lastDriveBackupAt: local.lastDriveBackupAt,
+      lastDriveSyncAt: local.lastDriveSyncAt,
+      lastCloudSyncAt: local.lastCloudSyncAt,
+      cloudSettingsSignature: local.cloudSettingsSignature,
     );
   }
 }

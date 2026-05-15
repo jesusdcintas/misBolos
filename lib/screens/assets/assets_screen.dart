@@ -27,18 +27,20 @@ class AssetsScreen extends ConsumerStatefulWidget {
 
 class _AssetsScreenState extends ConsumerState<AssetsScreen> {
   bool _entered = false;
+  AssetsNotifier? _assetsNotifier;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_entered) return;
     _entered = true;
-    Future.microtask(() => ref.read(assetsProvider.notifier).enterScreen());
+    _assetsNotifier = ref.read(assetsProvider.notifier);
+    Future.microtask(() => _assetsNotifier?.enterScreen());
   }
 
   @override
   void dispose() {
-    ref.read(assetsProvider.notifier).leaveScreen();
+    _assetsNotifier?.leaveScreen();
     super.dispose();
   }
 

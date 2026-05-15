@@ -17,9 +17,12 @@ class AppSettings {
   final String? driveRootFolderId;
   final String? driveRootFolderName;
   final String? driveAccountEmail;
+  final String? driveAccountName;
   final bool driveConnected;
   final DateTime? lastDriveBackupAt;
   final DateTime? lastDriveSyncAt;
+  final DateTime? lastCloudSyncAt;
+  final String? cloudSettingsSignature;
 
   AppSettings({
     this.logoPath = '',
@@ -40,9 +43,12 @@ class AppSettings {
     this.driveRootFolderId,
     this.driveRootFolderName,
     this.driveAccountEmail,
+    this.driveAccountName,
     this.driveConnected = false,
     this.lastDriveBackupAt,
     this.lastDriveSyncAt,
+    this.lastCloudSyncAt,
+    this.cloudSettingsSignature,
   });
 
   AppSettings copyWith({
@@ -64,9 +70,12 @@ class AppSettings {
     String? driveRootFolderId,
     String? driveRootFolderName,
     String? driveAccountEmail,
+    String? driveAccountName,
     bool? driveConnected,
     DateTime? lastDriveBackupAt,
     DateTime? lastDriveSyncAt,
+    DateTime? lastCloudSyncAt,
+    String? cloudSettingsSignature,
     bool clearDriveRootFolder = false,
     bool clearDriveAccount = false,
     bool clearLastDriveBackupAt = false,
@@ -98,6 +107,9 @@ class AppSettings {
       driveAccountEmail: clearDriveAccount
           ? null
           : driveAccountEmail ?? this.driveAccountEmail,
+      driveAccountName: clearDriveAccount
+          ? null
+          : driveAccountName ?? this.driveAccountName,
       driveConnected: driveConnected ?? this.driveConnected,
       lastDriveBackupAt: clearLastDriveBackupAt
           ? null
@@ -105,6 +117,9 @@ class AppSettings {
       lastDriveSyncAt: clearLastDriveSyncAt
           ? null
           : lastDriveSyncAt ?? this.lastDriveSyncAt,
+      lastCloudSyncAt: lastCloudSyncAt ?? this.lastCloudSyncAt,
+      cloudSettingsSignature:
+          cloudSettingsSignature ?? this.cloudSettingsSignature,
     );
   }
 
@@ -128,9 +143,12 @@ class AppSettings {
       'drive_root_folder_id': driveRootFolderId,
       'drive_root_folder_name': driveRootFolderName,
       'drive_account_email': driveAccountEmail,
+      'drive_account_name': driveAccountName,
       'drive_connected': driveConnected ? 1 : 0,
       'last_drive_backup_at': lastDriveBackupAt?.toIso8601String(),
       'last_drive_sync_at': lastDriveSyncAt?.toIso8601String(),
+      'last_cloud_sync_at': lastCloudSyncAt?.toIso8601String(),
+      'cloud_settings_signature': cloudSettingsSignature,
     };
   }
 
@@ -154,6 +172,7 @@ class AppSettings {
       driveRootFolderId: map['drive_root_folder_id'] as String?,
       driveRootFolderName: map['drive_root_folder_name'] as String?,
       driveAccountEmail: map['drive_account_email'] as String?,
+      driveAccountName: map['drive_account_name'] as String?,
       driveConnected: (map['drive_connected'] as int? ?? 0) == 1,
       lastDriveBackupAt: map['last_drive_backup_at'] != null
           ? DateTime.tryParse(map['last_drive_backup_at'] as String)
@@ -161,6 +180,10 @@ class AppSettings {
       lastDriveSyncAt: map['last_drive_sync_at'] != null
           ? DateTime.tryParse(map['last_drive_sync_at'] as String)
           : null,
+      lastCloudSyncAt: map['last_cloud_sync_at'] != null
+          ? DateTime.tryParse(map['last_cloud_sync_at'] as String)
+          : null,
+      cloudSettingsSignature: map['cloud_settings_signature'] as String?,
     );
   }
 }

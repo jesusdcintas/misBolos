@@ -32,6 +32,7 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
   AssetCategory _categoria = AssetCategory.otros;
   double _ivaRate = 21.0;
   String? _documentoPath;
+  String? _documentoNombreOriginal;
   bool _loading = false;
   bool _extracting = false;
   bool _loaded = false;
@@ -88,6 +89,7 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
       _fechaCompra = asset.fechaCompra;
       _categoria = asset.categoria;
       _documentoPath = asset.documentoPath;
+      _documentoNombreOriginal = asset.attachmentDisplayName;
       _loaded = true;
     });
   }
@@ -105,7 +107,13 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
   Future<void> _pickDocument() async {
     try {
       final path = await AiAttachmentService.instance.pickPdf();
-      if (path != null && mounted) setState(() => _documentoPath = path);
+      if (path != null && mounted) {
+        setState(() {
+          _documentoPath = path;
+          _documentoNombreOriginal =
+              AiAttachmentService.instance.normalizeOriginalFileName(path);
+        });
+      }
     } catch (e) {
       _showPickerError('No se pudo seleccionar el PDF: $e');
     }
@@ -114,7 +122,13 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
   Future<void> _pickPhoto() async {
     try {
       final path = await AiAttachmentService.instance.pickImageFromGallery();
-      if (path != null && mounted) setState(() => _documentoPath = path);
+      if (path != null && mounted) {
+        setState(() {
+          _documentoPath = path;
+          _documentoNombreOriginal =
+              AiAttachmentService.instance.normalizeOriginalFileName(path);
+        });
+      }
     } catch (e) {
       _showPickerError('No se pudo seleccionar la imagen: $e');
     }
@@ -123,7 +137,13 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
   Future<void> _takePhoto() async {
     try {
       final path = await AiAttachmentService.instance.takePhotoWithCamera();
-      if (path != null && mounted) setState(() => _documentoPath = path);
+      if (path != null && mounted) {
+        setState(() {
+          _documentoPath = path;
+          _documentoNombreOriginal =
+              AiAttachmentService.instance.normalizeOriginalFileName(path);
+        });
+      }
     } catch (e) {
       _showPickerError('No se pudo abrir la cámara: $e');
     }
@@ -324,6 +344,7 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
       vidaUtilAnos: _vidaUtilAnos,
       categoria: _categoria,
       documentoPath: _documentoPath,
+      attachmentOriginalName: _documentoNombreOriginal,
       notas: _notasController.text.trim().isEmpty
           ? null
           : _notasController.text.trim(),
@@ -617,10 +638,15 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
               Chip(
                 avatar: const Icon(Icons.attach_file, size: 16),
                 label: Text(
-                  _documentoPath!.split('/').last,
+                  (_documentoNombreOriginal?.trim().isNotEmpty == true
+                          ? _documentoNombreOriginal!
+                          : _documentoPath!.split('/').last),
                   overflow: TextOverflow.ellipsis,
                 ),
-                onDeleted: () => setState(() => _documentoPath = null),
+                onDeleted: () => setState(() {
+                  _documentoPath = null;
+                  _documentoNombreOriginal = null;
+                }),
               ),
             const SizedBox(height: 4),
             Wrap(
@@ -655,7 +681,7 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.auto_awesome_outlined, size: 18),
-              label: const Text('Extraer inversión con IA'),
+              label: const Text('Extraer información con IA'),
             ),
             const SizedBox(height: 12),
             TextFormField(

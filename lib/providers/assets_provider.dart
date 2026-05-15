@@ -1,12 +1,15 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../database/database_helper.dart';
 import '../models/asset.dart';
 import '../repositories/asset_repository.dart';
+import '../core/services/drive_document_sync_service.dart';
 import '../services/supabase_service.dart';
+import '../services/ai_attachment_service.dart';
 
 final assetRepositoryProvider = Provider((ref) => AssetRepository.instance);
 
@@ -188,17 +191,103 @@ class AssetsNotifier extends AsyncNotifier<List<Asset>> {
 
   Future<void> add(Asset asset) async {
     final repo = ref.read(assetRepositoryProvider);
-    final localId = await repo.insert(asset.copyWith(synced: false));
+    final localId = await repo.insert(
+      asset.copyWith(
+        synced: false,
+        attachmentStatus: 'pending_upload',
+      ),
+    );
+    final saved = await repo.getById(localId);
+    if (saved != null && saved.documentoPath != null) {
+      try {
+        final stablePath = await AiAttachmentService.instance
+            .persistAttachmentForEntity(
+              sourcePath: saved.documentoPath!,
+              entityType: 'asset',
+              entityId: saved.id.toString(),
+            );
+        await repo.update(
+          saved.copyWith(
+            documentoPath: stablePath,
+            attachmentStatus: 'pending_upload',
+            attachmentError: null,
+            attachmentOriginalPath: saved.documentoPath,
+            attachmentOriginalName:
+                AiAttachmentService.instance.normalizeOriginalFileName(
+              saved.documentoPath!,
+            ),
+            attachmentStoredName: p.basename(stablePath),
+            attachmentMimeType: _mimeTypeFor(stablePath),
+            synced: false,
+          ),
+        );
+      } catch (e) {
+        await repo.update(
+          saved.copyWith(
+            attachmentStatus: 'broken',
+            attachmentError: e.toString(),
+            attachmentOriginalPath: saved.documentoPath,
+            synced: false,
+          ),
+        );
+      }
+    }
     ref.invalidateSelf();
     unawaited(_tryUploadAsset(localId));
   }
 
   Future<void> updateAsset(Asset asset) async {
     final repo = ref.read(assetRepositoryProvider);
-    await repo.update(asset.copyWith(synced: false));
+    var updated = asset.copyWith(synced: false);
+    if (updated.documentoPath != null && updated.id != null) {
+      try {
+        final stablePath = await AiAttachmentService.instance
+            .persistAttachmentForEntity(
+              sourcePath: updated.documentoPath!,
+              entityType: 'asset',
+              entityId: updated.id.toString(),
+            );
+        updated = updated.copyWith(
+          documentoPath: stablePath,
+          attachmentStatus: 'pending_upload',
+          attachmentError: null,
+          attachmentOriginalPath: asset.documentoPath,
+          attachmentOriginalName: asset.attachmentOriginalName ??
+              AiAttachmentService.instance.normalizeOriginalFileName(
+                asset.documentoPath!,
+              ),
+          attachmentStoredName: p.basename(stablePath),
+          attachmentMimeType: _mimeTypeFor(stablePath),
+        );
+      } catch (e) {
+        updated = updated.copyWith(
+          attachmentStatus: 'broken',
+          attachmentError: e.toString(),
+          attachmentOriginalPath: asset.documentoPath,
+        );
+      }
+    }
+    await repo.update(updated);
     ref.invalidateSelf();
     if (asset.id != null) {
       unawaited(_tryUploadAsset(asset.id!));
+    }
+  }
+
+  String _mimeTypeFor(String path) {
+    final ext = p.extension(path).toLowerCase();
+    switch (ext) {
+      case '.pdf':
+        return 'application/pdf';
+      case '.jpg':
+      case '.jpeg':
+        return 'image/jpeg';
+      case '.png':
+        return 'image/png';
+      case '.heic':
+        return 'image/heic';
+      default:
+        return 'application/octet-stream';
     }
   }
 
@@ -210,6 +299,10 @@ class AssetsNotifier extends AsyncNotifier<List<Asset>> {
       unawaited(SupabaseService.instance.deleteAsset(existing.cloudId!));
     }
     await repo.delete(id);
+    await DriveDocumentSyncService.instance.removeQueueForEntity(
+      entityType: 'asset',
+      entityId: id.toString(),
+    );
     ref.invalidateSelf();
   }
 
@@ -236,7 +329,13 @@ class AssetsNotifier extends AsyncNotifier<List<Asset>> {
 
     try {
       await supabase.uploadAssets([updated.copyWith(synced: true)]);
-      await repo.update(updated.copyWith(synced: true));
+      await repo.update(
+        updated.copyWith(
+          synced: true,
+          attachmentStatus:
+              updated.documentoPath == null ? updated.attachmentStatus : 'pending_upload',
+        ),
+      );
       await reloadLocal();
     } catch (e) {
       debugPrint('[AssetsSync] Upload directo error: $e');

@@ -59,6 +59,8 @@ class GoogleDriveService {
   GoogleDriveService._();
 
   final SettingsRepository _settingsRepository = SettingsRepository();
+  final Map<String, String> _folderIdCache = {};
+  final Map<String, DriveMonthFolders> _monthStructureCache = {};
 
   bool get _isMobile => !kIsWeb && (Platform.isIOS || Platform.isAndroid);
 
@@ -77,17 +79,13 @@ class GoogleDriveService {
       settings.copyWith(
         driveConnected: true,
         driveAccountEmail: account?.email,
+        driveAccountName: account?.displayName,
       ),
     );
   }
 
   Future<void> signOut() async {
-    if (_isMobile) {
-      await PlatformAuthService.instance.signOut();
-    } else {
-      await GoogleAuthService.instance.signOut();
-    }
-
+    _clearFolderCache();
     final settings = await _settingsRepository.get();
     await _settingsRepository.save(
       settings.copyWith(
@@ -145,6 +143,7 @@ class GoogleDriveService {
   }
 
   Future<void> selectRootFolder(DriveFolderResult folder) async {
+    _clearFolderCache();
     final settings = await _settingsRepository.get();
     final account = await getCurrentAccount();
     await _settingsRepository.save(
@@ -153,8 +152,31 @@ class GoogleDriveService {
         driveRootFolderId: folder.id,
         driveRootFolderName: folder.name,
         driveAccountEmail: account?.email ?? settings.driveAccountEmail,
+        driveAccountName: account?.displayName ?? settings.driveAccountName,
       ),
     );
+  }
+
+  Future<bool> restoreSilently() async {
+    final settings = await _settingsRepository.get();
+    if ((settings.driveRootFolderId ?? '').isEmpty) return false;
+
+    final success = _isMobile
+        ? await PlatformAuthService.instance.signInSilently()
+        : await GoogleAuthService.instance.signInSilently();
+    if (!success) {
+      return false;
+    }
+
+    final account = await getCurrentAccount();
+    await _settingsRepository.save(
+      settings.copyWith(
+        driveConnected: true,
+        driveAccountEmail: account?.email ?? settings.driveAccountEmail,
+        driveAccountName: account?.displayName ?? settings.driveAccountName,
+      ),
+    );
+    return true;
   }
 
   Future<String> ensureRootFolder() {
@@ -165,13 +187,18 @@ class GoogleDriveService {
     required String parentId,
     required String folderName,
   }) async {
+    final normalizedName = folderName.trim();
+    final cacheKey = _folderCacheKey(parentId, normalizedName);
+    final cached = _folderIdCache[cacheKey];
+    if (cached != null) return cached;
+
     final api = await _driveApi();
     final existing = await api.files.list(
       q:
           "mimeType = 'application/vnd.google-apps.folder' "
           "and trashed = false "
           "and '${_escapeQuery(parentId)}' in parents "
-          "and name = '${_escapeQuery(folderName)}'",
+          "and name = '${_escapeQuery(normalizedName)}'",
       spaces: 'drive',
       $fields: 'files(id,name)',
       pageSize: 10,
@@ -179,19 +206,22 @@ class GoogleDriveService {
 
     final files = existing.files ?? [];
     if (files.isNotEmpty && files.first.id != null) {
-      return files.first.id!;
+      final id = files.first.id!;
+      _folderIdCache[cacheKey] = id;
+      return id;
     }
 
     final folder = drive.File()
-      ..name = folderName
+      ..name = normalizedName
       ..mimeType = 'application/vnd.google-apps.folder'
       ..parents = [parentId];
 
     final created = await api.files.create(folder, $fields: 'id');
     final id = created.id;
     if (id == null) {
-      throw Exception('Google Drive no devolvió ID para $folderName.');
+      throw Exception('Google Drive no devolvió ID para $normalizedName.');
     }
+    _folderIdCache[cacheKey] = id;
     return id;
   }
 
@@ -229,6 +259,10 @@ class GoogleDriveService {
 
   Future<DriveMonthFolders> ensureMonthStructure(DateTime date) async {
     final rootFolderId = await _requiredRootFolderId();
+    final cacheKey = '$rootFolderId:${date.year}:${date.month}';
+    final cached = _monthStructureCache[cacheKey];
+    if (cached != null) return cached;
+
     final yearFolderId = await ensureYearFolder(
       rootFolderId: rootFolderId,
       year: date.year,
@@ -244,7 +278,7 @@ class GoogleDriveService {
       date: date,
     );
 
-    return DriveMonthFolders(
+    final folders = DriveMonthFolders(
       yearFolderId: yearFolderId,
       quarterFolderId: quarterFolderId,
       monthFolderId: monthFolderId,
@@ -261,6 +295,8 @@ class GoogleDriveService {
         folderName: 'INVERSIONES',
       ),
     );
+    _monthStructureCache[cacheKey] = folders;
+    return folders;
   }
 
   Future<void> createFullYearStructure(int year) async {
@@ -325,11 +361,141 @@ class GoogleDriveService {
     return DriveUploadResult(fileId: result.id!, fileUrl: result.webViewLink);
   }
 
+  Future<DriveUploadResult> copyFileToFolder({
+    required String sourceFileId,
+    required String fileName,
+    required String parentFolderId,
+  }) async {
+    final api = await _driveApi();
+    final copied = await api.files.copy(
+      drive.File()
+        ..name = sanitizeDriveFileName(fileName)
+        ..parents = [parentFolderId],
+      sourceFileId,
+      $fields: 'id,webViewLink',
+      supportsAllDrives: true,
+    );
+    if (copied.id == null) {
+      throw Exception('No se pudo copiar el archivo en Drive.');
+    }
+    return DriveUploadResult(fileId: copied.id!, fileUrl: copied.webViewLink);
+  }
+
   Future<void> openFolder(String folderId) async {
     final uri = Uri.parse('https://drive.google.com/drive/folders/$folderId');
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
       throw Exception('No se pudo abrir la carpeta de Drive.');
     }
+  }
+
+  Future<File> downloadFileTo({
+    required String fileId,
+    required String targetPath,
+  }) async {
+    final api = await _driveApi();
+    final media = await api.files.get(
+      fileId,
+      downloadOptions: drive.DownloadOptions.fullMedia,
+    );
+    if (media is! drive.Media) {
+      throw Exception('No se pudo descargar el archivo de Drive.');
+    }
+    final bytes = <int>[];
+    await for (final chunk in media.stream) {
+      bytes.addAll(chunk);
+    }
+    final file = File(targetPath);
+    await file.parent.create(recursive: true);
+    await file.writeAsBytes(Uint8List.fromList(bytes), flush: true);
+    return file;
+  }
+
+  Future<bool> fileExists(String fileId) async {
+    final id = fileId.trim();
+    if (id.isEmpty) return false;
+    final api = await _driveApi();
+    try {
+      final file = await api.files.get(
+        id,
+        $fields: 'id',
+        supportsAllDrives: true,
+      );
+      return (file as drive.File).id != null;
+    } catch (e) {
+      final message = e.toString().toLowerCase();
+      if (message.contains('404') || message.contains('not found')) {
+        return false;
+      }
+      rethrow;
+    }
+  }
+
+  Future<bool> fileExistsUnderRoot({
+    required String fileId,
+    required String rootFolderId,
+  }) async {
+    final id = fileId.trim();
+    final rootId = rootFolderId.trim();
+    if (id.isEmpty || rootId.isEmpty) return false;
+    final api = await _driveApi();
+    try {
+      final file = await api.files.get(
+        id,
+        $fields: 'id,parents,trashed',
+        supportsAllDrives: true,
+      ) as drive.File;
+      if (file.id == null || file.trashed == true) return false;
+      final parents = (file.parents ?? []).whereType<String>().toList();
+      if (parents.isEmpty) return false;
+      if (parents.contains(rootId)) return true;
+      final visited = <String>{id};
+      return _parentsContainRoot(
+        api: api,
+        parents: parents,
+        rootFolderId: rootId,
+        visited: visited,
+      );
+    } catch (e) {
+      final message = e.toString().toLowerCase();
+      if (message.contains('404') || message.contains('not found')) {
+        return false;
+      }
+      rethrow;
+    }
+  }
+
+  Future<bool> _parentsContainRoot({
+    required drive.DriveApi api,
+    required List<String> parents,
+    required String rootFolderId,
+    required Set<String> visited,
+  }) async {
+    for (final parentId in parents) {
+      if (parentId == rootFolderId) return true;
+      if (visited.contains(parentId)) continue;
+      visited.add(parentId);
+      try {
+        final parent = await api.files.get(
+          parentId,
+          $fields: 'id,parents,trashed',
+          supportsAllDrives: true,
+        ) as drive.File;
+        if (parent.id == null || parent.trashed == true) continue;
+        final nextParents = (parent.parents ?? []).whereType<String>().toList();
+        if (nextParents.contains(rootFolderId)) return true;
+        if (nextParents.isEmpty) continue;
+        final found = await _parentsContainRoot(
+          api: api,
+          parents: nextParents,
+          rootFolderId: rootFolderId,
+          visited: visited,
+        );
+        if (found) return true;
+      } catch (_) {
+        continue;
+      }
+    }
+    return false;
   }
 
   Future<drive.DriveApi> _driveApi() async {
@@ -377,6 +543,15 @@ class GoogleDriveService {
   }
 
   String _escapeQuery(String value) => value.replaceAll("'", r"\'");
+
+  String _folderCacheKey(String parentId, String folderName) {
+    return '$parentId::$folderName';
+  }
+
+  void _clearFolderCache() {
+    _folderIdCache.clear();
+    _monthStructureCache.clear();
+  }
 }
 
 String getQuarterName(DateTime date) {

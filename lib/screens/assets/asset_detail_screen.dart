@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../core/constants/app_colors.dart';
 import '../../models/asset.dart';
 import '../../providers/assets_provider.dart';
+import '../../services/ai_attachment_service.dart';
 
 class AssetDetailScreen extends ConsumerWidget {
   final int assetId;
@@ -301,19 +302,45 @@ class _AssetDetailContent extends StatelessWidget {
 
           // Justificante
           if (asset.documentoPath != null)
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.attach_file,
-                    color: AppColors.primary),
-                title: Text(
-                  asset.documentoPath!.split('/').last,
-                  overflow: TextOverflow.ellipsis,
+            ...[
+              if (_attachmentWarning(asset.documentoPath!) case final warning?)
+                Card(
+                  color: Colors.orange.shade50,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(color: Colors.orange.shade200),
+                  ),
+                  child: ListTile(
+                    leading: const Icon(
+                      Icons.warning_amber_rounded,
+                      color: Colors.orange,
+                    ),
+                    title: Text(warning),
+                    subtitle: const Text(
+                      'Reasigna el adjunto para sincronizarlo en Drive.',
+                    ),
+                    trailing: TextButton(
+                      onPressed: () => buildContext.push('/asset/edit/${asset.id}'),
+                      child: const Text('Reasignar'),
+                    ),
+                  ),
                 ),
-                subtitle: const Text('Factura adjunta'),
-                trailing: const Icon(Icons.open_in_new, size: 16),
-                onTap: () => _openDocumento(buildContext, asset.documentoPath!),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.attach_file,
+                      color: AppColors.primary),
+                  title: Text(
+                    asset.attachmentDisplayName ??
+                        asset.documentoPath!.split('/').last,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: const Text('Factura adjunta'),
+                  trailing: const Icon(Icons.open_in_new, size: 16),
+                  onTap: () =>
+                      _openDocumento(buildContext, asset.documentoPath!),
+                ),
               ),
-            ),
+            ],
 
           // Notas
           if (asset.notas != null && asset.notas!.isNotEmpty)
@@ -378,6 +405,20 @@ class _AssetDetailContent extends StatelessWidget {
         const SnackBar(content: Text('Archivo no encontrado')),
       );
     }
+  }
+
+  String? _attachmentWarning(String path) {
+    final normalized = path.trim();
+    if (AiAttachmentService.instance.isCrossDeviceAbsolutePath(normalized)) {
+      return 'Este adjunto viene de otro dispositivo y no está disponible aquí.';
+    }
+    if (AiAttachmentService.instance.isTemporaryPath(normalized)) {
+      return 'Este adjunto usa una ruta temporal y puede haberse borrado.';
+    }
+    if (!File(normalized).existsSync()) {
+      return 'No existe el archivo local de este adjunto.';
+    }
+    return null;
   }
 
   Future<void> _darDeBaja(BuildContext ctx) async {

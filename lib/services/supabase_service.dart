@@ -40,11 +40,16 @@ class SupabaseService {
     debugPrint('[Supabase] Initialized');
 
     // Escuchar cambios de auth para debug
-    _client?.auth.onAuthStateChange.listen((data) {
-      debugPrint(
-        '[Supabase] Auth state changed: ${data.event} - ${data.session?.user.email}',
-      );
-    });
+    _client?.auth.onAuthStateChange.listen(
+      (data) {
+        debugPrint(
+          '[Supabase] Auth state changed: ${data.event} - ${data.session?.user.email}',
+        );
+      },
+      onError: (Object error) {
+        debugPrint('[Supabase] Auth state warning: $error');
+      },
+    );
   }
 
   /// Autenticar con Google ID token (para iOS/Android)
@@ -441,15 +446,18 @@ class SupabaseService {
       return;
     }
 
+    final signature = settingsSyncSignature(settings);
+    if (settings.cloudSettingsSignature == signature) {
+      debugPrint('[Supabase] Settings unchanged, skipping upload');
+      return;
+    }
+
     // Subir logo si existe
     String? logoUrl;
-    debugPrint('[Supabase] Logo path: "${settings.logoPath}"');
     if (settings.logoPath.isNotEmpty) {
       final exists = File(settings.logoPath).existsSync();
-      debugPrint('[Supabase] Logo file exists: $exists');
       if (exists) {
         logoUrl = await uploadLogo(settings.logoPath);
-        debugPrint('[Supabase] Logo uploaded: $logoUrl');
       }
     }
 
@@ -473,6 +481,23 @@ class SupabaseService {
     debugPrint('[Supabase] Uploaded settings');
   }
 
+  String settingsSyncSignature(AppSettings settings) {
+    final logoSignature = _logoFileSignature(settings.logoPath);
+    return [
+      settings.emisorNombre.trim(),
+      settings.emisorNIF.trim(),
+      settings.emisorDireccion.trim(),
+      settings.emisorCiudad.trim(),
+      settings.emisorProvincia.trim(),
+      settings.emisorCodigoPostal.trim(),
+      settings.emisorEmail.trim(),
+      settings.emisorTelefono.trim(),
+      settings.iban.trim(),
+      settings.ivaDefault.toStringAsFixed(4),
+      logoSignature,
+    ].join('|');
+  }
+
   bool _billingFieldsAreEmpty(AppSettings settings) {
     return settings.emisorNombre.trim().isEmpty &&
         settings.emisorNIF.trim().isEmpty &&
@@ -485,18 +510,21 @@ class SupabaseService {
         settings.iban.trim().isEmpty;
   }
 
-  Future<AppSettings?> downloadSettings() async {
+  Future<AppSettings?> downloadSettings({DateTime? changedAfter}) async {
     if (!isAuthenticated) return null;
 
     try {
-      final data = await _client!
+      var query = _client!
           .from('user_settings')
           .select()
-          .eq('user_id', userId!)
-          .maybeSingle();
+          .eq('user_id', userId!);
+      if (changedAfter != null) {
+        query = query.gt('updated_at', changedAfter.toUtc().toIso8601String());
+      }
+      final data = await query.maybeSingle();
 
       if (data == null) {
-        debugPrint('[Supabase] No settings found');
+        debugPrint('[Supabase] No settings changes since=$changedAfter');
         return null;
       }
 
@@ -556,13 +584,16 @@ class SupabaseService {
     if (!isAuthenticated) return null;
 
     try {
-      final bytes = await _client!.storage.from('logos').download(cloudPath);
-
       final dir = await getApplicationDocumentsDirectory();
       final ext = p.extension(cloudPath);
       final localPath = '${dir.path}/logo$ext';
-
       final file = File(localPath);
+      if (await file.exists()) {
+        debugPrint('[Supabase] Logo already local: $localPath');
+        return localPath;
+      }
+
+      final bytes = await _client!.storage.from('logos').download(cloudPath);
       await file.writeAsBytes(bytes);
 
       debugPrint('[Supabase] Downloaded logo to: $localPath');
@@ -570,6 +601,18 @@ class SupabaseService {
     } catch (e) {
       debugPrint('[Supabase] Download logo error: $e');
       return null;
+    }
+  }
+
+  String _logoFileSignature(String path) {
+    if (path.trim().isEmpty) return 'logo:none';
+    try {
+      final file = File(path);
+      if (!file.existsSync()) return 'logo:missing:$path';
+      final stat = file.statSync();
+      return 'logo:$path:${stat.size}:${stat.modified.toUtc().toIso8601String()}';
+    } catch (_) {
+      return 'logo:unreadable:$path';
     }
   }
 
@@ -678,30 +721,58 @@ class SupabaseService {
   Future<List<Client>> downloadClients() async {
     if (!isAuthenticated) return [];
 
-    final data = await _client!.from('clients').select();
-    final clients = (data as List).map((e) => _clientFromSupabase(e)).toList();
+    final data = await _selectChangedRows(
+      table: 'clients',
+      changedAfter: null,
+      includeDeletedAt: false,
+    );
+    final clients = data.map((e) => _clientFromSupabase(e)).toList();
     debugPrint('[Supabase] Downloaded ${clients.length} clients');
     return clients;
   }
 
-  Future<List<Gig>> downloadGigs() async {
+  Future<List<Client>> downloadClientsChangesSince(
+    DateTime? changedAfter,
+  ) async {
+    if (!isAuthenticated) return [];
+    final data = await _selectChangedRows(
+      table: 'clients',
+      changedAfter: changedAfter,
+      includeDeletedAt: false,
+    );
+    final clients = data.map((e) => _clientFromSupabase(e)).toList();
+    debugPrint(
+      '[Supabase] Downloaded clients changes=${clients.length} since=$changedAfter',
+    );
+    return clients;
+  }
+
+  Future<List<Gig>> downloadGigs({DateTime? changedAfter}) async {
     if (!isAuthenticated) return [];
 
-    final data = await _client!.from('gigs').select();
-    final gigs = (data as List).map((e) => _gigFromSupabase(e)).toList();
-    debugPrint('[Supabase] Downloaded ${gigs.length} gigs');
+    final data = await _selectChangedRows(
+      table: 'gigs',
+      changedAfter: changedAfter,
+    );
+    final gigs = data.map((e) => _gigFromSupabase(e)).toList();
+    debugPrint('[Supabase] Downloaded ${gigs.length} gigs since=$changedAfter');
     return gigs;
   }
 
-  Future<List<Invoice>> downloadInvoices() async {
+  Future<List<Invoice>> downloadInvoices({DateTime? changedAfter}) async {
     if (!isAuthenticated) return [];
 
-    final data = await _client!.from('invoices').select();
-    final invoices = (data as List)
+    final data = await _selectChangedRows(
+      table: 'invoices',
+      changedAfter: changedAfter,
+    );
+    final invoices = data
         .map((e) => _invoiceFromSupabase(e))
         .where((invoice) => invoice.numero > 0)
         .toList();
-    debugPrint('[Supabase] Downloaded ${invoices.length} invoices');
+    debugPrint(
+      '[Supabase] Downloaded ${invoices.length} invoices since=$changedAfter',
+    );
     return invoices;
   }
 
@@ -885,13 +956,17 @@ class SupabaseService {
     debugPrint('[Supabase] Uploaded ${expenses.length} expenses');
   }
 
-  Future<List<Expense>> downloadExpenses() async {
+  Future<List<Expense>> downloadExpenses({DateTime? changedAfter}) async {
     if (!isAuthenticated) return [];
-    final uid = userId;
-    final query = _client!.from('expenses').select();
-    final data = uid == null ? await query : await query.eq('user_id', uid);
-    final result = (data as List).map((e) => _expenseFromSupabase(e)).toList();
-    debugPrint('[Supabase] Downloaded ${result.length} expenses');
+    final data = await _selectChangedRows(
+      table: 'expenses',
+      changedAfter: changedAfter,
+      includeDeletedAt: false,
+    );
+    final result = data.map((e) => _expenseFromSupabase(e)).toList();
+    debugPrint(
+      '[Supabase] Downloaded ${result.length} expenses since=$changedAfter',
+    );
     return result;
   }
 
@@ -918,7 +993,8 @@ class SupabaseService {
     'categoria': e.categoria.dbValue,
     'es_deducible': e.esDeducible,
     'porcentaje_deduccion': e.porcentajeDeduccion,
-    'documento_path': e.documentoPath,
+    // No sincronizar rutas locales entre dispositivos.
+    'documento_path': null,
     'notas': e.notas,
     'created_at': e.createdAt.toUtc().toIso8601String(),
   };
@@ -958,13 +1034,17 @@ class SupabaseService {
     debugPrint('[Supabase] Uploaded ${assets.length} assets');
   }
 
-  Future<List<Asset>> downloadAssets() async {
+  Future<List<Asset>> downloadAssets({DateTime? changedAfter}) async {
     if (!isAuthenticated) return [];
-    final uid = userId;
-    final query = _client!.from('assets').select();
-    final data = uid == null ? await query : await query.eq('user_id', uid);
-    final result = (data as List).map((e) => _assetFromSupabase(e)).toList();
-    debugPrint('[Supabase] Downloaded ${result.length} assets');
+    final data = await _selectChangedRows(
+      table: 'assets',
+      changedAfter: changedAfter,
+      includeDeletedAt: false,
+    );
+    final result = data.map((e) => _assetFromSupabase(e)).toList();
+    debugPrint(
+      '[Supabase] Downloaded ${result.length} assets since=$changedAfter',
+    );
     return result;
   }
 
@@ -991,7 +1071,8 @@ class SupabaseService {
     'vida_util_anos': a.vidaUtilAnos,
     'metodo_amortizacion': a.metodoAmortizacion,
     'categoria': a.categoria.dbValue,
-    'documento_path': a.documentoPath,
+    // No sincronizar rutas locales entre dispositivos.
+    'documento_path': null,
     'notas': a.notas,
     'activo': a.activo,
     'created_at': a.createdAt.toUtc().toIso8601String(),
@@ -1016,4 +1097,22 @@ class SupabaseService {
     synced: true,
     createdAt: DateTime.parse(m['created_at'] as String),
   );
+
+  Future<List<dynamic>> _selectChangedRows({
+    required String table,
+    required DateTime? changedAfter,
+    bool includeDeletedAt = true,
+  }) async {
+    final uid = userId;
+    if (uid == null) return const [];
+
+    var query = _client!.from(table).select().eq('user_id', uid);
+    if (changedAfter != null) {
+      final iso = changedAfter.toUtc().toIso8601String();
+      query = includeDeletedAt
+          ? query.or('updated_at.gt.$iso,deleted_at.gt.$iso')
+          : query.gt('updated_at', iso);
+    }
+    return query;
+  }
 }

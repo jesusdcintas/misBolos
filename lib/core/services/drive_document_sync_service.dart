@@ -1,10 +1,13 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../database/database_helper.dart';
+import '../../core/utils/invoice_file_name.dart';
 import '../../models/asset.dart';
 import '../../models/client.dart';
 import '../../models/expense.dart';
@@ -15,6 +18,7 @@ import '../../repositories/expense_repository.dart';
 import '../../repositories/invoice_repository.dart';
 import '../../repositories/settings_repository.dart';
 import '../../services/pdf_service.dart';
+import '../../services/ai_attachment_service.dart';
 import 'google_drive_service.dart';
 
 class DriveDocumentSyncResult {
@@ -51,6 +55,30 @@ class DriveDocumentSyncResult {
   }
 }
 
+class DriveReuploadResult {
+  final int uploaded;
+  final int alreadyExists;
+  final int missingLocal;
+  final int errors;
+
+  const DriveReuploadResult({
+    this.uploaded = 0,
+    this.alreadyExists = 0,
+    this.missingLocal = 0,
+    this.errors = 0,
+  });
+}
+
+class DriveStructureResult {
+  final List<int> years;
+  final int foldersEnsured;
+
+  const DriveStructureResult({
+    this.years = const [],
+    this.foldersEnsured = 0,
+  });
+}
+
 class DriveRetryResult {
   final int retried;
   final int succeeded;
@@ -67,6 +95,58 @@ class DriveRetryResult {
   });
 }
 
+class DriveQueueSummary {
+  final int totalPending;
+  final int invoicePending;
+  final int expensePending;
+  final int assetPending;
+  final int backupPending;
+  final int invalidMissingFile;
+  final int invalidDevicePath;
+
+  const DriveQueueSummary({
+    this.totalPending = 0,
+    this.invoicePending = 0,
+    this.expensePending = 0,
+    this.assetPending = 0,
+    this.backupPending = 0,
+    this.invalidMissingFile = 0,
+    this.invalidDevicePath = 0,
+  });
+}
+
+class AttachmentRepairResult {
+  final int checked;
+  final int repaired;
+  final int missing;
+  final int unavailable;
+  final int failed;
+
+  const AttachmentRepairResult({
+    this.checked = 0,
+    this.repaired = 0,
+    this.missing = 0,
+    this.unavailable = 0,
+    this.failed = 0,
+  });
+}
+
+class BrokenAttachmentItem {
+  final String entityType;
+  final String entityId;
+  final String? fileName;
+  final String reason;
+  final String? path;
+
+  const BrokenAttachmentItem({
+    required this.entityType,
+    required this.entityId,
+    required this.reason,
+    this.fileName,
+    this.path,
+  });
+}
+
 class DriveDocumentSyncService {
   static final DriveDocumentSyncService instance = DriveDocumentSyncService._();
   DriveDocumentSyncService._();
@@ -78,11 +158,51 @@ class DriveDocumentSyncService {
   final ClientRepository _clientRepository = ClientRepository.instance;
   final SettingsRepository _settingsRepository = SettingsRepository();
   static const int maxRetryAttempts = 5;
+  static const String errorMissingFile = 'failed_file_missing';
+  static const String errorDevicePath = 'device_path_unavailable';
+  static Future<DriveDocumentSyncResult>? _documentSyncInFlight;
+  int _driveListMs = 0;
+  int _driveUploadMs = 0;
+  int _driveDownloadMs = 0;
 
-  Future<DriveDocumentSyncResult> syncExistingDocuments() async {
+  Future<DriveDocumentSyncResult> syncExistingDocuments({
+    String reason = 'drive_sync',
+  }) async {
+    final totalWatch = Stopwatch()..start();
+    debugPrint('[SYNC] start reason=$reason');
+    if (_documentSyncInFlight != null) {
+      debugPrint(
+        '[SYNC] acquire lock: ${totalWatch.elapsedMilliseconds} ms (reused in-flight)',
+      );
+      return _documentSyncInFlight!;
+    }
+    debugPrint('[SYNC] acquire lock: ${totalWatch.elapsedMilliseconds} ms');
+    _documentSyncInFlight = _syncExistingDocumentsInternal(reason: reason);
+    try {
+      return await _documentSyncInFlight!;
+    } finally {
+      debugPrint('[SYNC] total: ${totalWatch.elapsedMilliseconds} ms');
+      _documentSyncInFlight = null;
+    }
+  }
+
+  Future<DriveDocumentSyncResult> _syncExistingDocumentsInternal({
+    required String reason,
+  }) async {
+    final attachmentsWatch = Stopwatch()..start();
+    _driveListMs = 0;
+    _driveUploadMs = 0;
+    _driveDownloadMs = 0;
+    debugPrint('[SYNC][ATTACHMENTS] start reason=$reason');
+    final rootWatch = Stopwatch()..start();
     await _drive.ensureRootFolder();
+    rootWatch.stop();
+    _driveListMs += rootWatch.elapsedMilliseconds;
 
     var result = const DriveDocumentSyncResult();
+    var pendingUpload = 0;
+    var pendingDownload = 0;
+    var broken = 0;
 
     final invoices = await _invoiceRepository.getAll();
     for (final baseInvoice in invoices) {
@@ -91,6 +211,11 @@ class DriveDocumentSyncService {
         result = result.copyWith(skipped: result.skipped + 1);
         continue;
       }
+      if (_invoiceDriveAlreadySynced(invoice)) {
+        result = result.copyWith(skipped: result.skipped + 1);
+        continue;
+      }
+      pendingUpload++;
       try {
         await _syncInvoice(invoice);
         result = result.copyWith(invoicesUploaded: result.invoicesUploaded + 1);
@@ -108,9 +233,40 @@ class DriveDocumentSyncService {
 
     final expenses = await _expenseRepository.getAll();
     for (final expense in expenses) {
-      if (expense.id == null || expense.documentoPath == null) {
+      if (expense.id == null) {
+        debugPrint('[DRIVE][UPLOAD] skipped_reason=missing_entity_id entity_type=expense');
         result = result.copyWith(skipped: result.skipped + 1);
         continue;
+      }
+      final hasLocalPath = expense.documentoPath?.trim().isNotEmpty == true;
+      final hasDriveFile = expense.driveFileId?.trim().isNotEmpty == true;
+      if (!hasLocalPath && !hasDriveFile) {
+        debugPrint(
+          '[DRIVE][UPLOAD] skipped_reason=no_local_and_no_remote entity_type=expense entity_id=${expense.id}',
+        );
+        result = result.copyWith(skipped: result.skipped + 1);
+        continue;
+      }
+      if (_expenseDriveAlreadySynced(expense) ||
+          _shouldSkipBrokenAttachment(expense.attachmentStatus)) {
+        if (_shouldSkipBrokenAttachment(expense.attachmentStatus)) broken++;
+        if (_expenseDriveAlreadySynced(expense)) {
+          debugPrint(
+            '[DRIVE][UPLOAD] skipped because already uploaded entity=expense/${expense.id}',
+          );
+        } else {
+          debugPrint(
+            '[DRIVE][UPLOAD] skipped_reason=broken_status entity_type=expense entity_id=${expense.id} status=${expense.attachmentStatus}',
+          );
+        }
+        result = result.copyWith(skipped: result.skipped + 1);
+        continue;
+      }
+      if ((expense.documentoPath == null || expense.documentoPath!.isEmpty) &&
+          expense.driveFileId?.isNotEmpty == true) {
+        pendingDownload++;
+      } else {
+        pendingUpload++;
       }
       try {
         await _syncExpense(expense);
@@ -130,9 +286,40 @@ class DriveDocumentSyncService {
 
     final assets = await _assetRepository.getAll();
     for (final asset in assets) {
-      if (asset.id == null || asset.documentoPath == null) {
+      if (asset.id == null) {
+        debugPrint('[DRIVE][UPLOAD] skipped_reason=missing_entity_id entity_type=asset');
         result = result.copyWith(skipped: result.skipped + 1);
         continue;
+      }
+      final hasLocalPath = asset.documentoPath?.trim().isNotEmpty == true;
+      final hasDriveFile = asset.driveFileId?.trim().isNotEmpty == true;
+      if (!hasLocalPath && !hasDriveFile) {
+        debugPrint(
+          '[DRIVE][UPLOAD] skipped_reason=no_local_and_no_remote entity_type=asset entity_id=${asset.id}',
+        );
+        result = result.copyWith(skipped: result.skipped + 1);
+        continue;
+      }
+      if (_assetDriveAlreadySynced(asset) ||
+          _shouldSkipBrokenAttachment(asset.attachmentStatus)) {
+        if (_shouldSkipBrokenAttachment(asset.attachmentStatus)) broken++;
+        if (_assetDriveAlreadySynced(asset)) {
+          debugPrint(
+            '[DRIVE][UPLOAD] skipped because already uploaded entity=asset/${asset.id}',
+          );
+        } else {
+          debugPrint(
+            '[DRIVE][UPLOAD] skipped_reason=broken_status entity_type=asset entity_id=${asset.id} status=${asset.attachmentStatus}',
+          );
+        }
+        result = result.copyWith(skipped: result.skipped + 1);
+        continue;
+      }
+      if ((asset.documentoPath == null || asset.documentoPath!.isEmpty) &&
+          asset.driveFileId?.isNotEmpty == true) {
+        pendingDownload++;
+      } else {
+        pendingUpload++;
       }
       try {
         await _syncAsset(asset);
@@ -154,6 +341,21 @@ class DriveDocumentSyncService {
     await _settingsRepository.save(
       settings.copyWith(lastDriveSyncAt: DateTime.now()),
     );
+    attachmentsWatch.stop();
+    debugPrint(
+      '[SYNC][ATTACHMENTS] pending_upload=$pendingUpload, pending_download=$pendingDownload, '
+      'broken=$broken, skipped=${result.skipped}',
+    );
+    debugPrint(
+      '[SYNC][ATTACHMENTS] processed=${result.uploaded}, failed=${result.failed}, '
+      'time=${attachmentsWatch.elapsedMilliseconds} ms',
+    );
+    debugPrint('[SYNC][DRIVE] list folders/files: $_driveListMs ms');
+    debugPrint('[SYNC][DRIVE] upload: $_driveUploadMs ms');
+    debugPrint('[SYNC][DRIVE] download: $_driveDownloadMs ms');
+    debugPrint(
+      '[SYNC][DRIVE] total: ${_driveListMs + _driveUploadMs + _driveDownloadMs} ms',
+    );
     return result;
   }
 
@@ -165,7 +367,10 @@ class DriveDocumentSyncService {
       client: client ?? _fallbackClient(),
       settings: settings,
     );
+    final listWatch = Stopwatch()..start();
     final monthFolders = await _drive.ensureMonthStructure(invoice.fecha);
+    listWatch.stop();
+    _driveListMs += listWatch.elapsedMilliseconds;
     final fileName = _invoiceFileName(
       invoice: invoice,
       clientName: client?.nombre,
@@ -209,6 +414,350 @@ class DriveDocumentSyncService {
     }
   }
 
+  Future<DriveReuploadResult> uploadAllDocumentsToDrive({
+    String reason = 'drive_reupload',
+  }) async {
+    final totalWatch = Stopwatch()..start();
+    debugPrint('[DRIVE][REUPLOAD] start reason=$reason');
+    await _drive.ensureRootFolder();
+    var uploaded = 0;
+    var alreadyExists = 0;
+    var missingLocal = 0;
+    var errors = 0;
+    var foldersEnsured = 0;
+
+    final settings = await _settingsRepository.get();
+    final selectedRootFolderId = settings.driveRootFolderId?.trim() ?? '';
+
+    final invoices = await _invoiceRepository.getAll();
+    final invoiceYears = invoices.map((e) => e.fecha.year).toSet().toList()
+      ..sort();
+    debugPrint(
+      '[DRIVE][REUPLOAD] invoices found=${invoices.length} years=$invoiceYears',
+    );
+    final expenses = await _expenseRepository.getAll();
+    final expenseYears =
+        expenses.map((e) => e.fecha.year).toSet().toList()..sort();
+    debugPrint(
+      '[DRIVE][REUPLOAD] expenses found=${expenses.length} years=$expenseYears',
+    );
+    final assets = await _assetRepository.getAll();
+    final assetYears = assets.map((e) => e.fechaCompra.year).toSet().toList()
+      ..sort();
+    debugPrint('[DRIVE][REUPLOAD] assets found=${assets.length} years=$assetYears');
+
+    final allYears = <int>{
+      ...invoiceYears,
+      ...expenseYears,
+      ...assetYears,
+    }.toList()
+      ..sort();
+    for (final year in allYears) {
+      try {
+        await _drive.createFullYearStructure(year);
+        foldersEnsured++;
+      } catch (e, st) {
+        debugPrint(
+          '[DRIVE][REUPLOAD][ERROR] year_structure/$year exception=$e',
+        );
+        debugPrint('[DRIVE][REUPLOAD][ERROR] year_structure/$year stack=$st');
+        errors++;
+      }
+    }
+
+    for (final invoice in invoices) {
+      try {
+        var candidate = invoice;
+        final existingId = invoice.driveFileId?.trim();
+        if (existingId?.isNotEmpty == true) {
+          final existsInSelectedRoot = selectedRootFolderId.isNotEmpty
+              ? await _drive.fileExistsUnderRoot(
+                  fileId: existingId!,
+                  rootFolderId: selectedRootFolderId,
+                )
+              : await _drive.fileExists(existingId!);
+          if (existsInSelectedRoot) {
+            alreadyExists++;
+            continue;
+          }
+          debugPrint(
+            '[DRIVE][REUPLOAD] invoice/${invoice.id} exists_outside_selected_root -> reupload',
+          );
+          await _invoiceRepository.clearDriveMetadata(invoice.id);
+          candidate = invoice.copyWith(clearDriveFile: true);
+        }
+        final client = await _clientRepository.getById(candidate.clientId);
+        if (client == null) {
+          errors++;
+          continue;
+        }
+        final file = await PdfService().generateInvoicePdf(
+          invoice: candidate,
+          client: client,
+          settings: settings,
+        );
+        final monthFolders = await _drive.ensureMonthStructure(candidate.fecha);
+        final uploadedResult = await _uploadOrUpdate(
+          existingFileId: null,
+          file: file,
+          fileName: _invoiceFileName(
+            invoice: candidate,
+            clientName: client.nombre,
+          ),
+          parentFolderId: monthFolders.facturasFolderId,
+          mimeType: 'application/pdf',
+        );
+        await _invoiceRepository.updateDriveMetadata(
+          id: candidate.id,
+          driveFileId: uploadedResult.fileId,
+          driveFileUrl: uploadedResult.fileUrl,
+          driveSyncedAt: DateTime.now(),
+        );
+        uploaded++;
+      } catch (e, st) {
+        debugPrint(
+          '[DRIVE][REUPLOAD][ERROR] invoice/${invoice.id} exception=$e',
+        );
+        debugPrint('[DRIVE][REUPLOAD][ERROR] invoice/${invoice.id} stack=$st');
+        errors++;
+      }
+    }
+
+    for (final expense in expenses) {
+      if (expense.id == null) continue;
+      try {
+        var candidate = expense;
+        final existingId = candidate.driveFileId?.trim();
+        if (existingId?.isNotEmpty == true) {
+          final existsInSelectedRoot = selectedRootFolderId.isNotEmpty
+              ? await _drive.fileExistsUnderRoot(
+                  fileId: existingId!,
+                  rootFolderId: selectedRootFolderId,
+                )
+              : await _drive.fileExists(existingId!);
+          if (existsInSelectedRoot) {
+            alreadyExists++;
+            continue;
+          }
+          debugPrint(
+            '[DRIVE][REUPLOAD] expense/${expense.id} exists_outside_selected_root -> reupload',
+          );
+          final path = candidate.documentoPath?.trim();
+          final hasLocal = path != null && path.isNotEmpty && File(path).existsSync();
+          if (!hasLocal) {
+            try {
+              final listWatch = Stopwatch()..start();
+              final monthFolders = await _drive.ensureMonthStructure(candidate.fecha);
+              listWatch.stop();
+              _driveListMs += listWatch.elapsedMilliseconds;
+              final copied = await _drive.copyFileToFolder(
+                sourceFileId: existingId,
+                fileName: _expenseFileName(
+                  candidate,
+                  File(path ?? 'adjunto.pdf'),
+                ),
+                parentFolderId: monthFolders.gastosFolderId,
+              );
+              await _expenseRepository.updateDriveMetadata(
+                id: candidate.id!,
+                driveFileId: copied.fileId,
+                driveFileUrl: copied.fileUrl,
+                driveSyncedAt: DateTime.now(),
+              );
+              uploaded++;
+              debugPrint(
+                '[DRIVE][REUPLOAD] expense/${expense.id} copied_from_existing_drive_file',
+              );
+              continue;
+            } catch (e, st) {
+              debugPrint(
+                '[DRIVE][REUPLOAD][ERROR] expense/${expense.id} copy_from_existing exception=$e',
+              );
+              debugPrint(
+                '[DRIVE][REUPLOAD][ERROR] expense/${expense.id} copy_from_existing stack=$st',
+              );
+            }
+          }
+          await _expenseRepository.clearDriveMetadata(candidate.id!);
+          candidate = candidate.copyWith(clearDriveFile: true);
+        }
+        final path = _bestAttachmentPath(
+          candidate.documentoPath,
+          candidate.attachmentOriginalPath,
+        );
+        if (path == null || path.isEmpty || !File(path).existsSync()) {
+          debugPrint(
+            '[DRIVE][REUPLOAD] expense/${expense.id} missing_local path=${path ?? '-'} original_path=${candidate.attachmentOriginalPath ?? '-'} drive_file_id=${candidate.driveFileId ?? '-'}',
+          );
+          await _expenseRepository.update(
+            candidate.copyWith(
+              attachmentStatus: 'missing_local',
+              attachmentError: 'No existe el archivo local del adjunto.',
+            ),
+          );
+          missingLocal++;
+          continue;
+        }
+        await _syncExpense(candidate);
+        uploaded++;
+      } catch (e, st) {
+        debugPrint(
+          '[DRIVE][REUPLOAD][ERROR] expense/${expense.id} exception=$e',
+        );
+        debugPrint('[DRIVE][REUPLOAD][ERROR] expense/${expense.id} stack=$st');
+        errors++;
+      }
+    }
+
+    for (final asset in assets) {
+      if (asset.id == null) continue;
+      try {
+        var candidate = asset;
+        final existingId = candidate.driveFileId?.trim();
+        if (existingId?.isNotEmpty == true) {
+          final existsInSelectedRoot = selectedRootFolderId.isNotEmpty
+              ? await _drive.fileExistsUnderRoot(
+                  fileId: existingId!,
+                  rootFolderId: selectedRootFolderId,
+                )
+              : await _drive.fileExists(existingId!);
+          if (existsInSelectedRoot) {
+            alreadyExists++;
+            continue;
+          }
+          debugPrint(
+            '[DRIVE][REUPLOAD] asset/${asset.id} exists_outside_selected_root -> reupload',
+          );
+          final path = candidate.documentoPath?.trim();
+          final hasLocal = path != null && path.isNotEmpty && File(path).existsSync();
+          if (!hasLocal) {
+            try {
+              final listWatch = Stopwatch()..start();
+              final monthFolders = await _drive.ensureMonthStructure(candidate.fechaCompra);
+              listWatch.stop();
+              _driveListMs += listWatch.elapsedMilliseconds;
+              final copied = await _drive.copyFileToFolder(
+                sourceFileId: existingId,
+                fileName: _assetFileName(
+                  candidate,
+                  File(path ?? 'adjunto.pdf'),
+                ),
+                parentFolderId: monthFolders.inversionesFolderId,
+              );
+              await _assetRepository.updateDriveMetadata(
+                id: candidate.id!,
+                driveFileId: copied.fileId,
+                driveFileUrl: copied.fileUrl,
+                driveSyncedAt: DateTime.now(),
+              );
+              uploaded++;
+              debugPrint(
+                '[DRIVE][REUPLOAD] asset/${asset.id} copied_from_existing_drive_file',
+              );
+              continue;
+            } catch (e, st) {
+              debugPrint(
+                '[DRIVE][REUPLOAD][ERROR] asset/${asset.id} copy_from_existing exception=$e',
+              );
+              debugPrint(
+                '[DRIVE][REUPLOAD][ERROR] asset/${asset.id} copy_from_existing stack=$st',
+              );
+            }
+          }
+          await _assetRepository.clearDriveMetadata(candidate.id!);
+          candidate = candidate.copyWith(clearDriveFile: true);
+        }
+        final path = _bestAttachmentPath(
+          candidate.documentoPath,
+          candidate.attachmentOriginalPath,
+        );
+        if (path == null || path.isEmpty || !File(path).existsSync()) {
+          debugPrint(
+            '[DRIVE][REUPLOAD] asset/${asset.id} missing_local path=${path ?? '-'} original_path=${candidate.attachmentOriginalPath ?? '-'} drive_file_id=${candidate.driveFileId ?? '-'}',
+          );
+          await _assetRepository.update(
+            candidate.copyWith(
+              attachmentStatus: 'missing_local',
+              attachmentError: 'No existe el archivo local del adjunto.',
+            ),
+          );
+          missingLocal++;
+          continue;
+        }
+        await _syncAsset(candidate);
+        uploaded++;
+      } catch (e, st) {
+        debugPrint('[DRIVE][REUPLOAD][ERROR] asset/${asset.id} exception=$e');
+        debugPrint('[DRIVE][REUPLOAD][ERROR] asset/${asset.id} stack=$st');
+        errors++;
+      }
+    }
+
+    await _settingsRepository.save(
+      settings.copyWith(lastDriveSyncAt: DateTime.now()),
+    );
+
+    totalWatch.stop();
+    debugPrint('[DRIVE][REUPLOAD] folders created=$foldersEnsured');
+    debugPrint('[DRIVE][REUPLOAD] uploaded=$uploaded');
+    debugPrint('[DRIVE][REUPLOAD] already_exists=$alreadyExists');
+    debugPrint('[DRIVE][REUPLOAD] missing_local=$missingLocal');
+    debugPrint('[DRIVE][REUPLOAD] errors=$errors');
+    debugPrint('[DRIVE][REUPLOAD] done time=${totalWatch.elapsedMilliseconds} ms');
+
+    return DriveReuploadResult(
+      uploaded: uploaded,
+      alreadyExists: alreadyExists,
+      missingLocal: missingLocal,
+      errors: errors,
+    );
+  }
+
+  Future<DriveStructureResult> createStructureForExistingDocuments({
+    String reason = 'drive_create_structure',
+  }) async {
+    final watch = Stopwatch()..start();
+    debugPrint('[DRIVE][STRUCTURE] start reason=$reason');
+    await _drive.ensureRootFolder();
+
+    final invoices = await _invoiceRepository.getAll();
+    final expenses = await _expenseRepository.getAll();
+    final assets = await _assetRepository.getAll();
+
+    final years = <int>{
+      ...invoices.map((e) => e.fecha.year),
+      ...expenses.map((e) => e.fecha.year),
+      ...assets.map((e) => e.fechaCompra.year),
+    }.toList()
+      ..sort();
+
+    if (years.isEmpty) {
+      years.add(DateTime.now().year);
+    }
+
+    debugPrint('[DRIVE][STRUCTURE] years=$years');
+    var foldersEnsured = 0;
+    for (final year in years) {
+      try {
+        await _drive.createFullYearStructure(year);
+        foldersEnsured++;
+      } catch (e, st) {
+        debugPrint('[DRIVE][STRUCTURE][ERROR] year=$year exception=$e');
+        debugPrint('[DRIVE][STRUCTURE][ERROR] year=$year stack=$st');
+        rethrow;
+      }
+    }
+
+    watch.stop();
+    debugPrint(
+      '[DRIVE][STRUCTURE] done years=$years folders_created=$foldersEnsured time=${watch.elapsedMilliseconds} ms',
+    );
+    return DriveStructureResult(
+      years: years,
+      foldersEnsured: foldersEnsured,
+    );
+  }
+
   Future<int> getPendingQueueCount() async {
     final db = await DatabaseHelper.instance.database;
     final rows = await db.rawQuery(
@@ -222,16 +771,131 @@ class DriveDocumentSyncService {
     return (rows.first['total'] as int?) ?? 0;
   }
 
+  Future<DriveQueueSummary> getQueueSummary() async {
+    final db = await DatabaseHelper.instance.database;
+    final rows = await db.query('drive_sync_queue');
+    var invoice = 0;
+    var expense = 0;
+    var asset = 0;
+    var backup = 0;
+    var invalidMissing = 0;
+    var invalidDevice = 0;
+
+    for (final row in rows) {
+      final type = _canonicalEntityType((row['entity_type'] as String?) ?? '');
+      final entityId = (row['entity_id'] as String?) ?? '';
+      if (!await _driveQueueParentExists(type, entityId)) {
+        continue;
+      }
+      final error = (row['last_error'] as String?) ?? '';
+      final isInvalidMissing =
+          error.startsWith(errorMissingFile) ||
+          error.contains('$errorMissingFile:');
+      final isInvalidDevice =
+          error.startsWith(errorDevicePath) ||
+          error.contains('$errorDevicePath:');
+      if (isInvalidMissing) invalidMissing++;
+      if (isInvalidDevice) invalidDevice++;
+      if (isInvalidMissing || isInvalidDevice) continue;
+      switch (type) {
+        case 'invoice':
+          invoice++;
+          break;
+        case 'expense':
+          expense++;
+          break;
+        case 'asset':
+          asset++;
+          break;
+        case 'backup':
+          backup++;
+          break;
+      }
+    }
+
+    // También contamos pendientes locales (aunque aún no hayan entrado en la cola)
+    // para que el indicador refleje facturas/gastos/inversiones reales por subir.
+    final queuedInvoiceIds = <String>{};
+    final queuedExpenseIds = <String>{};
+    final queuedAssetIds = <String>{};
+    for (final row in rows) {
+      final type = _canonicalEntityType((row['entity_type'] as String?) ?? '');
+      final entityId = (row['entity_id'] as String?) ?? '';
+      if (entityId.isEmpty) continue;
+      if (type == 'invoice') queuedInvoiceIds.add(entityId);
+      if (type == 'expense') queuedExpenseIds.add(entityId);
+      if (type == 'asset') queuedAssetIds.add(entityId);
+    }
+
+    final invoices = await _invoiceRepository.getAll();
+    for (final inv in invoices) {
+      if (queuedInvoiceIds.contains(inv.id)) continue;
+      if (_invoiceDriveAlreadySynced(inv)) continue;
+      invoice++;
+    }
+
+    final expenses = await _expenseRepository.getAll();
+    for (final exp in expenses) {
+      final id = exp.id?.toString();
+      if (id == null || queuedExpenseIds.contains(id)) continue;
+      if (_expenseDriveAlreadySynced(exp)) continue;
+      if (_shouldSkipBrokenAttachment(exp.attachmentStatus)) continue;
+      final hasLocal = exp.documentoPath?.trim().isNotEmpty == true;
+      final hasRemote = exp.driveFileId?.trim().isNotEmpty == true;
+      if (!hasLocal && !hasRemote) continue;
+      expense++;
+    }
+
+    final assets = await _assetRepository.getAll();
+    for (final ast in assets) {
+      final id = ast.id?.toString();
+      if (id == null || queuedAssetIds.contains(id)) continue;
+      if (_assetDriveAlreadySynced(ast)) continue;
+      if (_shouldSkipBrokenAttachment(ast.attachmentStatus)) continue;
+      final hasLocal = ast.documentoPath?.trim().isNotEmpty == true;
+      final hasRemote = ast.driveFileId?.trim().isNotEmpty == true;
+      if (!hasLocal && !hasRemote) continue;
+      asset++;
+    }
+
+    return DriveQueueSummary(
+      totalPending: invoice + expense + asset + backup,
+      invoicePending: invoice,
+      expensePending: expense,
+      assetPending: asset,
+      backupPending: backup,
+      invalidMissingFile: invalidMissing,
+      invalidDevicePath: invalidDevice,
+    );
+  }
+
   Future<List<Map<String, Object?>>> getRecentQueueErrors({
     int limit = 5,
   }) async {
     final db = await DatabaseHelper.instance.database;
-    return db.query(
+    final rows = await db.query(
       'drive_sync_queue',
       columns: ['entity_type', 'entity_id', 'attempts', 'last_error'],
+      where:
+          'last_error IS NULL OR (last_error NOT LIKE ? AND last_error NOT LIKE ? AND last_error NOT LIKE ? AND last_error NOT LIKE ?)',
+      whereArgs: [
+        '$errorMissingFile:%',
+        '$errorDevicePath:%',
+        '%$errorMissingFile:%',
+        '%$errorDevicePath:%',
+      ],
       orderBy: 'updated_at DESC',
-      limit: limit,
     );
+    final validRows = <Map<String, Object?>>[];
+    for (final row in rows) {
+      final type = (row['entity_type'] as String?) ?? '';
+      final id = (row['entity_id'] as String?) ?? '';
+      if (await _driveQueueParentExists(type, id)) {
+        validRows.add(row);
+        if (validRows.length >= limit) break;
+      }
+    }
+    return validRows;
   }
 
   Future<DriveRetryResult> retryPendingDriveSync() async {
@@ -239,8 +903,13 @@ class DriveDocumentSyncService {
     final db = await DatabaseHelper.instance.database;
     final queue = await db.query(
       'drive_sync_queue',
-      where: 'attempts < ?',
-      whereArgs: [maxRetryAttempts],
+      where:
+          'attempts < ? AND (last_error IS NULL OR (last_error NOT LIKE ? AND last_error NOT LIKE ?))',
+      whereArgs: [
+        maxRetryAttempts,
+        '$errorMissingFile:%',
+        '$errorDevicePath:%',
+      ],
       orderBy: 'created_at ASC',
       limit: 200,
     );
@@ -257,7 +926,9 @@ class DriveDocumentSyncService {
     for (final item in queue) {
       retried++;
       final id = item['id'] as String;
-      final entityType = (item['entity_type'] as String?) ?? '';
+      final entityType = _canonicalEntityType(
+        (item['entity_type'] as String?) ?? '',
+      );
       final entityId = (item['entity_id'] as String?) ?? '';
       final attempts = (item['attempts'] as int?) ?? 0;
 
@@ -336,40 +1007,487 @@ class DriveDocumentSyncService {
     );
   }
 
-  Future<void> _syncExpense(Expense expense) async {
-    final file = await _existingFile(expense.documentoPath!);
-    final monthFolders = await _drive.ensureMonthStructure(expense.fecha);
-    final uploaded = await _uploadOrUpdate(
-      existingFileId: expense.driveFileId,
-      file: file,
-      fileName: _expenseFileName(expense, file),
-      parentFolderId: monthFolders.gastosFolderId,
-      mimeType: _mimeTypeFor(file.path),
+  Future<int> clearInvalidQueueEntries() async {
+    final db = await DatabaseHelper.instance.database;
+    var removed = await db.delete(
+      'drive_sync_queue',
+      where:
+          'last_error LIKE ? OR last_error LIKE ? OR last_error LIKE ? OR last_error LIKE ?',
+      whereArgs: [
+        '$errorMissingFile:%',
+        '$errorDevicePath:%',
+        '%$errorMissingFile:%',
+        '%$errorDevicePath:%',
+      ],
     );
-    await _expenseRepository.updateDriveMetadata(
-      id: expense.id!,
-      driveFileId: uploaded.fileId,
-      driveFileUrl: uploaded.fileUrl,
-      driveSyncedAt: DateTime.now(),
+    removed += await cleanupOrphanDriveQueueEntries();
+    debugPrint('[DriveSync] Limpieza inválidos/huérfanos removed=$removed');
+    return removed;
+  }
+
+  Future<int> cleanupOrphanDriveQueueEntries() async {
+    final db = await DatabaseHelper.instance.database;
+    final rows = await db.query(
+      'drive_sync_queue',
+      columns: ['id', 'entity_type', 'entity_id'],
+    );
+    var removed = 0;
+    for (final row in rows) {
+      final queueId = row['id'] as String;
+      final type = (row['entity_type'] as String?) ?? '';
+      final entityId = (row['entity_id'] as String?) ?? '';
+      if (await _driveQueueParentExists(type, entityId)) continue;
+      await db.delete(
+        'drive_sync_queue',
+        where: 'id = ?',
+        whereArgs: [queueId],
+      );
+      removed++;
+      debugPrint('[DriveSync] Cola Drive huérfana eliminada: $type/$entityId');
+    }
+    if (removed > 0) {
+      debugPrint('[DriveSync] Entradas huérfanas eliminadas: $removed');
+    }
+    return removed;
+  }
+
+  Future<int> removeQueueForEntity({
+    required String entityType,
+    required String entityId,
+  }) async {
+    final db = await DatabaseHelper.instance.database;
+    final removed = await db.delete(
+      'drive_sync_queue',
+      where: 'entity_type = ? AND entity_id = ?',
+      whereArgs: [entityType, entityId],
+    );
+    if (removed > 0) {
+      debugPrint(
+        '[DriveSync] Cola Drive eliminada para $entityType/$entityId: $removed',
+      );
+    }
+    return removed;
+  }
+
+  Future<AttachmentRepairResult> repairLegacyAttachmentPaths() async {
+    final attachmentService = AiAttachmentService.instance;
+    var checked = 0;
+    var repaired = 0;
+    var missing = 0;
+    var unavailable = 0;
+    var failed = 0;
+
+    final expenses = await _expenseRepository.getAll();
+    for (final expense in expenses) {
+      final path = expense.documentoPath;
+      if (path == null || path.trim().isEmpty || expense.id == null) continue;
+      checked++;
+      try {
+        final normalized = path.trim();
+        if (attachmentService.isCrossDeviceAbsolutePath(normalized)) {
+          unavailable++;
+          await _expenseRepository.update(
+            expense.copyWith(
+              attachmentStatus: 'missing_remote',
+              attachmentError:
+                  'Este adjunto fue añadido desde otro dispositivo y no está disponible aquí.',
+            ),
+          );
+          await _queueFailedSync(
+            entityType: 'expense',
+            entityId: expense.id!.toString(),
+            action: 'upload',
+            localFilePath: normalized,
+            targetFolderType: 'GASTOS',
+            lastError:
+                '$errorDevicePath: Este adjunto fue añadido desde otro dispositivo y no está disponible aquí. Reasígnalo en este dispositivo o sincronízalo desde el dispositivo original.',
+          );
+          continue;
+        }
+        final file = File(normalized);
+        if (!await file.exists()) {
+          if (expense.driveFileId != null &&
+              expense.driveFileId!.trim().isNotEmpty) {
+            try {
+              final recovered = await _recoverFromDrive(
+                entityType: 'expense',
+                entityId: expense.id!.toString(),
+                driveFileId: expense.driveFileId!,
+                extensionHint: p.extension(normalized),
+              );
+              await _expenseRepository.update(
+                expense.copyWith(
+                  documentoPath: recovered.path,
+                  attachmentStatus: 'pending_upload',
+                  attachmentError: null,
+                ),
+              );
+              repaired++;
+              continue;
+            } catch (_) {}
+          }
+          missing++;
+          await _expenseRepository.update(
+            expense.copyWith(
+              attachmentStatus: 'broken',
+              attachmentError:
+                  'No existe el archivo local. Reasigna el adjunto.',
+            ),
+          );
+          await _queueFailedSync(
+            entityType: 'expense',
+            entityId: expense.id!.toString(),
+            action: 'upload',
+            localFilePath: normalized,
+            targetFolderType: 'GASTOS',
+            lastError:
+                '$errorMissingFile: No existe el archivo local. Reasigna el adjunto.',
+          );
+          continue;
+        }
+        final persistent = await attachmentService.persistAttachment(
+          normalized,
+          folder: 'expenses',
+        );
+        if (persistent != normalized) {
+          await _expenseRepository.update(
+            expense.copyWith(
+              documentoPath: persistent,
+              attachmentStatus: 'pending_upload',
+              attachmentError: null,
+            ),
+          );
+          repaired++;
+        }
+      } catch (_) {
+        failed++;
+      }
+    }
+
+    final assets = await _assetRepository.getAll();
+    for (final asset in assets) {
+      final path = asset.documentoPath;
+      if (path == null || path.trim().isEmpty || asset.id == null) continue;
+      checked++;
+      try {
+        final normalized = path.trim();
+        if (attachmentService.isCrossDeviceAbsolutePath(normalized)) {
+          unavailable++;
+          await _assetRepository.update(
+            asset.copyWith(
+              attachmentStatus: 'missing_remote',
+              attachmentError:
+                  'Este adjunto fue añadido desde otro dispositivo y no está disponible aquí.',
+            ),
+          );
+          await _queueFailedSync(
+            entityType: 'asset',
+            entityId: asset.id!.toString(),
+            action: 'upload',
+            localFilePath: normalized,
+            targetFolderType: 'INVERSIONES',
+            lastError:
+                '$errorDevicePath: Este adjunto fue añadido desde otro dispositivo y no está disponible aquí. Reasígnalo en este dispositivo o sincronízalo desde el dispositivo original.',
+          );
+          continue;
+        }
+        final file = File(normalized);
+        if (!await file.exists()) {
+          if (asset.driveFileId != null &&
+              asset.driveFileId!.trim().isNotEmpty) {
+            try {
+              final recovered = await _recoverFromDrive(
+                entityType: 'asset',
+                entityId: asset.id!.toString(),
+                driveFileId: asset.driveFileId!,
+                extensionHint: p.extension(normalized),
+              );
+              await _assetRepository.update(
+                asset.copyWith(
+                  documentoPath: recovered.path,
+                  attachmentStatus: 'pending_upload',
+                  attachmentError: null,
+                ),
+              );
+              repaired++;
+              continue;
+            } catch (_) {}
+          }
+          missing++;
+          await _assetRepository.update(
+            asset.copyWith(
+              attachmentStatus: 'broken',
+              attachmentError:
+                  'No existe el archivo local. Reasigna el adjunto.',
+            ),
+          );
+          await _queueFailedSync(
+            entityType: 'asset',
+            entityId: asset.id!.toString(),
+            action: 'upload',
+            localFilePath: normalized,
+            targetFolderType: 'INVERSIONES',
+            lastError:
+                '$errorMissingFile: No existe el archivo local. Reasigna el adjunto.',
+          );
+          continue;
+        }
+        final persistent = await attachmentService.persistAttachment(
+          normalized,
+          folder: 'assets',
+        );
+        if (persistent != normalized) {
+          await _assetRepository.update(
+            asset.copyWith(
+              documentoPath: persistent,
+              attachmentStatus: 'pending_upload',
+              attachmentError: null,
+            ),
+          );
+          repaired++;
+        }
+      } catch (_) {
+        failed++;
+      }
+    }
+
+    return AttachmentRepairResult(
+      checked: checked,
+      repaired: repaired,
+      missing: missing,
+      unavailable: unavailable,
+      failed: failed,
     );
   }
 
+  Future<void> _syncExpense(Expense expense) async {
+    debugPrint(
+      '[DRIVE][UPLOAD] expense attachment found id=${expense.id} path=${expense.documentoPath ?? '-'}',
+    );
+    final bestPath = _bestAttachmentPath(
+      expense.documentoPath,
+      expense.attachmentOriginalPath,
+    );
+    if (bestPath == null || bestPath.isEmpty) {
+      if (expense.driveFileId != null && expense.driveFileId!.isNotEmpty) {
+        final recovered = await _recoverFromDrive(
+          entityType: 'expense',
+          entityId: expense.id!.toString(),
+          driveFileId: expense.driveFileId!,
+          extensionHint: '.pdf',
+        );
+        await _expenseRepository.update(
+          expense.copyWith(
+            documentoPath: recovered.path,
+            attachmentStatus: 'pending_download',
+            attachmentError: null,
+          ),
+        );
+        return;
+      }
+      debugPrint(
+        '[DRIVE][UPLOAD] skipped because missing local file expense=${expense.id}',
+      );
+      throw Exception('$errorMissingFile: No existe ruta local del adjunto.');
+    }
+    String? folderId;
+    try {
+      final file = await _existingFile(bestPath);
+      final length = await file.length();
+      if (length <= 0) {
+        throw Exception('failed_file_empty: El archivo adjunto está vacío.');
+      }
+      final listWatch = Stopwatch()..start();
+      final monthFolders = await _drive.ensureMonthStructure(expense.fecha);
+      listWatch.stop();
+      _driveListMs += listWatch.elapsedMilliseconds;
+      folderId = monthFolders.gastosFolderId;
+      final uploaded = await _uploadOrUpdate(
+        existingFileId: expense.driveFileId,
+        file: file,
+        fileName: _expenseFileName(expense, file),
+        parentFolderId: monthFolders.gastosFolderId,
+        mimeType: _mimeTypeFor(file.path),
+      );
+      await _expenseRepository.update(
+        expense.copyWith(
+          driveFileId: uploaded.fileId,
+          driveFileUrl: uploaded.fileUrl,
+          driveSyncedAt: DateTime.now(),
+          attachmentStatus: 'uploaded',
+          attachmentError: null,
+        ),
+      );
+      debugPrint(
+        '[DRIVE][UPLOAD] uploaded file_id=${uploaded.fileId} entity=expense/${expense.id}',
+      );
+    } catch (e, st) {
+      _logUploadError(
+        entityType: 'expense',
+        entityId: expense.id!.toString(),
+        localPath: bestPath,
+        targetFolder: 'Gastos',
+        folderId: folderId,
+        exception: e,
+        stackTrace: st,
+      );
+      rethrow;
+    }
+  }
+
   Future<void> _syncAsset(Asset asset) async {
-    final file = await _existingFile(asset.documentoPath!);
-    final monthFolders = await _drive.ensureMonthStructure(asset.fechaCompra);
-    final uploaded = await _uploadOrUpdate(
-      existingFileId: asset.driveFileId,
-      file: file,
-      fileName: _assetFileName(asset, file),
-      parentFolderId: monthFolders.inversionesFolderId,
-      mimeType: _mimeTypeFor(file.path),
+    debugPrint(
+      '[DRIVE][UPLOAD] asset attachment found id=${asset.id} path=${asset.documentoPath ?? '-'}',
     );
-    await _assetRepository.updateDriveMetadata(
-      id: asset.id!,
-      driveFileId: uploaded.fileId,
-      driveFileUrl: uploaded.fileUrl,
-      driveSyncedAt: DateTime.now(),
+    final bestPath = _bestAttachmentPath(
+      asset.documentoPath,
+      asset.attachmentOriginalPath,
     );
+    if (bestPath == null || bestPath.isEmpty) {
+      if (asset.driveFileId != null && asset.driveFileId!.isNotEmpty) {
+        final recovered = await _recoverFromDrive(
+          entityType: 'asset',
+          entityId: asset.id!.toString(),
+          driveFileId: asset.driveFileId!,
+          extensionHint: '.pdf',
+        );
+        await _assetRepository.update(
+          asset.copyWith(
+            documentoPath: recovered.path,
+            attachmentStatus: 'pending_download',
+            attachmentError: null,
+          ),
+        );
+        return;
+      }
+      debugPrint(
+        '[DRIVE][UPLOAD] skipped because missing local file asset=${asset.id}',
+      );
+      throw Exception('$errorMissingFile: No existe ruta local del adjunto.');
+    }
+    String? folderId;
+    try {
+      final file = await _existingFile(bestPath);
+      final length = await file.length();
+      if (length <= 0) {
+        throw Exception('failed_file_empty: El archivo adjunto está vacío.');
+      }
+      final listWatch = Stopwatch()..start();
+      final monthFolders = await _drive.ensureMonthStructure(asset.fechaCompra);
+      listWatch.stop();
+      _driveListMs += listWatch.elapsedMilliseconds;
+      folderId = monthFolders.inversionesFolderId;
+      final uploaded = await _uploadOrUpdate(
+        existingFileId: asset.driveFileId,
+        file: file,
+        fileName: _assetFileName(asset, file),
+        parentFolderId: monthFolders.inversionesFolderId,
+        mimeType: _mimeTypeFor(file.path),
+      );
+      await _assetRepository.update(
+        asset.copyWith(
+          driveFileId: uploaded.fileId,
+          driveFileUrl: uploaded.fileUrl,
+          driveSyncedAt: DateTime.now(),
+          attachmentStatus: 'uploaded',
+          attachmentError: null,
+        ),
+      );
+      debugPrint(
+        '[DRIVE][UPLOAD] uploaded file_id=${uploaded.fileId} entity=asset/${asset.id}',
+      );
+    } catch (e, st) {
+      _logUploadError(
+        entityType: 'asset',
+        entityId: asset.id!.toString(),
+        localPath: bestPath,
+        targetFolder: 'Inversiones',
+        folderId: folderId,
+        exception: e,
+        stackTrace: st,
+      );
+      rethrow;
+    }
+  }
+
+  Future<File> _recoverFromDrive({
+    required String entityType,
+    required String entityId,
+    required String driveFileId,
+    String extensionHint = '',
+  }) async {
+    final docsDir = await getApplicationDocumentsDirectory();
+    final ext = extensionHint.isEmpty ? '.bin' : extensionHint;
+    final targetPath = p.join(
+      docsDir.path,
+      'attachments',
+      '${entityType}_${entityId}_recovered$ext',
+    );
+    final watch = Stopwatch()..start();
+    try {
+      return await _drive.downloadFileTo(
+        fileId: driveFileId,
+        targetPath: targetPath,
+      );
+    } finally {
+      watch.stop();
+      _driveDownloadMs += watch.elapsedMilliseconds;
+    }
+  }
+
+  Future<List<BrokenAttachmentItem>> getBrokenAttachments() async {
+    final expenses = await _expenseRepository.getAll();
+    final assets = await _assetRepository.getAll();
+    final out = <BrokenAttachmentItem>[];
+    for (final expense in expenses) {
+      if (expense.documentoPath == null) continue;
+      if (expense.attachmentStatus == 'uploaded' &&
+          (expense.attachmentError == null ||
+              expense.attachmentError!.isEmpty)) {
+        continue;
+      }
+      final invalid = _isBrokenPath(expense.documentoPath!);
+      if (invalid || expense.attachmentStatus == 'broken') {
+        out.add(
+          BrokenAttachmentItem(
+            entityType: 'expense',
+            entityId: (expense.id ?? 0).toString(),
+            fileName: p.basename(expense.documentoPath!),
+            reason: expense.attachmentError ?? 'Adjunto no disponible',
+            path: expense.documentoPath,
+          ),
+        );
+      }
+    }
+    for (final asset in assets) {
+      if (asset.documentoPath == null) continue;
+      if (asset.attachmentStatus == 'uploaded' &&
+          (asset.attachmentError == null || asset.attachmentError!.isEmpty)) {
+        continue;
+      }
+      final invalid = _isBrokenPath(asset.documentoPath!);
+      if (invalid || asset.attachmentStatus == 'broken') {
+        out.add(
+          BrokenAttachmentItem(
+            entityType: 'asset',
+            entityId: (asset.id ?? 0).toString(),
+            fileName: p.basename(asset.documentoPath!),
+            reason: asset.attachmentError ?? 'Adjunto no disponible',
+            path: asset.documentoPath,
+          ),
+        );
+      }
+    }
+    return out;
+  }
+
+  bool _isBrokenPath(String path) {
+    final normalized = path.trim();
+    if (AiAttachmentService.instance.isTemporaryPath(normalized)) return true;
+    if (AiAttachmentService.instance.isCrossDeviceAbsolutePath(normalized)) {
+      return true;
+    }
+    return !File(normalized).existsSync();
   }
 
   Future<DriveUploadResult> _uploadOrUpdate({
@@ -378,42 +1496,159 @@ class DriveDocumentSyncService {
     required String fileName,
     required String parentFolderId,
     required String mimeType,
-  }) {
-    if (existingFileId != null && existingFileId.isNotEmpty) {
-      return _drive.updateFile(
-        fileId: existingFileId,
+  }) async {
+    final watch = Stopwatch()..start();
+    try {
+      if (existingFileId != null && existingFileId.isNotEmpty) {
+        return await _drive.updateFile(
+          fileId: existingFileId,
+          file: file,
+          mimeType: mimeType,
+        );
+      }
+      return await _drive.uploadFile(
         file: file,
+        fileName: fileName,
+        parentFolderId: parentFolderId,
         mimeType: mimeType,
       );
+    } finally {
+      watch.stop();
+      _driveUploadMs += watch.elapsedMilliseconds;
     }
-    return _drive.uploadFile(
-      file: file,
-      fileName: fileName,
-      parentFolderId: parentFolderId,
-      mimeType: mimeType,
-    );
+  }
+
+  bool _invoiceDriveAlreadySynced(Invoice invoice) {
+    final syncedAt = invoice.driveSyncedAt;
+    if (invoice.driveFileId?.isNotEmpty != true || syncedAt == null) {
+      return false;
+    }
+    final updatedAfterSync = invoice.updatedAt.difference(syncedAt);
+    return updatedAfterSync <= Duration.zero ||
+        updatedAfterSync < const Duration(seconds: 5);
+  }
+
+  bool _expenseDriveAlreadySynced(Expense expense) {
+    return expense.driveFileId?.isNotEmpty == true &&
+        expense.driveSyncedAt != null &&
+        expense.attachmentStatus == 'uploaded';
+  }
+
+  bool _assetDriveAlreadySynced(Asset asset) {
+    return asset.driveFileId?.isNotEmpty == true &&
+        asset.driveSyncedAt != null &&
+        asset.attachmentStatus == 'uploaded';
+  }
+
+  bool _shouldSkipBrokenAttachment(String status) {
+    return status == 'broken' ||
+        status == 'missing_local' ||
+        status == 'missing_remote';
+  }
+
+  Future<bool> _driveQueueParentExists(
+    String entityType,
+    String entityId,
+  ) async {
+    final normalizedType = _canonicalEntityType(entityType);
+    if (normalizedType == 'backup') return true;
+    if (normalizedType == 'invoice') {
+      return _invoiceRepository
+          .getById(entityId)
+          .then((value) => value != null);
+    }
+    if (normalizedType == 'expense') {
+      final id = int.tryParse(entityId);
+      if (id == null) return false;
+      return _expenseRepository.getById(id).then((value) => value != null);
+    }
+    if (normalizedType == 'asset') {
+      final id = int.tryParse(entityId);
+      if (id == null) return false;
+      return _assetRepository.getById(id).then((value) => value != null);
+    }
+    return false;
+  }
+
+  String _canonicalEntityType(String raw) {
+    final value = raw.trim().toLowerCase();
+    if (value == 'investment') return 'asset';
+    return value;
   }
 
   Future<File> _existingFile(String path) async {
-    final file = File(path);
-    if (!await file.exists()) {
-      throw Exception('No existe el archivo local: $path');
+    final normalized = path.replaceAll('\\', '/');
+    if (AiAttachmentService.instance.isCrossDeviceAbsolutePath(normalized)) {
+      throw Exception(
+        '$errorDevicePath: Este adjunto fue añadido desde otro dispositivo y no está disponible aquí. Reasígnalo en este dispositivo o sincronízalo desde el dispositivo original.',
+      );
     }
-    return file;
+    try {
+      final file = File(path);
+      if (!await file.exists()) {
+        throw Exception('$errorMissingFile: No existe el archivo local: $path');
+      }
+      return file;
+    } on PathAccessException {
+      throw Exception(
+        '$errorDevicePath: Este adjunto fue añadido desde otro dispositivo y no está disponible aquí. Reasígnalo en este dispositivo o sincronízalo desde el dispositivo original.',
+      );
+    } on FileSystemException {
+      throw Exception('$errorMissingFile: No existe el archivo local: $path');
+    }
+  }
+
+  Future<void> _logUploadError({
+    required String entityType,
+    required String entityId,
+    required Object exception,
+    required StackTrace stackTrace,
+    required String targetFolder,
+    String? localPath,
+    String? folderId,
+  }) async {
+    final normalizedPath = localPath?.trim();
+    final hasLocalPath = normalizedPath != null && normalizedPath.isNotEmpty;
+    final exists = hasLocalPath ? File(normalizedPath).existsSync() : false;
+    int? size;
+    if (exists && hasLocalPath) {
+      try {
+        size = await File(normalizedPath).length();
+      } catch (_) {}
+    }
+    final connected = await _drive.isConnected();
+    String? rootFolderId;
+    try {
+      rootFolderId = await _drive.ensureRootFolder();
+    } catch (_) {}
+    debugPrint('[DRIVE][UPLOAD][ERROR] attachment_id=$entityId');
+    debugPrint('[DRIVE][UPLOAD][ERROR] entity_type=$entityType');
+    debugPrint('[DRIVE][UPLOAD][ERROR] local_path=${normalizedPath ?? '-'}');
+    debugPrint('[DRIVE][UPLOAD][ERROR] file_exists=$exists');
+    debugPrint('[DRIVE][UPLOAD][ERROR] file_size=${size ?? 0}');
+    debugPrint('[DRIVE][UPLOAD][ERROR] drive_connected=$connected');
+    debugPrint('[DRIVE][UPLOAD][ERROR] root_folder_id=${rootFolderId ?? '-'}');
+    debugPrint('[DRIVE][UPLOAD][ERROR] folder_id=${folderId ?? '-'}');
+    debugPrint('[DRIVE][UPLOAD][ERROR] target_folder=$targetFolder');
+    debugPrint('[DRIVE][UPLOAD][ERROR] exception=$exception');
+    debugPrint('[DRIVE][UPLOAD][ERROR] stacktrace=$stackTrace');
   }
 
   String _invoiceFileName({
     required Invoice invoice,
     required String? clientName,
   }) {
-    final number = invoice.numero.toString().padLeft(3, '0');
-    final date = _dateFormat.format(invoice.fecha);
-    return sanitizeDriveFileName(
-      'FACTURA $number - ${clientName ?? 'Sin cliente'} - $date.pdf',
+    return buildInvoicePdfFileName(
+      invoice: invoice,
+      clientName: clientName,
     );
   }
 
   String _expenseFileName(Expense expense, File file) {
+    final original = expense.attachmentOriginalName?.trim();
+    if (original != null && original.isNotEmpty) {
+      return sanitizeDriveFileName(original);
+    }
     final date = _dateFormat.format(expense.fecha);
     final provider = expense.proveedor?.trim().isNotEmpty == true
         ? expense.proveedor!.trim()
@@ -425,6 +1660,16 @@ class DriveDocumentSyncService {
   }
 
   String _assetFileName(Asset asset, File file) {
+    final original = asset.attachmentOriginalName?.trim();
+    if (original != null && original.isNotEmpty) {
+      final ext = p.extension(original).isNotEmpty
+          ? p.extension(original)
+          : _extension(file);
+      final base = p.basenameWithoutExtension(original).trim();
+      final desc = asset.descripcion.trim();
+      final composed = desc.isEmpty ? '$base$ext' : '$base - $desc$ext';
+      return sanitizeDriveFileName(composed);
+    }
     final date = _dateFormat.format(asset.fechaCompra);
     final amount = _moneyFormat.format(
       asset.importeConIva > 0 ? asset.importeConIva : asset.importeTotal,
@@ -437,6 +1682,14 @@ class DriveDocumentSyncService {
   String _extension(File file) {
     final ext = p.extension(file.path).toLowerCase();
     return ext.isEmpty ? '' : ext;
+  }
+
+  String? _bestAttachmentPath(String? primary, String? fallback) {
+    final p1 = primary?.trim();
+    if (p1 != null && p1.isNotEmpty) return p1;
+    final p2 = fallback?.trim();
+    if (p2 != null && p2.isNotEmpty) return p2;
+    return null;
   }
 
   String _mimeTypeFor(String path) {

@@ -102,6 +102,11 @@ Checklist:
 - [x] Reintentar sincronización manualmente.
 - [x] Mostrar errores claros.
 - [x] Evitar bucles infinitos.
+- [x] Excluir automáticamente de reintento los inválidos por archivo temporal/no encontrado.
+- [x] Excluir automáticamente de reintento rutas de otro dispositivo.
+- [x] Añadir acción "Limpiar pendientes inválidos".
+- [x] Añadir función de reparación `repairLegacyAttachmentPaths()`.
+- [x] Mostrar resumen de cola (totales + inválidos) en Perfil y Ajustes.
 
 ## Fase 9 - Restauración futura
 Checklist:
@@ -142,3 +147,4 @@ Checklist:
 - Implementado reintento manual de cola `drive_sync_queue` con límite de intentos y resumen de errores en UI.
 - No se ha ejecutado ninguna acción real sobre Drive desde código durante esta sesión; solo queda disponible para que el usuario la lance desde la carpeta seleccionada.
 - Pendiente restauración futura y pruebas E2E reales en Drive.
+- Pendiente crítico detectado en producción: en "Subir documentos a Drive" algunas inversiones/gastos existentes no se suben si el adjunto local se perdió y el registro ya existía; requiere cierre definitivo del flujo de recuperación/re-subida masiva para adjuntos no locales.

@@ -1,12 +1,15 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../database/database_helper.dart';
 import '../models/expense.dart';
 import '../repositories/expense_repository.dart';
+import '../core/services/drive_document_sync_service.dart';
 import '../services/supabase_service.dart';
+import '../services/ai_attachment_service.dart';
 
 final expenseRepositoryProvider = Provider((ref) => ExpenseRepository.instance);
 
@@ -198,17 +201,105 @@ class ExpensesNotifier extends AsyncNotifier<List<Expense>> {
 
   Future<void> add(Expense expense) async {
     final repo = ref.read(expenseRepositoryProvider);
-    final localId = await repo.insert(expense.copyWith(synced: false));
+    final localId = await repo.insert(
+      expense.copyWith(
+        synced: false,
+        attachmentStatus: expense.documentoPath == null
+            ? 'pending_upload'
+            : 'pending_upload',
+      ),
+    );
+    final saved = await repo.getById(localId);
+    if (saved != null && saved.documentoPath != null) {
+      try {
+        final stablePath = await AiAttachmentService.instance
+            .persistAttachmentForEntity(
+              sourcePath: saved.documentoPath!,
+              entityType: 'expense',
+              entityId: saved.id.toString(),
+            );
+        await repo.update(
+          saved.copyWith(
+            documentoPath: stablePath,
+            attachmentStatus: 'pending_upload',
+            attachmentError: null,
+            attachmentOriginalPath: saved.documentoPath,
+            attachmentOriginalName:
+                AiAttachmentService.instance.normalizeOriginalFileName(
+              saved.documentoPath!,
+            ),
+            attachmentStoredName: p.basename(stablePath),
+            attachmentMimeType: _mimeTypeFor(stablePath),
+            synced: false,
+          ),
+        );
+      } catch (e) {
+        await repo.update(
+          saved.copyWith(
+            attachmentStatus: 'broken',
+            attachmentError: e.toString(),
+            attachmentOriginalPath: saved.documentoPath,
+            synced: false,
+          ),
+        );
+      }
+    }
     ref.invalidateSelf();
     unawaited(_tryUploadExpense(localId));
   }
 
   Future<void> updateExpense(Expense expense) async {
     final repo = ref.read(expenseRepositoryProvider);
-    await repo.update(expense.copyWith(synced: false));
+    var updated = expense.copyWith(synced: false);
+    if (updated.documentoPath != null && updated.id != null) {
+      try {
+        final stablePath = await AiAttachmentService.instance
+            .persistAttachmentForEntity(
+              sourcePath: updated.documentoPath!,
+              entityType: 'expense',
+              entityId: updated.id.toString(),
+            );
+        updated = updated.copyWith(
+          documentoPath: stablePath,
+          attachmentStatus: 'pending_upload',
+          attachmentError: null,
+          attachmentOriginalPath: expense.documentoPath,
+          attachmentOriginalName: expense.attachmentOriginalName ??
+              AiAttachmentService.instance.normalizeOriginalFileName(
+                expense.documentoPath!,
+              ),
+          attachmentStoredName: p.basename(stablePath),
+          attachmentMimeType: _mimeTypeFor(stablePath),
+        );
+      } catch (e) {
+        updated = updated.copyWith(
+          attachmentStatus: 'broken',
+          attachmentError: e.toString(),
+          attachmentOriginalPath: expense.documentoPath,
+        );
+      }
+    }
+    await repo.update(updated);
     ref.invalidateSelf();
     if (expense.id != null) {
       unawaited(_tryUploadExpense(expense.id!));
+    }
+  }
+
+  String _mimeTypeFor(String path) {
+    final ext = p.extension(path).toLowerCase();
+    switch (ext) {
+      case '.pdf':
+        return 'application/pdf';
+      case '.jpg':
+      case '.jpeg':
+        return 'image/jpeg';
+      case '.png':
+        return 'image/png';
+      case '.heic':
+        return 'image/heic';
+      default:
+        return 'application/octet-stream';
     }
   }
 
@@ -223,6 +314,10 @@ class ExpensesNotifier extends AsyncNotifier<List<Expense>> {
       unawaited(SupabaseService.instance.deleteExpense(existing.cloudId!));
     }
     await repo.delete(id);
+    await DriveDocumentSyncService.instance.removeQueueForEntity(
+      entityType: 'expense',
+      entityId: id.toString(),
+    );
     ref.invalidateSelf();
   }
 
@@ -242,7 +337,13 @@ class ExpensesNotifier extends AsyncNotifier<List<Expense>> {
 
     try {
       await supabase.uploadExpenses([updated.copyWith(synced: true)]);
-      await repo.update(updated.copyWith(synced: true));
+      await repo.update(
+        updated.copyWith(
+          synced: true,
+          attachmentStatus:
+              updated.documentoPath == null ? updated.attachmentStatus : 'pending_upload',
+        ),
+      );
       await reloadLocal();
     } catch (e) {
       debugPrint('[ExpensesSync] Upload directo error: $e');
