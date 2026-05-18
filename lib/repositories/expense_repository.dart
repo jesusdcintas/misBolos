@@ -74,6 +74,7 @@ class ExpenseRepository {
         'drive_file_id': driveFileId,
         'drive_file_url': driveFileUrl,
         'drive_synced_at': driveSyncedAt.toIso8601String(),
+        'synced': 0,
       },
       where: 'id = ?',
       whereArgs: [id],
@@ -88,6 +89,7 @@ class ExpenseRepository {
         'drive_file_id': null,
         'drive_file_url': null,
         'drive_synced_at': null,
+        'synced': 0,
       },
       where: 'id = ?',
       whereArgs: [id],
@@ -192,7 +194,8 @@ class ExpenseRepository {
         attachmentStatus: (expense.attachmentStatus.trim().isNotEmpty)
             ? expense.attachmentStatus
             : localExpense.attachmentStatus,
-        attachmentError: expense.attachmentError ?? localExpense.attachmentError,
+        attachmentError:
+            expense.attachmentError ?? localExpense.attachmentError,
         attachmentOriginalPath:
             (expense.attachmentOriginalPath?.trim().isNotEmpty ?? false)
             ? expense.attachmentOriginalPath

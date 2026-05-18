@@ -111,9 +111,7 @@ class _ExpenseDetail extends StatelessWidget {
                   ],
                 ),
                 const Divider(height: 24),
-                _Row(
-                    label: 'Fecha',
-                    value: dateFmt.format(expense.fecha)),
+                _Row(label: 'Fecha', value: dateFmt.format(expense.fecha)),
                 if (expense.proveedor != null)
                   _Row(label: 'Proveedor', value: expense.proveedor!),
               ],
@@ -134,11 +132,13 @@ class _ExpenseDetail extends StatelessWidget {
             child: Column(
               children: [
                 _Row(
-                    label: 'Base imponible',
-                    value: fmt.format(expense.importeBase)),
+                  label: 'Base imponible',
+                  value: fmt.format(expense.importeBase),
+                ),
                 _Row(
-                    label: 'IVA (${expense.ivaRate.toStringAsFixed(0)} %)',
-                    value: fmt.format(expense.ivaAmount)),
+                  label: 'IVA (${expense.ivaRate.toStringAsFixed(0)} %)',
+                  value: fmt.format(expense.ivaAmount),
+                ),
                 const Divider(height: 16),
                 _Row(
                   label: 'Total',
@@ -248,7 +248,9 @@ class _ExpenseDetail extends StatelessWidget {
                   const Text(
                     'Notas',
                     style: TextStyle(
-                        color: AppColors.textSecondary, fontSize: 12),
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(expense.notas!),
@@ -292,7 +294,35 @@ class _ExpenseDetail extends StatelessWidget {
       ),
     );
     if (confirmed == true && expense.id != null) {
-      await ref.read(expensesProvider.notifier).remove(expense.id!);
+      var deleteFromDrive = false;
+      final hasDriveFile = expense.driveFileId?.trim().isNotEmpty == true;
+      if (hasDriveFile) {
+        if (!context.mounted) return;
+        final alsoDrive = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('¿Borrar también en Drive?'),
+            content: const Text(
+              'El documento se enviará a la papelera de Drive. '
+              'En MisBolos el gasto se eliminará igualmente.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('No'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Sí, en Drive también'),
+              ),
+            ],
+          ),
+        );
+        deleteFromDrive = alsoDrive == true;
+      }
+      await ref
+          .read(expensesProvider.notifier)
+          .remove(expense.id!, deleteFromDrive: deleteFromDrive);
       if (context.mounted) context.pop();
     }
   }
@@ -300,16 +330,16 @@ class _ExpenseDetail extends StatelessWidget {
   void _openDocumento(BuildContext context, String path) {
     final file = File(path);
     if (!file.existsSync()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Archivo no encontrado')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Archivo no encontrado')));
       return;
     }
     // Abrir con el visor del sistema (macOS/iOS/Android)
     // Para visualización nativa se puede integrar open_file si se añade la dep
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Archivo: $path')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Archivo: $path')));
   }
 
   String? _attachmentWarning(String path) {
@@ -362,8 +392,7 @@ class _Row extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label,
-              style: const TextStyle(color: AppColors.textSecondary)),
+          Text(label, style: const TextStyle(color: AppColors.textSecondary)),
           Text(
             value,
             style: TextStyle(

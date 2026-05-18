@@ -61,6 +61,19 @@ class SyncNotifier extends StateNotifier<SyncState> {
 
   bool get isAuthenticated => _supabase.isAuthenticated;
 
+  bool _shouldRunDefensiveCloudPull(String reason) {
+    switch (reason) {
+      case 'manual_button':
+      case 'pull_to_refresh':
+      case 'periodic_auto':
+      case 'app_resume':
+      case 'app_start':
+        return true;
+      default:
+        return false;
+    }
+  }
+
   /// Procesa borrados pendientes que fallaron offline/por error
   Future<void> processPendingDeletions() async {
     if (!_supabase.isAuthenticated) return;
@@ -303,14 +316,34 @@ class SyncNotifier extends StateNotifier<SyncState> {
         changedAfter: lastSyncAt,
       );
       final expensesWatch = Stopwatch()..start();
-      final cloudExpenses = await _supabase.downloadExpenses(
+      var cloudExpenses = await _supabase.downloadExpenseChangesRaw(
         changedAfter: lastSyncAt,
       );
+      if (cloudExpenses.isEmpty &&
+          lastSyncAt != null &&
+          _shouldRunDefensiveCloudPull(reason)) {
+        debugPrint(
+          '[SYNC][DATA] expenses incremental vacío; ejecutando pull defensivo completo',
+        );
+        cloudExpenses = await _supabase.downloadExpenseChangesRaw(
+          changedAfter: null,
+        );
+      }
       expensesWatch.stop();
       final assetsWatch = Stopwatch()..start();
-      final cloudAssets = await _supabase.downloadAssets(
+      var cloudAssets = await _supabase.downloadAssetChangesRaw(
         changedAfter: lastSyncAt,
       );
+      if (cloudAssets.isEmpty &&
+          lastSyncAt != null &&
+          _shouldRunDefensiveCloudPull(reason)) {
+        debugPrint(
+          '[SYNC][DATA] assets incremental vacío; ejecutando pull defensivo completo',
+        );
+        cloudAssets = await _supabase.downloadAssetChangesRaw(
+          changedAfter: null,
+        );
+      }
       assetsWatch.stop();
 
       var clientsChanged = 0;
@@ -407,7 +440,15 @@ class SyncNotifier extends StateNotifier<SyncState> {
           '[Sync] Repaired $repaired local gig statuses after download',
         );
       }
-      for (final expense in cloudExpenses) {
+      for (final row in cloudExpenses) {
+        final cloudId = row['id']?.toString();
+        if (cloudId == null || cloudId.isEmpty) continue;
+        if (row['deleted_at'] != null) {
+          await ExpenseRepository.instance.deleteByCloudId(cloudId);
+          expensesChanged++;
+          continue;
+        }
+        final expense = _supabase.expenseFromCloudRow(row);
         await ExpenseRepository.instance.upsertByCloudId(expense);
         expensesChanged++;
       }
@@ -415,7 +456,15 @@ class SyncNotifier extends StateNotifier<SyncState> {
         '[SYNC][DATA] expenses: count=${cloudExpenses.length}, downloaded=${cloudExpenses.length}, '
         'uploaded=0, skipped=${cloudExpenses.length - expensesChanged}, time=${expensesWatch.elapsedMilliseconds} ms',
       );
-      for (final asset in cloudAssets) {
+      for (final row in cloudAssets) {
+        final cloudId = row['id']?.toString();
+        if (cloudId == null || cloudId.isEmpty) continue;
+        if (row['deleted_at'] != null) {
+          await AssetRepository.instance.deleteByCloudId(cloudId);
+          assetsChanged++;
+          continue;
+        }
+        final asset = _supabase.assetFromCloudRow(row);
         await AssetRepository.instance.upsertByCloudId(asset);
         assetsChanged++;
       }

@@ -276,6 +276,7 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp>
   bool _synced = false;
   Timer? _autoSyncTimer;
   Timer? _queueRetryTimer;
+  Timer? _autoCloudSyncTimer;
 
   @override
   void initState() {
@@ -287,6 +288,9 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp>
       unawaited(
         SyncQueueProcessor.instance.processPending(reason: 'periodic_retry'),
       );
+    });
+    _autoCloudSyncTimer = Timer.periodic(const Duration(seconds: 45), (_) {
+      unawaited(_autoCloudSyncTick());
     });
   }
 
@@ -311,12 +315,20 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp>
     }
   }
 
+  Future<void> _autoCloudSyncTick() async {
+    if (!mounted) return;
+    final notifier = ref.read(syncProvider.notifier);
+    if (!notifier.isAuthenticated) return;
+    await notifier.syncAll(reason: 'periodic_auto');
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
     unawaited(
       SyncQueueProcessor.instance.processPending(reason: 'app_resumed'),
     );
+    unawaited(_autoCloudSyncTick());
   }
 
   @override
@@ -324,6 +336,7 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp>
     WidgetsBinding.instance.removeObserver(this);
     _autoSyncTimer?.cancel();
     _queueRetryTimer?.cancel();
+    _autoCloudSyncTimer?.cancel();
     super.dispose();
   }
 

@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../core/constants/app_colors.dart';
 import '../../models/asset.dart';
 import '../../providers/assets_provider.dart';
+import '../../providers/sync_provider.dart';
 import '../../widgets/common/empty_state.dart';
 
 final _assetCategoryFilterProvider = StateProvider<AssetCategory?>(
@@ -44,6 +45,14 @@ class _AssetsScreenState extends ConsumerState<AssetsScreen> {
     super.dispose();
   }
 
+  Future<void> _onRefresh() async {
+    try {
+      await ref.read(syncProvider.notifier).syncAll(reason: 'pull_to_refresh');
+    } catch (_) {
+      await ref.read(assetsProvider.notifier).reloadLocal();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final assetsAsync = ref.watch(assetsProvider);
@@ -71,56 +80,55 @@ class _AssetsScreenState extends ConsumerState<AssetsScreen> {
           }).toList();
           _sortAssets(filtered, sortOption);
 
-          return Column(
-            children: [
-              const _CompactHeader(title: 'Inversiones'),
-              _ResumenBanner(
-                assets: assets.where((a) => a.activo).toList(),
-                amortizacionTrimestreAsync: amortizacionAsync,
-                year: now.year,
-                quarter: quarter,
-              ),
-              _AssetActions(
-                category: categoriaFilter,
-                showInactive: showInactivos,
-                sortOption: sortOption,
-                onCategoryChanged: (value) {
-                  ref.read(_assetCategoryFilterProvider.notifier).state = value;
-                },
-                onShowInactiveChanged: () {
-                  ref.read(_showInactivosProvider.notifier).state =
-                      !showInactivos;
-                },
-                onSortChanged: (value) {
-                  ref.read(_assetSortProvider.notifier).state = value;
-                },
-              ),
-              if (filtered.isEmpty)
-                const Expanded(
-                  child: EmptyState(
-                    icon: Icons.inventory_2_outlined,
-                    message: 'Sin inversiones para este filtro',
-                  ),
-                )
-              else
-                Expanded(
-                  child: ListView.separated(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    itemCount: filtered.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
-                    itemBuilder: (context, index) {
-                      return _AssetCard(
-                        asset: filtered[index],
-                        onTap: () =>
-                            context.push('/asset/${filtered[index].id}'),
-                      );
-                    },
-                  ),
+          return RefreshIndicator(
+            onRefresh: _onRefresh,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: [
+                const _CompactHeader(title: 'Inversiones'),
+                _ResumenBanner(
+                  assets: assets.where((a) => a.activo).toList(),
+                  amortizacionTrimestreAsync: amortizacionAsync,
+                  year: now.year,
+                  quarter: quarter,
                 ),
-            ],
+                _AssetActions(
+                  category: categoriaFilter,
+                  showInactive: showInactivos,
+                  sortOption: sortOption,
+                  onCategoryChanged: (value) {
+                    ref.read(_assetCategoryFilterProvider.notifier).state =
+                        value;
+                  },
+                  onShowInactiveChanged: () {
+                    ref.read(_showInactivosProvider.notifier).state =
+                        !showInactivos;
+                  },
+                  onSortChanged: (value) {
+                    ref.read(_assetSortProvider.notifier).state = value;
+                  },
+                ),
+                if (filtered.isEmpty)
+                  const SizedBox(
+                    height: 420,
+                    child: EmptyState(
+                      icon: Icons.inventory_2_outlined,
+                      message: 'Sin inversiones para este filtro',
+                    ),
+                  )
+                else
+                  ...filtered.map(
+                    (asset) => Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                      child: _AssetCard(
+                        asset: asset,
+                        onTap: () => context.push('/asset/${asset.id}'),
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 84),
+              ],
+            ),
           );
         },
       ),

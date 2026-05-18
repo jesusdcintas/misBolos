@@ -86,8 +86,11 @@ class _AssetDetailContent extends StatelessWidget {
                           color: AppColors.primaryLight,
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        child: Icon(asset.categoria.icono,
-                            size: 24, color: AppColors.primary),
+                        child: Icon(
+                          asset.categoria.icono,
+                          size: 24,
+                          color: AppColors.primary,
+                        ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -104,7 +107,8 @@ class _AssetDetailContent extends StatelessWidget {
                             Text(
                               asset.categoria.label,
                               style: const TextStyle(
-                                  color: AppColors.textSecondary),
+                                color: AppColors.textSecondary,
+                              ),
                             ),
                           ],
                         ),
@@ -112,7 +116,9 @@ class _AssetDetailContent extends StatelessWidget {
                       if (!asset.activo)
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 4),
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.grey.shade100,
                             borderRadius: BorderRadius.circular(12),
@@ -120,8 +126,9 @@ class _AssetDetailContent extends StatelessWidget {
                           child: const Text(
                             'Dado de baja',
                             style: TextStyle(
-                                fontSize: 11,
-                                color: AppColors.textSecondary),
+                              fontSize: 11,
+                              color: AppColors.textSecondary,
+                            ),
                           ),
                         ),
                     ],
@@ -143,10 +150,7 @@ class _AssetDetailContent extends StatelessWidget {
                     label: 'Vida útil',
                     value: '${asset.vidaUtilAnos} años',
                   ),
-                  _InfoRow(
-                    label: 'Método',
-                    value: asset.metodoAmortizacion,
-                  ),
+                  _InfoRow(label: 'Método', value: asset.metodoAmortizacion),
                 ],
               ),
             ),
@@ -162,8 +166,7 @@ class _AssetDetailContent extends StatelessWidget {
                 children: [
                   const Text(
                     'Situación actual',
-                    style: TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 14),
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                   ),
                   const SizedBox(height: 12),
                   Row(
@@ -204,14 +207,16 @@ class _AssetDetailContent extends StatelessWidget {
                       Text(
                         '${(pct * 100).toStringAsFixed(1)}% amortizado',
                         style: const TextStyle(
-                            fontSize: 11,
-                            color: AppColors.textSecondary),
+                          fontSize: 11,
+                          color: AppColors.textSecondary,
+                        ),
                       ),
                       Text(
                         '${asset.anosTranscurridos} de ${asset.vidaUtilAnos} años',
                         style: const TextStyle(
-                            fontSize: 11,
-                            color: AppColors.textSecondary),
+                          fontSize: 11,
+                          color: AppColors.textSecondary,
+                        ),
                       ),
                     ],
                   ),
@@ -243,8 +248,7 @@ class _AssetDetailContent extends StatelessWidget {
                 children: [
                   const Text(
                     'Tabla de amortización',
-                    style: TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 14),
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                   ),
                   const SizedBox(height: 12),
                   Table(
@@ -255,8 +259,7 @@ class _AssetDetailContent extends StatelessWidget {
                     },
                     children: [
                       TableRow(
-                        decoration: BoxDecoration(
-                            color: AppColors.primary),
+                        decoration: BoxDecoration(color: AppColors.primary),
                         children: [
                           _tableHeader('Año'),
                           _tableHeader('Cuota'),
@@ -266,29 +269,33 @@ class _AssetDetailContent extends StatelessWidget {
                       ...List.generate(asset.vidaUtilAnos, (i) {
                         final ano = i + 1;
                         final cuota = asset.cuotaAnual;
-                        final valorFin = (asset.importeTotal -
-                                cuota * ano)
+                        final valorFin = (asset.importeTotal - cuota * ano)
                             .clamp(asset.valorResidual, double.infinity);
-                        final esActual =
-                            ano == asset.anosTranscurridos + 1;
+                        final esActual = ano == asset.anosTranscurridos + 1;
                         return TableRow(
                           decoration: BoxDecoration(
                             color: esActual
                                 ? AppColors.primaryLight
                                 : (i.isEven
-                                    ? Colors.white
-                                    : Colors.grey.shade50),
+                                      ? Colors.white
+                                      : Colors.grey.shade50),
                           ),
                           children: [
                             _tableCell(
-                                'Año $ano', TextAlign.center,
-                                bold: esActual),
-                            _tableCell(moneyFmt.format(cuota),
-                                TextAlign.right,
-                                bold: esActual),
-                            _tableCell(moneyFmt.format(valorFin),
-                                TextAlign.right,
-                                bold: esActual),
+                              'Año $ano',
+                              TextAlign.center,
+                              bold: esActual,
+                            ),
+                            _tableCell(
+                              moneyFmt.format(cuota),
+                              TextAlign.right,
+                              bold: esActual,
+                            ),
+                            _tableCell(
+                              moneyFmt.format(valorFin),
+                              TextAlign.right,
+                              bold: esActual,
+                            ),
                           ],
                         );
                       }),
@@ -301,46 +308,47 @@ class _AssetDetailContent extends StatelessWidget {
           const SizedBox(height: 12),
 
           // Justificante
-          if (asset.documentoPath != null)
-            ...[
-              if (_attachmentWarning(asset.documentoPath!) case final warning?)
-                Card(
-                  color: Colors.orange.shade50,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    side: BorderSide(color: Colors.orange.shade200),
-                  ),
-                  child: ListTile(
-                    leading: const Icon(
-                      Icons.warning_amber_rounded,
-                      color: Colors.orange,
-                    ),
-                    title: Text(warning),
-                    subtitle: const Text(
-                      'Reasigna el adjunto para sincronizarlo en Drive.',
-                    ),
-                    trailing: TextButton(
-                      onPressed: () => buildContext.push('/asset/edit/${asset.id}'),
-                      child: const Text('Reasignar'),
-                    ),
-                  ),
-                ),
+          if (asset.documentoPath != null) ...[
+            if (_attachmentWarning(asset.documentoPath!) case final warning?)
               Card(
+                color: Colors.orange.shade50,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: Colors.orange.shade200),
+                ),
                 child: ListTile(
-                  leading: const Icon(Icons.attach_file,
-                      color: AppColors.primary),
-                  title: Text(
-                    asset.attachmentDisplayName ??
-                        asset.documentoPath!.split('/').last,
-                    overflow: TextOverflow.ellipsis,
+                  leading: const Icon(
+                    Icons.warning_amber_rounded,
+                    color: Colors.orange,
                   ),
-                  subtitle: const Text('Factura adjunta'),
-                  trailing: const Icon(Icons.open_in_new, size: 16),
-                  onTap: () =>
-                      _openDocumento(buildContext, asset.documentoPath!),
+                  title: Text(warning),
+                  subtitle: const Text(
+                    'Reasigna el adjunto para sincronizarlo en Drive.',
+                  ),
+                  trailing: TextButton(
+                    onPressed: () =>
+                        buildContext.push('/asset/edit/${asset.id}'),
+                    child: const Text('Reasignar'),
+                  ),
                 ),
               ),
-            ],
+            Card(
+              child: ListTile(
+                leading: const Icon(
+                  Icons.attach_file,
+                  color: AppColors.primary,
+                ),
+                title: Text(
+                  asset.attachmentDisplayName ??
+                      asset.documentoPath!.split('/').last,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: const Text('Factura adjunta'),
+                trailing: const Icon(Icons.open_in_new, size: 16),
+                onTap: () => _openDocumento(buildContext, asset.documentoPath!),
+              ),
+            ),
+          ],
 
           // Notas
           if (asset.notas != null && asset.notas!.isNotEmpty)
@@ -353,7 +361,9 @@ class _AssetDetailContent extends StatelessWidget {
                     const Text(
                       'Notas',
                       style: TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 13),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
                     ),
                     const SizedBox(height: 6),
                     Text(asset.notas!),
@@ -370,8 +380,10 @@ class _AssetDetailContent extends StatelessWidget {
               width: double.infinity,
               child: OutlinedButton.icon(
                 onPressed: () => _darDeBaja(buildContext),
-                icon: const Icon(Icons.archive_outlined,
-                    color: AppColors.warning),
+                icon: const Icon(
+                  Icons.archive_outlined,
+                  color: AppColors.warning,
+                ),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppColors.warning,
                   side: const BorderSide(color: AppColors.warning),
@@ -379,8 +391,7 @@ class _AssetDetailContent extends StatelessWidget {
                 label: const Text('Dar de baja'),
               ),
             ),
-          if (asset.activo && !asset.estaAmortizado)
-            const SizedBox(height: 8),
+          if (asset.activo && !asset.estaAmortizado) const SizedBox(height: 8),
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
@@ -401,9 +412,9 @@ class _AssetDetailContent extends StatelessWidget {
 
   void _openDocumento(BuildContext ctx, String path) {
     if (!File(path).existsSync()) {
-      ScaffoldMessenger.of(ctx).showSnackBar(
-        const SnackBar(content: Text('Archivo no encontrado')),
-      );
+      ScaffoldMessenger.of(
+        ctx,
+      ).showSnackBar(const SnackBar(content: Text('Archivo no encontrado')));
     }
   }
 
@@ -427,16 +438,16 @@ class _AssetDetailContent extends StatelessWidget {
       builder: (dlgCtx) => AlertDialog(
         title: const Text('¿Dar de baja?'),
         content: const Text(
-            'El activo dejará de incluirse en los cálculos de amortización. '
-            'No se eliminan los datos.'),
+          'El activo dejará de incluirse en los cálculos de amortización. '
+          'No se eliminan los datos.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dlgCtx, false),
             child: const Text('Cancelar'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.warning),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.warning),
             onPressed: () => Navigator.pop(dlgCtx, true),
             child: const Text('Dar de baja'),
           ),
@@ -455,7 +466,8 @@ class _AssetDetailContent extends StatelessWidget {
       builder: (dlgCtx) => AlertDialog(
         title: const Text('¿Eliminar inversión?'),
         content: const Text(
-            'Se eliminará permanentemente. Esta acción no se puede deshacer.'),
+          'Se eliminará permanentemente. Esta acción no se puede deshacer.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dlgCtx, false),
@@ -470,34 +482,67 @@ class _AssetDetailContent extends StatelessWidget {
       ),
     );
     if (confirm == true && ctx.mounted) {
-      await ref.read(assetsProvider.notifier).remove(asset.id!);
-      if (ctx.mounted) {
-        ScaffoldMessenger.of(ctx).showSnackBar(
-          const SnackBar(content: Text('Inversión eliminada')),
+      var deleteFromDrive = false;
+      final hasDriveFile = asset.driveFileId?.trim().isNotEmpty == true;
+      if (hasDriveFile) {
+        final alsoDrive = await showDialog<bool>(
+          context: ctx,
+          builder: (dlgCtx) => AlertDialog(
+            title: const Text('¿Borrar también en Drive?'),
+            content: const Text(
+              'El documento se enviará a la papelera de Drive. '
+              'En MisBolos la inversión se eliminará igualmente.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dlgCtx, false),
+                child: const Text('No'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(dlgCtx, true),
+                child: const Text('Sí, en Drive también'),
+              ),
+            ],
+          ),
         );
+        deleteFromDrive = alsoDrive == true;
+      }
+      await ref
+          .read(assetsProvider.notifier)
+          .remove(asset.id!, deleteFromDrive: deleteFromDrive);
+      if (ctx.mounted) {
+        ScaffoldMessenger.of(
+          ctx,
+        ).showSnackBar(const SnackBar(content: Text('Inversión eliminada')));
         ctx.pop();
       }
     }
   }
 
   Widget _tableHeader(String text) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        child: Text(text,
-            style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 11),
-            textAlign: TextAlign.center),
-      );
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+    child: Text(
+      text,
+      style: const TextStyle(
+        color: Colors.white,
+        fontWeight: FontWeight.bold,
+        fontSize: 11,
+      ),
+      textAlign: TextAlign.center,
+    ),
+  );
 
   Widget _tableCell(String text, TextAlign align, {bool bold = false}) =>
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-        child: Text(text,
-            style: TextStyle(
-                fontSize: 11,
-                fontWeight: bold ? FontWeight.bold : FontWeight.normal),
-            textAlign: align),
+        child: Text(
+          text,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: bold ? FontWeight.bold : FontWeight.normal,
+          ),
+          textAlign: align,
+        ),
       );
 }
 
@@ -514,12 +559,17 @@ class _InfoRow extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label,
-              style: const TextStyle(
-                  color: AppColors.textSecondary, fontSize: 13)),
-          Text(value,
-              style: const TextStyle(
-                  fontWeight: FontWeight.w500, fontSize: 13)),
+          Text(
+            label,
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 13,
+            ),
+          ),
+          Text(
+            value,
+            style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+          ),
         ],
       ),
     );
@@ -551,13 +601,18 @@ class _ValueBox extends StatelessWidget {
           Text(
             value,
             style: TextStyle(
-                fontWeight: FontWeight.bold, fontSize: 14, color: color),
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+              color: color,
+            ),
           ),
           const SizedBox(height: 2),
           Text(
             label,
             style: const TextStyle(
-                fontSize: 10, color: AppColors.textSecondary),
+              fontSize: 10,
+              color: AppColors.textSecondary,
+            ),
           ),
         ],
       ),

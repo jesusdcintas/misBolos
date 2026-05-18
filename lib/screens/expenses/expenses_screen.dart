@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../core/constants/app_colors.dart';
 import '../../models/expense.dart';
 import '../../providers/expenses_provider.dart';
+import '../../providers/sync_provider.dart';
 import '../../widgets/common/empty_state.dart';
 
 final _expenseCategoryFilterProvider = StateProvider<ExpenseCategory?>(
@@ -47,6 +48,14 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
     super.dispose();
   }
 
+  Future<void> _onRefresh() async {
+    try {
+      await ref.read(syncProvider.notifier).syncAll(reason: 'pull_to_refresh');
+    } catch (_) {
+      await ref.read(expensesProvider.notifier).reloadLocal();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final expensesAsync = ref.watch(expensesProvider);
@@ -76,55 +85,53 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                 (s, e) => s + e.ivaAmount * (e.porcentajeDeduccion / 100),
               );
 
-          return Column(
-            children: [
-              const _CompactHeader(title: 'Gastos'),
-              _ResumenBanner(total: totalMes, ivaSoportado: ivaSoportado),
-              _ExpenseActions(
-                category: categoriaFilter,
-                sortOption: sortOption,
-                onCategoryChanged: (value) {
-                  ref.read(_expenseCategoryFilterProvider.notifier).state =
-                      value;
-                },
-                onSortChanged: (value) {
-                  ref.read(_expenseSortProvider.notifier).state = value;
-                },
-              ),
-              _FiltroMes(
-                year: yearFilter,
-                month: monthFilter,
-                onChanged: (y, m) {
-                  ref.read(_expenseYearFilterProvider.notifier).state = y;
-                  ref.read(_expenseMonthFilterProvider.notifier).state = m;
-                },
-              ),
-              if (filtered.isEmpty)
-                const Expanded(
-                  child: EmptyState(
-                    icon: Icons.receipt_long_outlined,
-                    message: 'Sin gastos para este filtro',
-                  ),
-                )
-              else
-                Expanded(
-                  child: ListView.separated(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    itemCount: filtered.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
-                    itemBuilder: (context, index) {
-                      return _ExpenseCard(
-                        expense: filtered[index],
-                        onTap: () =>
-                            context.push('/expense/${filtered[index].id}'),
-                      );
-                    },
-                  ),
+          return RefreshIndicator(
+            onRefresh: _onRefresh,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: [
+                const _CompactHeader(title: 'Gastos'),
+                _ResumenBanner(total: totalMes, ivaSoportado: ivaSoportado),
+                _ExpenseActions(
+                  category: categoriaFilter,
+                  sortOption: sortOption,
+                  onCategoryChanged: (value) {
+                    ref.read(_expenseCategoryFilterProvider.notifier).state =
+                        value;
+                  },
+                  onSortChanged: (value) {
+                    ref.read(_expenseSortProvider.notifier).state = value;
+                  },
                 ),
-            ],
+                _FiltroMes(
+                  year: yearFilter,
+                  month: monthFilter,
+                  onChanged: (y, m) {
+                    ref.read(_expenseYearFilterProvider.notifier).state = y;
+                    ref.read(_expenseMonthFilterProvider.notifier).state = m;
+                  },
+                ),
+                if (filtered.isEmpty)
+                  const SizedBox(
+                    height: 420,
+                    child: EmptyState(
+                      icon: Icons.receipt_long_outlined,
+                      message: 'Sin gastos para este filtro',
+                    ),
+                  )
+                else
+                  ...filtered.map(
+                    (expense) => Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                      child: _ExpenseCard(
+                        expense: expense,
+                        onTap: () => context.push('/expense/${expense.id}'),
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 84),
+              ],
+            ),
           );
         },
       ),

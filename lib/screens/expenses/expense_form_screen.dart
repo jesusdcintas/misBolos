@@ -72,8 +72,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
     setState(() {
       _conceptoController.text = expense.concepto;
       _proveedorController.text = expense.proveedor ?? '';
-      _importeBaseController.text =
-          expense.importeBase.toStringAsFixed(2);
+      _importeBaseController.text = expense.importeBase.toStringAsFixed(2);
       _ivaRateController.text = expense.ivaRate.toStringAsFixed(0);
       _notasController.text = expense.notas ?? '';
       _fecha = expense.fecha;
@@ -102,8 +101,8 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
       if (path != null && mounted) {
         setState(() {
           _documentoPath = path;
-          _documentoNombreOriginal =
-              AiAttachmentService.instance.normalizeOriginalFileName(path);
+          _documentoNombreOriginal = AiAttachmentService.instance
+              .normalizeOriginalFileName(path);
         });
       }
     } catch (e) {
@@ -117,8 +116,8 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
       if (path != null && mounted) {
         setState(() {
           _documentoPath = path;
-          _documentoNombreOriginal =
-              AiAttachmentService.instance.normalizeOriginalFileName(path);
+          _documentoNombreOriginal = AiAttachmentService.instance
+              .normalizeOriginalFileName(path);
         });
       }
     } catch (e) {
@@ -132,8 +131,8 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
       if (path != null && mounted) {
         setState(() {
           _documentoPath = path;
-          _documentoNombreOriginal =
-              AiAttachmentService.instance.normalizeOriginalFileName(path);
+          _documentoNombreOriginal = AiAttachmentService.instance
+              .normalizeOriginalFileName(path);
         });
       }
     } catch (e) {
@@ -143,13 +142,17 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
 
   void _showPickerError(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+
+    final proceed = await _confirmPotentialDuplicate();
+    if (!proceed) return;
+
     setState(() => _loading = true);
 
     final expense = Expense(
@@ -182,6 +185,62 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
     if (mounted) context.pop();
   }
 
+  Future<bool> _confirmPotentialDuplicate() async {
+    final repo = ref.read(expenseRepositoryProvider);
+    final all = await repo.getAll();
+    final targetConcept = _conceptoController.text.trim().toLowerCase();
+    final targetProvider = _proveedorController.text.trim().toLowerCase();
+    final targetTotal = _total;
+
+    bool sameDay(DateTime a, DateTime b) =>
+        a.year == b.year && a.month == b.month && a.day == b.day;
+
+    final duplicates = all.where((e) {
+      if (widget.expenseId != null && e.id == widget.expenseId) return false;
+      if (!sameDay(e.fecha, _fecha)) return false;
+      final sameConcept = e.concepto.trim().toLowerCase() == targetConcept;
+      final sameProvider =
+          (e.proveedor ?? '').trim().toLowerCase() == targetProvider;
+      final sameTotal = (e.total - targetTotal).abs() < 0.01;
+      return sameConcept && sameProvider && sameTotal;
+    }).toList();
+
+    if (duplicates.isEmpty || !mounted) return true;
+
+    final fmt = NumberFormat.currency(locale: 'es_ES', symbol: '€');
+    final dateFmt = DateFormat('dd/MM/yyyy');
+    final preview = duplicates
+        .take(3)
+        .map((e) {
+          final provider = e.proveedor?.isNotEmpty == true
+              ? e.proveedor!
+              : 'Sin proveedor';
+          return '• ${dateFmt.format(e.fecha)} · ${e.concepto} · $provider · ${fmt.format(e.total)}';
+        })
+        .join('\n');
+
+    final keep = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Posible gasto duplicado'),
+        content: Text(
+          'Se detectó ${duplicates.length == 1 ? '1 gasto igual' : '${duplicates.length} gastos iguales'}.\n\n$preview\n\n¿Quieres guardarlo igualmente?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Revisar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Guardar igualmente'),
+          ),
+        ],
+      ),
+    );
+    return keep == true;
+  }
+
   Future<void> _extractWithAi() async {
     var inputText = _iaTextController.text.trim();
     if (_extracting || _loading) return;
@@ -189,7 +248,8 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
     setState(() => _extracting = true);
     try {
       final documentPath = _documentoPath;
-      final hasImage = documentPath != null &&
+      final hasImage =
+          documentPath != null &&
           AiAttachmentService.instance.isImagePath(documentPath);
 
       if (hasImage) {
@@ -201,8 +261,9 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
       }
 
       if (inputText.isEmpty && documentPath != null) {
-        final extracted = await DocumentTextExtractor.instance
-            .tryExtractText(documentPath);
+        final extracted = await DocumentTextExtractor.instance.tryExtractText(
+          documentPath,
+        );
         if (extracted != null && extracted.trim().isNotEmpty) {
           inputText = extracted.trim();
           if (mounted) {
@@ -248,7 +309,8 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
       if (result.proveedor != null) 'Proveedor fiscal: ${result.proveedor}',
       if (result.estacion != null) 'Estación: ${result.estacion}',
       if (result.numeroFactura != null) 'Factura: ${result.numeroFactura}',
-      if (result.fecha != null) 'Fecha: ${DateFormat('dd/MM/yyyy').format(result.fecha!)}',
+      if (result.fecha != null)
+        'Fecha: ${DateFormat('dd/MM/yyyy').format(result.fecha!)}',
       if (result.fechaOperacion != null)
         'F. Operación: ${DateFormat('dd/MM/yyyy').format(result.fechaOperacion!)}',
       if (result.matriculaVehiculo != null)
@@ -375,8 +437,10 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
             // Fecha
             ListTile(
               contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.calendar_today_outlined,
-                  color: AppColors.primary),
+              leading: const Icon(
+                Icons.calendar_today_outlined,
+                color: AppColors.primary,
+              ),
               title: const Text('Fecha'),
               subtitle: Text(dateFmt.format(_fecha)),
               onTap: _pickDate,
@@ -419,7 +483,8 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
                       suffixText: '€',
                     ),
                     keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true),
+                      decimal: true,
+                    ),
                     onChanged: (_) => setState(() {}),
                     validator: (v) {
                       if (v == null || v.trim().isEmpty) {
@@ -437,11 +502,10 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
                   flex: 2,
                   child: TextFormField(
                     controller: _ivaRateController,
-                    decoration: const InputDecoration(
-                      labelText: 'IVA %',
-                    ),
+                    decoration: const InputDecoration(labelText: 'IVA %'),
                     keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true),
+                      decimal: true,
+                    ),
                     onChanged: (_) => setState(() {}),
                   ),
                 ),
@@ -471,10 +535,10 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
               initialValue: _categoria,
               decoration: const InputDecoration(labelText: 'Categoría'),
               items: ExpenseCategory.values
-                  .map((cat) => DropdownMenuItem(
-                        value: cat,
-                        child: Text(cat.label),
-                      ))
+                  .map(
+                    (cat) =>
+                        DropdownMenuItem(value: cat, child: Text(cat.label)),
+                  )
                   .toList(),
               onChanged: (v) {
                 if (v != null) setState(() => _categoria = v);
@@ -493,8 +557,10 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
               const SizedBox(height: 4),
               Row(
                 children: [
-                  const Text('% Deducción:',
-                      style: TextStyle(color: AppColors.textSecondary)),
+                  const Text(
+                    '% Deducción:',
+                    style: TextStyle(color: AppColors.textSecondary),
+                  ),
                   Expanded(
                     child: Slider(
                       value: _porcentajeDeduccion,
@@ -529,8 +595,8 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
                 avatar: const Icon(Icons.attach_file, size: 16),
                 label: Text(
                   (_documentoNombreOriginal?.trim().isNotEmpty == true
-                          ? _documentoNombreOriginal!
-                          : _documentoPath!.split('/').last),
+                      ? _documentoNombreOriginal!
+                      : _documentoPath!.split('/').last),
                   overflow: TextOverflow.ellipsis,
                 ),
                 onDeleted: () => setState(() {

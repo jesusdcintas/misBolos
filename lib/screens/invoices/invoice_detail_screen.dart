@@ -947,7 +947,34 @@ class _InvoiceDetailContent extends ConsumerWidget {
     );
 
     if (confirm == true && context.mounted) {
-      await ref.read(invoicesProvider.notifier).remove(invoice.id);
+      var deleteFromDrive = false;
+      final hasDriveFile = invoice.driveFileId?.trim().isNotEmpty == true;
+      if (hasDriveFile) {
+        final alsoDrive = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('¿Borrar también en Drive?'),
+            content: const Text(
+              'El PDF se enviará a la papelera de Drive. '
+              'En MisBolos la factura se eliminará igualmente.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('No'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Sí, en Drive también'),
+              ),
+            ],
+          ),
+        );
+        deleteFromDrive = alsoDrive == true;
+      }
+      await ref
+          .read(invoicesProvider.notifier)
+          .remove(invoice.id, deleteFromDrive: deleteFromDrive);
 
       if (context.mounted) {
         ScaffoldMessenger.of(

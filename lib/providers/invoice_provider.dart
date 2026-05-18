@@ -10,6 +10,7 @@ import '../repositories/gig_repository.dart';
 import '../repositories/invoice_repository.dart';
 import '../repositories/sync_queue_repository.dart';
 import '../core/services/drive_document_sync_service.dart';
+import '../core/services/google_drive_service.dart';
 import '../services/supabase_service.dart';
 import '../services/sync_queue_processor.dart';
 import 'gig_provider.dart';
@@ -196,6 +197,11 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
             (m['irpf_importe'] as num?)?.toDouble() ??
             0,
         total: (m['total'] as num?)?.toDouble() ?? 0,
+        driveFileId: m['drive_file_id']?.toString(),
+        driveFileUrl: m['drive_file_url']?.toString(),
+        driveSyncedAt: m['drive_synced_at'] != null
+            ? DateTime.tryParse(m['drive_synced_at'].toString())
+            : null,
         status: status,
         createdAt: createdAt,
         updatedAt:
@@ -551,11 +557,20 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
     await reloadLocal();
   }
 
-  Future<void> remove(String id) async {
+  Future<void> remove(String id, {bool deleteFromDrive = false}) async {
     _markLocalMutation();
     final invoice = await ref
         .read(invoiceRepositoryProvider)
         .deleteAndUnlinkGig(id);
+    if (deleteFromDrive && invoice?.driveFileId?.trim().isNotEmpty == true) {
+      try {
+        await GoogleDriveService.instance.trashFile(invoice!.driveFileId!);
+      } catch (e) {
+        debugPrint(
+          '[InvoiceProvider] No se pudo enviar factura a papelera Drive: $e',
+        );
+      }
+    }
     await AppEventRepository.instance.insert(
       AppEvent(
         entityType: 'invoice',

@@ -45,8 +45,7 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
   double get _ivaAmount => _importeConIva - _baseImponible;
   double get _valorResidual =>
       double.tryParse(_valorResidualController.text.replaceAll(',', '.')) ?? 0;
-  int get _vidaUtilAnos =>
-      int.tryParse(_vidaUtilController.text) ?? 0;
+  int get _vidaUtilAnos => int.tryParse(_vidaUtilController.text) ?? 0;
 
   double get _cuotaAnual =>
       _vidaUtilAnos > 0 ? (_baseImponible - _valorResidual) / _vidaUtilAnos : 0;
@@ -73,8 +72,9 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
   }
 
   Future<void> _loadAsset() async {
-    final asset =
-        await ref.read(assetRepositoryProvider).getById(widget.assetId!);
+    final asset = await ref
+        .read(assetRepositoryProvider)
+        .getById(widget.assetId!);
     if (asset == null || !mounted) return;
     setState(() {
       _descripcionController.text = asset.descripcion;
@@ -82,8 +82,7 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
           (asset.importeConIva > 0 ? asset.importeConIva : asset.importeTotal)
               .toStringAsFixed(2);
       _ivaRate = asset.ivaRate;
-      _valorResidualController.text =
-          asset.valorResidual.toStringAsFixed(2);
+      _valorResidualController.text = asset.valorResidual.toStringAsFixed(2);
       _vidaUtilController.text = asset.vidaUtilAnos.toString();
       _notasController.text = asset.notas ?? '';
       _fechaCompra = asset.fechaCompra;
@@ -110,8 +109,8 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
       if (path != null && mounted) {
         setState(() {
           _documentoPath = path;
-          _documentoNombreOriginal =
-              AiAttachmentService.instance.normalizeOriginalFileName(path);
+          _documentoNombreOriginal = AiAttachmentService.instance
+              .normalizeOriginalFileName(path);
         });
       }
     } catch (e) {
@@ -125,8 +124,8 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
       if (path != null && mounted) {
         setState(() {
           _documentoPath = path;
-          _documentoNombreOriginal =
-              AiAttachmentService.instance.normalizeOriginalFileName(path);
+          _documentoNombreOriginal = AiAttachmentService.instance
+              .normalizeOriginalFileName(path);
         });
       }
     } catch (e) {
@@ -140,8 +139,8 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
       if (path != null && mounted) {
         setState(() {
           _documentoPath = path;
-          _documentoNombreOriginal =
-              AiAttachmentService.instance.normalizeOriginalFileName(path);
+          _documentoNombreOriginal = AiAttachmentService.instance
+              .normalizeOriginalFileName(path);
         });
       }
     } catch (e) {
@@ -151,9 +150,9 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
 
   void _showPickerError(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _extractWithAi() async {
@@ -164,15 +163,17 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
     try {
       final path = _documentoPath;
       if (path != null && AiAttachmentService.instance.isImagePath(path)) {
-        final result =
-            await InvestmentAiExtractor.instance.extractFromImagePath(path);
+        final result = await InvestmentAiExtractor.instance
+            .extractFromImagePath(path);
         if (!mounted) return;
         await _confirmApplyExtraction(result);
         return;
       }
 
       if (inputText.isEmpty && path != null) {
-        final extracted = await DocumentTextExtractor.instance.tryExtractText(path);
+        final extracted = await DocumentTextExtractor.instance.tryExtractText(
+          path,
+        );
         if (extracted != null && extracted.trim().isNotEmpty) {
           inputText = extracted.trim();
           if (mounted) setState(() => _iaTextController.text = inputText);
@@ -191,7 +192,9 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
 
       final result = path == null
           ? await InvestmentAiExtractor.instance.extractFromText(inputText)
-          : await InvestmentAiExtractor.instance.extractFromReceiptText(inputText);
+          : await InvestmentAiExtractor.instance.extractFromReceiptText(
+              inputText,
+            );
       if (!mounted) return;
       await _confirmApplyExtraction(result);
     } catch (e) {
@@ -204,7 +207,9 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
     }
   }
 
-  Future<void> _confirmApplyExtraction(InvestmentExtractionResult result) async {
+  Future<void> _confirmApplyExtraction(
+    InvestmentExtractionResult result,
+  ) async {
     final moneyFmt = NumberFormat.currency(locale: 'es_ES', symbol: '€');
     final dateFmt = DateFormat('dd/MM/yyyy');
     final summary = <String>[
@@ -289,8 +294,8 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
       if (result.totalAmount != null) {
         _importeTotalController.text = result.totalAmount!.toStringAsFixed(2);
       } else if (result.baseAmount != null && result.taxAmount != null) {
-        _importeTotalController.text =
-            (result.baseAmount! + result.taxAmount!).toStringAsFixed(2);
+        _importeTotalController.text = (result.baseAmount! + result.taxAmount!)
+            .toStringAsFixed(2);
       }
       if (result.vatRate != null) _ivaRate = result.vatRate!;
       if (result.usefulLifeYears != null && result.usefulLifeYears! > 0) {
@@ -320,8 +325,7 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
     if (cat == null) return;
     setState(() {
       _categoria = cat;
-      if (_vidaUtilController.text.isEmpty ||
-          _vidaUtilController.text == '0') {
+      if (_vidaUtilController.text.isEmpty || _vidaUtilController.text == '0') {
         final suggested = cat.vidaUtilSugerida;
         _vidaUtilController.text = suggested > 0 ? suggested.toString() : '';
       }
@@ -330,6 +334,10 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+
+    final proceed = await _confirmPotentialDuplicate();
+    if (!proceed) return;
+
     setState(() => _loading = true);
 
     final asset = Asset(
@@ -358,6 +366,60 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
     }
 
     if (mounted) context.pop();
+  }
+
+  Future<bool> _confirmPotentialDuplicate() async {
+    final repo = ref.read(assetRepositoryProvider);
+    final all = await repo.getAll();
+    final targetDesc = _descripcionController.text.trim().toLowerCase();
+    final targetTotal = _importeConIva > 0 ? _importeConIva : _baseImponible;
+
+    bool sameDay(DateTime a, DateTime b) =>
+        a.year == b.year && a.month == b.month && a.day == b.day;
+
+    final duplicates = all.where((a) {
+      if (widget.assetId != null && a.id == widget.assetId) return false;
+      if (!sameDay(a.fechaCompra, _fechaCompra)) return false;
+      final sameDesc = a.descripcion.trim().toLowerCase() == targetDesc;
+      final existingTotal = a.importeConIva > 0
+          ? a.importeConIva
+          : a.importeTotal;
+      final sameTotal = (existingTotal - targetTotal).abs() < 0.01;
+      return sameDesc && sameTotal;
+    }).toList();
+
+    if (duplicates.isEmpty || !mounted) return true;
+
+    final fmt = NumberFormat.currency(locale: 'es_ES', symbol: '€');
+    final dateFmt = DateFormat('dd/MM/yyyy');
+    final preview = duplicates
+        .take(3)
+        .map((a) {
+          final amount = a.importeConIva > 0 ? a.importeConIva : a.importeTotal;
+          return '• ${dateFmt.format(a.fechaCompra)} · ${a.descripcion} · ${fmt.format(amount)}';
+        })
+        .join('\n');
+
+    final keep = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Posible inversión duplicada'),
+        content: Text(
+          'Se detectó ${duplicates.length == 1 ? '1 inversión igual' : '${duplicates.length} inversiones iguales'}.\n\n$preview\n\n¿Quieres guardarla igualmente?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Revisar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Guardar igualmente'),
+          ),
+        ],
+      ),
+    );
+    return keep == true;
   }
 
   @override
@@ -405,25 +467,30 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
               initialValue: _categoria,
               decoration: const InputDecoration(labelText: 'Categoría'),
               items: AssetCategory.values
-                  .map((cat) => DropdownMenuItem(
-                        value: cat,
-                        child: Row(
-                          children: [
-                            Icon(cat.icono,
-                                size: 18,
-                                color: AppColors.textSecondary),
-                            const SizedBox(width: 8),
-                            Text(cat.label),
-                            const SizedBox(width: 4),
-                            Text(
-                              '(${(cat.coeficienteMaxHacienda * 100).toStringAsFixed(0)}% máx.)',
-                              style: const TextStyle(
-                                  fontSize: 11,
-                                  color: AppColors.textSecondary),
+                  .map(
+                    (cat) => DropdownMenuItem(
+                      value: cat,
+                      child: Row(
+                        children: [
+                          Icon(
+                            cat.icono,
+                            size: 18,
+                            color: AppColors.textSecondary,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(cat.label),
+                          const SizedBox(width: 4),
+                          Text(
+                            '(${(cat.coeficienteMaxHacienda * 100).toStringAsFixed(0)}% máx.)',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textSecondary,
                             ),
-                          ],
-                        ),
-                      ))
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
                   .toList(),
               onChanged: _onCategoriaChanged,
             ),
@@ -432,8 +499,10 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
             // Fecha de compra
             ListTile(
               contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.calendar_today_outlined,
-                  color: AppColors.primary),
+              leading: const Icon(
+                Icons.calendar_today_outlined,
+                color: AppColors.primary,
+              ),
               title: const Text('Fecha de compra'),
               subtitle: Text(dateFmt.format(_fechaCompra)),
               onTap: _pickDate,
@@ -448,8 +517,9 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
                 labelText: 'Importe total (con IVA) *',
                 suffixText: '€',
               ),
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               onChanged: (_) => setState(() {}),
               validator: (v) {
                 final n = double.tryParse(v?.replaceAll(',', '.') ?? '');
@@ -468,8 +538,11 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
               items: const [
                 DropdownMenuItem(value: 21.0, child: Text('21%  — General')),
                 DropdownMenuItem(value: 10.0, child: Text('10%  — Reducido')),
-                DropdownMenuItem(value: 4.0,  child: Text('4%   — Superreducido')),
-                DropdownMenuItem(value: 0.0,  child: Text('0%   — Exento')),
+                DropdownMenuItem(
+                  value: 4.0,
+                  child: Text('4%   — Superreducido'),
+                ),
+                DropdownMenuItem(value: 0.0, child: Text('0%   — Exento')),
               ],
               onChanged: (v) {
                 if (v != null) setState(() => _ivaRate = v);
@@ -492,23 +565,26 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
                     _PreviewRow(
                       label: 'Base imponible (amortizable)',
                       value: NumberFormat.currency(
-                              locale: 'es_ES', symbol: '€')
-                          .format(_baseImponible),
+                        locale: 'es_ES',
+                        symbol: '€',
+                      ).format(_baseImponible),
                       bold: true,
                     ),
                     _PreviewRow(
                       label: 'IVA deducible este trimestre',
                       value: NumberFormat.currency(
-                              locale: 'es_ES', symbol: '€')
-                          .format(_ivaAmount),
+                        locale: 'es_ES',
+                        symbol: '€',
+                      ).format(_ivaAmount),
                     ),
                     const SizedBox(height: 4),
                     const Text(
                       'El IVA se deduce como gasto en el trimestre de compra',
                       style: TextStyle(
-                          fontSize: 11,
-                          color: AppColors.textSecondary,
-                          fontStyle: FontStyle.italic),
+                        fontSize: 11,
+                        color: AppColors.textSecondary,
+                        fontStyle: FontStyle.italic,
+                      ),
                     ),
                   ],
                 ),
@@ -523,8 +599,9 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
                 hintText: '0',
                 suffixText: '€',
               ),
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: 12),
@@ -563,24 +640,29 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
                     const Text(
                       'Preview amortización lineal',
                       style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.primary,
-                          fontSize: 13),
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primary,
+                        fontSize: 13,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     _PreviewRow(
-                        label: 'Base amortizable',
-                        value: moneyFmt.format(_baseImponible)),
+                      label: 'Base amortizable',
+                      value: moneyFmt.format(_baseImponible),
+                    ),
                     _PreviewRow(
-                        label: 'Cuota mensual',
-                        value: moneyFmt.format(_cuotaMensual)),
+                      label: 'Cuota mensual',
+                      value: moneyFmt.format(_cuotaMensual),
+                    ),
                     _PreviewRow(
-                        label: 'Cuota trimestral',
-                        value: moneyFmt.format(_cuotaTrimestral)),
+                      label: 'Cuota trimestral',
+                      value: moneyFmt.format(_cuotaTrimestral),
+                    ),
                     _PreviewRow(
-                        label: 'Cuota anual',
-                        value: moneyFmt.format(_cuotaAnual),
-                        bold: true),
+                      label: 'Cuota anual',
+                      value: moneyFmt.format(_cuotaAnual),
+                      bold: true,
+                    ),
                   ],
                 ),
               ),
@@ -591,13 +673,18 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
                   decoration: BoxDecoration(
                     color: AppColors.successBg,
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
+                    border: Border.all(
+                      color: AppColors.success.withValues(alpha: 0.3),
+                    ),
                   ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.savings_outlined,
-                          size: 18, color: AppColors.success),
+                      const Icon(
+                        Icons.savings_outlined,
+                        size: 18,
+                        color: AppColors.success,
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Column(
@@ -615,8 +702,9 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
                             const Text(
                               'Se deduce como gasto en el trimestre de la compra, no se amortiza',
                               style: TextStyle(
-                                  fontSize: 11,
-                                  color: AppColors.success),
+                                fontSize: 11,
+                                color: AppColors.success,
+                              ),
                             ),
                           ],
                         ),
@@ -630,8 +718,7 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
             // Justificante
             const Text(
               'Justificante (factura de compra)',
-              style:
-                  TextStyle(color: AppColors.textSecondary, fontSize: 13),
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
             ),
             const SizedBox(height: 6),
             if (_documentoPath != null)
@@ -639,8 +726,8 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
                 avatar: const Icon(Icons.attach_file, size: 16),
                 label: Text(
                   (_documentoNombreOriginal?.trim().isNotEmpty == true
-                          ? _documentoNombreOriginal!
-                          : _documentoPath!.split('/').last),
+                      ? _documentoNombreOriginal!
+                      : _documentoPath!.split('/').last),
                   overflow: TextOverflow.ellipsis,
                 ),
                 onDeleted: () => setState(() {
@@ -731,19 +818,22 @@ class _PreviewRow extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label,
-              style: TextStyle(
-                  fontSize: 12,
-                  color: AppColors.textSecondary,
-                  fontWeight:
-                      bold ? FontWeight.bold : FontWeight.normal)),
-          Text(value,
-              style: TextStyle(
-                  fontSize: 12,
-                  fontWeight:
-                      bold ? FontWeight.bold : FontWeight.normal,
-                  color:
-                      bold ? AppColors.primary : AppColors.textPrimary)),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: AppColors.textSecondary,
+              fontWeight: bold ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: bold ? FontWeight.bold : FontWeight.normal,
+              color: bold ? AppColors.primary : AppColors.textPrimary,
+            ),
+          ),
         ],
       ),
     );

@@ -54,6 +54,13 @@ class DriveUploadResult {
   const DriveUploadResult({required this.fileId, this.fileUrl});
 }
 
+class DriveExistingFileResult {
+  final String fileId;
+  final String? fileUrl;
+
+  const DriveExistingFileResult({required this.fileId, this.fileUrl});
+}
+
 class GoogleDriveService {
   static final GoogleDriveService instance = GoogleDriveService._();
   GoogleDriveService._();
@@ -338,6 +345,43 @@ class GoogleDriveService {
     return DriveUploadResult(fileId: result.id!, fileUrl: result.webViewLink);
   }
 
+  Future<DriveExistingFileResult?> findFileInFolderByName({
+    required String parentFolderId,
+    required String fileName,
+  }) async {
+    final api = await _driveApi();
+    final normalizedName = sanitizeDriveFileName(fileName);
+    final result = await api.files.list(
+      q:
+          "trashed = false "
+          "and '${_escapeQuery(parentFolderId)}' in parents "
+          "and name = '${_escapeQuery(normalizedName)}'",
+      spaces: 'drive',
+      $fields: 'files(id,webViewLink)',
+      orderBy: 'createdTime desc',
+      pageSize: 1,
+      supportsAllDrives: true,
+    );
+    final files = result.files ?? const [];
+    if (files.isEmpty || files.first.id == null) return null;
+    return DriveExistingFileResult(
+      fileId: files.first.id!,
+      fileUrl: files.first.webViewLink,
+    );
+  }
+
+  Future<void> trashFile(String fileId) async {
+    final id = fileId.trim();
+    if (id.isEmpty) return;
+    final api = await _driveApi();
+    await api.files.update(
+      drive.File()..trashed = true,
+      id,
+      supportsAllDrives: true,
+      $fields: 'id',
+    );
+  }
+
   Future<DriveUploadResult> updateFile({
     required String fileId,
     required File file,
@@ -439,11 +483,13 @@ class GoogleDriveService {
     if (id.isEmpty || rootId.isEmpty) return false;
     final api = await _driveApi();
     try {
-      final file = await api.files.get(
-        id,
-        $fields: 'id,parents,trashed',
-        supportsAllDrives: true,
-      ) as drive.File;
+      final file =
+          await api.files.get(
+                id,
+                $fields: 'id,parents,trashed',
+                supportsAllDrives: true,
+              )
+              as drive.File;
       if (file.id == null || file.trashed == true) return false;
       final parents = (file.parents ?? []).whereType<String>().toList();
       if (parents.isEmpty) return false;
@@ -475,11 +521,13 @@ class GoogleDriveService {
       if (visited.contains(parentId)) continue;
       visited.add(parentId);
       try {
-        final parent = await api.files.get(
-          parentId,
-          $fields: 'id,parents,trashed',
-          supportsAllDrives: true,
-        ) as drive.File;
+        final parent =
+            await api.files.get(
+                  parentId,
+                  $fields: 'id,parents,trashed',
+                  supportsAllDrives: true,
+                )
+                as drive.File;
         if (parent.id == null || parent.trashed == true) continue;
         final nextParents = (parent.parents ?? []).whereType<String>().toList();
         if (nextParents.contains(rootFolderId)) return true;

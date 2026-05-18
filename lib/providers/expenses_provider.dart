@@ -8,8 +8,10 @@ import '../database/database_helper.dart';
 import '../models/expense.dart';
 import '../repositories/expense_repository.dart';
 import '../core/services/drive_document_sync_service.dart';
+import '../core/services/google_drive_service.dart';
 import '../services/supabase_service.dart';
 import '../services/ai_attachment_service.dart';
+import '../repositories/settings_repository.dart';
 
 final expenseRepositoryProvider = Provider((ref) => ExpenseRepository.instance);
 
@@ -27,6 +29,7 @@ class ExpensesNotifier extends AsyncNotifier<List<Expense>> {
 
   @override
   Future<List<Expense>> build() async {
+    _startRealtimeIfNeeded();
     return ref.read(expenseRepositoryProvider).getAll();
   }
 
@@ -36,7 +39,8 @@ class ExpensesNotifier extends AsyncNotifier<List<Expense>> {
   }
 
   void leaveScreen() {
-    _disposeRealtime();
+    // Mantener realtime activo aunque salgas de la pantalla para reflejar
+    // borrados/altas desde otros dispositivos sin sync manual.
   }
 
   Future<void> pullInitialFromCloud({bool force = false}) async {
@@ -153,6 +157,11 @@ class ExpensesNotifier extends AsyncNotifier<List<Expense>> {
         esDeducible: m['es_deducible'] as bool? ?? true,
         porcentajeDeduccion:
             (m['porcentaje_deduccion'] as num?)?.toDouble() ?? 100.0,
+        driveFileId: m['drive_file_id']?.toString(),
+        driveFileUrl: m['drive_file_url']?.toString(),
+        driveSyncedAt: m['drive_synced_at'] != null
+            ? DateTime.tryParse(m['drive_synced_at'].toString())
+            : null,
         documentoPath: m['documento_path']?.toString(),
         notas: m['notas']?.toString(),
         synced: true,
@@ -173,10 +182,15 @@ class ExpensesNotifier extends AsyncNotifier<List<Expense>> {
 
     try {
       _isApplyingRemoteChange = true;
-      if (event == PostgresChangeEvent.delete) {
+      if (event == PostgresChangeEvent.delete ||
+          (event == PostgresChangeEvent.update &&
+              payload.newRecord['deleted_at'] != null)) {
         final cloudId = payload.oldRecord['id']?.toString();
-        if (cloudId != null) {
-          await ref.read(expenseRepositoryProvider).deleteByCloudId(cloudId);
+        final resolvedCloudId = cloudId ?? payload.newRecord['id']?.toString();
+        if (resolvedCloudId != null) {
+          await ref
+              .read(expenseRepositoryProvider)
+              .deleteByCloudId(resolvedCloudId);
         }
       } else {
         final expense = _expenseFromRealtimeRecord(payload.newRecord);
@@ -224,10 +238,8 @@ class ExpensesNotifier extends AsyncNotifier<List<Expense>> {
             attachmentStatus: 'pending_upload',
             attachmentError: null,
             attachmentOriginalPath: saved.documentoPath,
-            attachmentOriginalName:
-                AiAttachmentService.instance.normalizeOriginalFileName(
-              saved.documentoPath!,
-            ),
+            attachmentOriginalName: AiAttachmentService.instance
+                .normalizeOriginalFileName(saved.documentoPath!),
             attachmentStoredName: p.basename(stablePath),
             attachmentMimeType: _mimeTypeFor(stablePath),
             synced: false,
@@ -245,7 +257,8 @@ class ExpensesNotifier extends AsyncNotifier<List<Expense>> {
       }
     }
     ref.invalidateSelf();
-    unawaited(_tryUploadExpense(localId));
+    await _tryUploadExpense(localId);
+    await _tryAutoSyncExpenseToDrive(localId);
   }
 
   Future<void> updateExpense(Expense expense) async {
@@ -264,7 +277,8 @@ class ExpensesNotifier extends AsyncNotifier<List<Expense>> {
           attachmentStatus: 'pending_upload',
           attachmentError: null,
           attachmentOriginalPath: expense.documentoPath,
-          attachmentOriginalName: expense.attachmentOriginalName ??
+          attachmentOriginalName:
+              expense.attachmentOriginalName ??
               AiAttachmentService.instance.normalizeOriginalFileName(
                 expense.documentoPath!,
               ),
@@ -282,7 +296,8 @@ class ExpensesNotifier extends AsyncNotifier<List<Expense>> {
     await repo.update(updated);
     ref.invalidateSelf();
     if (expense.id != null) {
-      unawaited(_tryUploadExpense(expense.id!));
+      await _tryUploadExpense(expense.id!);
+      await _tryAutoSyncExpenseToDrive(expense.id!);
     }
   }
 
@@ -303,15 +318,26 @@ class ExpensesNotifier extends AsyncNotifier<List<Expense>> {
     }
   }
 
-  Future<void> remove(int id) async {
+  Future<void> remove(int id, {bool deleteFromDrive = false}) async {
     final repo = ref.read(expenseRepositoryProvider);
     final existing = await repo.getById(id);
+    if (deleteFromDrive && existing?.driveFileId?.trim().isNotEmpty == true) {
+      try {
+        await GoogleDriveService.instance.trashFile(existing!.driveFileId!);
+      } catch (e) {
+        debugPrint('[ExpensesSync] No se pudo enviar a papelera en Drive: $e');
+      }
+    }
     if (existing?.cloudId != null) {
       await DatabaseHelper.instance.addPendingDeletion(
         'expenses',
         existing!.cloudId!,
       );
-      unawaited(SupabaseService.instance.deleteExpense(existing.cloudId!));
+      try {
+        await SupabaseService.instance.deleteExpense(existing.cloudId!);
+      } catch (e) {
+        debugPrint('[ExpensesSync] deleteExpense directo falló: $e');
+      }
     }
     await repo.delete(id);
     await DriveDocumentSyncService.instance.removeQueueForEntity(
@@ -340,13 +366,29 @@ class ExpensesNotifier extends AsyncNotifier<List<Expense>> {
       await repo.update(
         updated.copyWith(
           synced: true,
-          attachmentStatus:
-              updated.documentoPath == null ? updated.attachmentStatus : 'pending_upload',
+          attachmentStatus: updated.documentoPath == null
+              ? updated.attachmentStatus
+              : 'pending_upload',
         ),
       );
       await reloadLocal();
     } catch (e) {
       debugPrint('[ExpensesSync] Upload directo error: $e');
+    }
+  }
+
+  Future<void> _tryAutoSyncExpenseToDrive(int localId) async {
+    final settings = await SettingsRepository().get();
+    final ready =
+        settings.driveConnected &&
+        (settings.driveRootFolderId?.trim().isNotEmpty ?? false);
+    if (!ready) return;
+    try {
+      await DriveDocumentSyncService.instance.syncExpenseById(localId);
+    } catch (e) {
+      debugPrint(
+        '[ExpensesSync] Auto Drive sync error expense_id=$localId: $e',
+      );
     }
   }
 }
@@ -357,30 +399,34 @@ final expenseByIdProvider = FutureProvider.family<Expense?, int>((ref, id) {
 
 final expensesByCategoriaProvider =
     FutureProvider.family<List<Expense>, ExpenseCategory>((ref, categoria) {
-  return ref.read(expenseRepositoryProvider).getByCategoria(categoria);
-});
+      return ref.read(expenseRepositoryProvider).getByCategoria(categoria);
+    });
 
 final expensesByQuarterProvider =
-    FutureProvider.family<List<Expense>, ({int year, int quarter})>(
-        (ref, params) {
-  final repo = ref.read(expenseRepositoryProvider);
-  final startMonth = (params.quarter - 1) * 3 + 1;
-  final from = DateTime(params.year, startMonth, 1);
-  final to = DateTime(params.year, startMonth + 3, 0, 23, 59, 59);
-  return repo.getByDateRange(from, to);
-});
+    FutureProvider.family<List<Expense>, ({int year, int quarter})>((
+      ref,
+      params,
+    ) {
+      final repo = ref.read(expenseRepositoryProvider);
+      final startMonth = (params.quarter - 1) * 3 + 1;
+      final from = DateTime(params.year, startMonth, 1);
+      final to = DateTime(params.year, startMonth + 3, 0, 23, 59, 59);
+      return repo.getByDateRange(from, to);
+    });
 
 final gastosTrimestralProvider =
-    FutureProvider.family<Map<String, double>, ({int year, int quarter})>(
-        (ref, params) {
-  return ref
-      .read(expenseRepositoryProvider)
-      .getTotalesPorCategoria(params.year, params.quarter);
-});
+    FutureProvider.family<Map<String, double>, ({int year, int quarter})>((
+      ref,
+      params,
+    ) {
+      return ref
+          .read(expenseRepositoryProvider)
+          .getTotalesPorCategoria(params.year, params.quarter);
+    });
 
 final ivaDeducibleTrimestralProvider =
     FutureProvider.family<double, ({int year, int quarter})>((ref, params) {
-  return ref
-      .read(expenseRepositoryProvider)
-      .getTotalIvaSoportadoTrimestre(params.year, params.quarter);
-});
+      return ref
+          .read(expenseRepositoryProvider)
+          .getTotalIvaSoportadoTrimestre(params.year, params.quarter);
+    });

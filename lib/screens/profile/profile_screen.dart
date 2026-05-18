@@ -584,6 +584,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   label: const Text('Reparar adjuntos'),
                 ),
                 OutlinedButton.icon(
+                  onPressed: (!_driveBusy && driveReady)
+                      ? _repairPendingInvoiceDrivePdfs
+                      : null,
+                  icon: const Icon(Icons.picture_as_pdf_outlined),
+                  label: const Text('Reparar facturas Drive'),
+                ),
+                OutlinedButton.icon(
                   onPressed: () => context.push('/attachments/broken'),
                   icon: const Icon(Icons.broken_image_outlined),
                   label: const Text('Adjuntos rotos'),
@@ -604,7 +611,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 final s = snapshot.data ?? const DriveQueueSummary();
                 return Text(
                   s.totalPending > 0
-                      ? 'Pendientes Drive válidos: ${s.totalPending} · facturas ${s.invoicePending} · gastos ${s.expensePending} · inversiones ${s.assetPending}'
+                      ? 'Pendientes Drive válidos: ${s.totalPending} · facturas ${s.invoicePending} · gastos ${s.expensePending} · inversiones ${s.assetPending} · retryables ${s.retryable}'
                       : 'Sin pendientes en cola de Drive',
                   style: TextStyle(
                     fontSize: 12,
@@ -655,6 +662,24 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       ),
                     );
                   }).toList(),
+                );
+              },
+            ),
+            FutureBuilder<DriveQueueSummary>(
+              future: DriveDocumentSyncService.instance.getQueueSummary(),
+              builder: (context, snapshot) {
+                final s = snapshot.data ?? const DriveQueueSummary();
+                if (s.lastError == null || s.lastError!.trim().isEmpty) {
+                  return const SizedBox.shrink();
+                }
+                return Text(
+                  'Último error Drive: ${s.lastError}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textSecondary,
+                  ),
                 );
               },
             ),
@@ -753,9 +778,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   Future<void> _openDriveFolder(String folderId) async {
-    await _runDriveAction(() async {
-      await GoogleDriveService.instance.openFolder(folderId);
-    },
+    await _runDriveAction(
+      () async {
+        await GoogleDriveService.instance.openFolder(folderId);
+      },
       progressLabel: 'Abriendo carpeta en Google Drive...',
       errorPrefix: 'No se pudo abrir la carpeta de Drive',
     );
@@ -772,18 +798,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       );
       return;
     }
-    await _runDriveAction(() async {
-      final result = await DriveDocumentSyncService.instance
-          .syncExistingDocuments(reason: 'drive_sync');
-      ref.invalidate(settingsProvider);
-      ref.invalidate(invoicesProvider);
-      ref.invalidate(expensesProvider);
-      ref.invalidate(assetsProvider);
-      _showDriveMessage(
-        'Documentos sincronizados: ${result.uploaded} subidos/actualizados, '
-        '${result.skipped} omitidos, ${result.failed} pendientes.',
-      );
-    },
+    await _runDriveAction(
+      () async {
+        final result = await DriveDocumentSyncService.instance
+            .syncExistingDocuments(reason: 'drive_sync');
+        ref.invalidate(settingsProvider);
+        ref.invalidate(invoicesProvider);
+        ref.invalidate(expensesProvider);
+        ref.invalidate(assetsProvider);
+        _showDriveMessage(
+          'Documentos sincronizados: ${result.uploaded} subidos/actualizados, '
+          '${result.skipped} omitidos, ${result.failed} pendientes.',
+        );
+      },
       progressLabel: 'Sincronizando documentos con Drive...',
       errorPrefix: 'No se pudo sincronizar documentos',
     );
@@ -800,77 +827,94 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       );
       return;
     }
-    await _runDriveAction(() async {
-      final result = await DriveDocumentSyncService.instance
-          .uploadAllDocumentsToDrive(reason: 'drive_full_upload');
-      ref.invalidate(settingsProvider);
-      ref.invalidate(invoicesProvider);
-      ref.invalidate(expensesProvider);
-      ref.invalidate(assetsProvider);
-      _showDriveMessage(
-        'Subidos ${result.uploaded} · ya existían ${result.alreadyExists} · '
-        'faltan localmente ${result.missingLocal} · errores ${result.errors}',
-      );
-    },
+    await _runDriveAction(
+      () async {
+        final result = await DriveDocumentSyncService.instance
+            .uploadAllDocumentsToDrive(reason: 'drive_full_upload');
+        ref.invalidate(settingsProvider);
+        ref.invalidate(invoicesProvider);
+        ref.invalidate(expensesProvider);
+        ref.invalidate(assetsProvider);
+        _showDriveMessage(
+          'Subidos ${result.uploaded} · ya existían ${result.alreadyExists} · '
+          'faltan localmente ${result.missingLocal} · errores ${result.errors}',
+        );
+      },
       progressLabel: 'Subiendo documentos a Drive...',
       errorPrefix: 'No se pudieron subir documentos a Drive',
     );
   }
 
   Future<void> _createDriveBackupNow() async {
-    await _runDriveAction(() async {
-      final result = await DriveBackupService.instance.createBackupNow();
-      ref.invalidate(settingsProvider);
-      _showDriveMessage('Backup creado correctamente: ${result.fileName}');
-    },
+    await _runDriveAction(
+      () async {
+        final result = await DriveBackupService.instance.createBackupNow();
+        ref.invalidate(settingsProvider);
+        _showDriveMessage('Backup creado correctamente: ${result.fileName}');
+      },
       progressLabel: 'Creando backup en Drive...',
       errorPrefix: 'No se pudo crear el backup',
     );
   }
 
   Future<void> _retryPendingDriveSync() async {
-    await _runDriveAction(() async {
-      final result = await DriveDocumentSyncService.instance
-          .retryPendingDriveSync();
-      ref.invalidate(settingsProvider);
-      ref.invalidate(invoicesProvider);
-      ref.invalidate(expensesProvider);
-      ref.invalidate(assetsProvider);
-      if (!mounted) return;
-      final extra = result.recentErrors.isEmpty
-          ? ''
-          : '\nErrores: ${result.recentErrors.join(' | ')}';
-      _showDriveMessage(
-        'Reintento Drive: ${result.succeeded} ok, ${result.failed} fallos, '
-        '${result.skippedByMaxAttempts} al límite.$extra',
-      );
-    },
+    await _runDriveAction(
+      () async {
+        final result = await DriveDocumentSyncService.instance
+            .retryPendingDriveSync();
+        ref.invalidate(settingsProvider);
+        ref.invalidate(invoicesProvider);
+        ref.invalidate(expensesProvider);
+        ref.invalidate(assetsProvider);
+        if (!mounted) return;
+        final extra = result.recentErrors.isEmpty
+            ? ''
+            : '\nErrores: ${result.recentErrors.join(' | ')}';
+        _showDriveMessage(
+          'Reintento Drive: ${result.succeeded} ok, ${result.failed} fallos, '
+          '${result.skippedByMaxAttempts} al límite.$extra',
+        );
+      },
       progressLabel: 'Reintentando pendientes válidos de Drive...',
       errorPrefix: 'No se pudieron reintentar pendientes de Drive',
     );
   }
 
   Future<void> _clearInvalidDrivePending() async {
-    await _runDriveAction(() async {
-      final removed = await DriveDocumentSyncService.instance
-          .clearInvalidQueueEntries();
-      _showDriveMessage('Pendientes inválidos eliminados: $removed');
-    },
+    await _runDriveAction(
+      () async {
+        final removed = await DriveDocumentSyncService.instance
+            .clearInvalidQueueEntries();
+        _showDriveMessage('Pendientes inválidos eliminados: $removed');
+      },
       progressLabel: 'Limpiando pendientes inválidos...',
       errorPrefix: 'No se pudieron limpiar pendientes inválidos',
     );
   }
 
   Future<void> _repairLegacyAttachments() async {
-    await _runDriveAction(() async {
-      final result = await DriveDocumentSyncService.instance
-          .repairLegacyAttachmentPaths();
-      _showDriveMessage(
-        '${result.missing + result.unavailable} adjuntos no disponibles. Revisa adjuntos rotos.',
-      );
-    },
+    await _runDriveAction(
+      () async {
+        final result = await DriveDocumentSyncService.instance
+            .repairLegacyAttachmentPaths();
+        _showDriveMessage(
+          '${result.missing + result.unavailable} adjuntos no disponibles. Revisa adjuntos rotos.',
+        );
+      },
       progressLabel: 'Reparando adjuntos heredados...',
       errorPrefix: 'No se pudieron reparar adjuntos',
+    );
+  }
+
+  Future<void> _repairPendingInvoiceDrivePdfs() async {
+    await _runDriveAction(
+      () async {
+        final repaired = await DriveDocumentSyncService.instance
+            .repairPendingInvoicePdfs();
+        _showDriveMessage('Facturas reparadas para Drive: $repaired');
+      },
+      progressLabel: 'Regenerando PDFs de facturas pendientes...',
+      errorPrefix: 'No se pudieron reparar facturas pendientes',
     );
   }
 

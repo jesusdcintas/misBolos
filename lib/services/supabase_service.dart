@@ -705,7 +705,13 @@ class SupabaseService {
   Future<void> deleteByTable(String tableName, String recordId) async {
     if (!isAuthenticated) return;
     final now = DateTime.now().toUtc().toIso8601String();
-    if (tableName == 'gigs' || tableName == 'invoices') {
+    // Todas las tablas core usan soft-delete para que realtime/incremental
+    // propaguen borrados de forma consistente entre dispositivos.
+    if (tableName == 'clients' ||
+        tableName == 'gigs' ||
+        tableName == 'invoices' ||
+        tableName == 'expenses' ||
+        tableName == 'assets') {
       await _client!
           .from(tableName)
           .update({'deleted_at': now, 'updated_at': now})
@@ -865,6 +871,9 @@ class SupabaseService {
     'status': i.status.dbValue,
     'created_at': i.createdAt.toUtc().toIso8601String(),
     'updated_at': i.updatedAt.toUtc().toIso8601String(),
+    'drive_file_id': i.driveFileId,
+    'drive_file_url': i.driveFileUrl,
+    'drive_synced_at': i.driveSyncedAt?.toUtc().toIso8601String(),
     if (i.deletedAt != null)
       'deleted_at': i.deletedAt!.toUtc().toIso8601String(),
   };
@@ -915,6 +924,11 @@ class SupabaseService {
           (m['irpf_amount'] as num?)?.toDouble() ??
           0,
       total: (m['total'] as num?)?.toDouble() ?? 0,
+      driveFileId: m['drive_file_id'] as String?,
+      driveFileUrl: m['drive_file_url'] as String?,
+      driveSyncedAt: m['drive_synced_at'] != null
+          ? DateTime.tryParse(m['drive_synced_at'].toString())
+          : null,
       status: InvoiceStatusExtension.fromDb(m['status'] ?? 'borrador'),
       createdAt: DateTime.parse(m['created_at']),
       updatedAt: DateTime.parse(
@@ -963,17 +977,33 @@ class SupabaseService {
       changedAfter: changedAfter,
       includeDeletedAt: false,
     );
-    final result = data.map((e) => _expenseFromSupabase(e)).toList();
+    final result = data.map((e) => expenseFromCloudRow(e)).toList();
     debugPrint(
       '[Supabase] Downloaded ${result.length} expenses since=$changedAfter',
     );
     return result;
   }
 
+  Future<List<Map<String, dynamic>>> downloadExpenseChangesRaw({
+    DateTime? changedAfter,
+  }) async {
+    if (!isAuthenticated) return [];
+    final data = await _selectChangedRows(
+      table: 'expenses',
+      changedAfter: changedAfter,
+      includeDeletedAt: true,
+    );
+    return data.map((row) => Map<String, dynamic>.from(row as Map)).toList();
+  }
+
   Future<void> deleteExpense(String cloudId) async {
     if (!isAuthenticated) return;
     try {
-      await _client!.from('expenses').delete().eq('id', cloudId);
+      final now = DateTime.now().toUtc().toIso8601String();
+      await _client!
+          .from('expenses')
+          .update({'deleted_at': now, 'updated_at': now})
+          .eq('id', cloudId);
       debugPrint('[Supabase] Deleted expense $cloudId');
     } catch (e) {
       debugPrint('[Supabase] Delete expense error: $e');
@@ -996,10 +1026,13 @@ class SupabaseService {
     // No sincronizar rutas locales entre dispositivos.
     'documento_path': null,
     'notas': e.notas,
+    'drive_file_id': e.driveFileId,
+    'drive_file_url': e.driveFileUrl,
+    'drive_synced_at': e.driveSyncedAt?.toUtc().toIso8601String(),
     'created_at': e.createdAt.toUtc().toIso8601String(),
   };
 
-  Expense _expenseFromSupabase(Map<String, dynamic> m) => Expense(
+  Expense expenseFromCloudRow(Map<String, dynamic> m) => Expense(
     cloudId: m['id'] as String?,
     userId: m['user_id'] as String?,
     fecha: DateTime.parse(m['fecha'] as String),
@@ -1015,6 +1048,11 @@ class SupabaseService {
     esDeducible: m['es_deducible'] as bool? ?? true,
     porcentajeDeduccion:
         (m['porcentaje_deduccion'] as num?)?.toDouble() ?? 100.0,
+    driveFileId: m['drive_file_id'] as String?,
+    driveFileUrl: m['drive_file_url'] as String?,
+    driveSyncedAt: m['drive_synced_at'] != null
+        ? DateTime.tryParse(m['drive_synced_at'].toString())
+        : null,
     documentoPath: m['documento_path'] as String?,
     notas: m['notas'] as String?,
     synced: true,
@@ -1041,17 +1079,33 @@ class SupabaseService {
       changedAfter: changedAfter,
       includeDeletedAt: false,
     );
-    final result = data.map((e) => _assetFromSupabase(e)).toList();
+    final result = data.map((e) => assetFromCloudRow(e)).toList();
     debugPrint(
       '[Supabase] Downloaded ${result.length} assets since=$changedAfter',
     );
     return result;
   }
 
+  Future<List<Map<String, dynamic>>> downloadAssetChangesRaw({
+    DateTime? changedAfter,
+  }) async {
+    if (!isAuthenticated) return [];
+    final data = await _selectChangedRows(
+      table: 'assets',
+      changedAfter: changedAfter,
+      includeDeletedAt: true,
+    );
+    return data.map((row) => Map<String, dynamic>.from(row as Map)).toList();
+  }
+
   Future<void> deleteAsset(String cloudId) async {
     if (!isAuthenticated) return;
     try {
-      await _client!.from('assets').delete().eq('id', cloudId);
+      final now = DateTime.now().toUtc().toIso8601String();
+      await _client!
+          .from('assets')
+          .update({'deleted_at': now, 'updated_at': now})
+          .eq('id', cloudId);
       debugPrint('[Supabase] Deleted asset $cloudId');
     } catch (e) {
       debugPrint('[Supabase] Delete asset error: $e');
@@ -1074,11 +1128,14 @@ class SupabaseService {
     // No sincronizar rutas locales entre dispositivos.
     'documento_path': null,
     'notas': a.notas,
+    'drive_file_id': a.driveFileId,
+    'drive_file_url': a.driveFileUrl,
+    'drive_synced_at': a.driveSyncedAt?.toUtc().toIso8601String(),
     'activo': a.activo,
     'created_at': a.createdAt.toUtc().toIso8601String(),
   };
 
-  Asset _assetFromSupabase(Map<String, dynamic> m) => Asset(
+  Asset assetFromCloudRow(Map<String, dynamic> m) => Asset(
     cloudId: m['id'] as String?,
     userId: m['user_id'] as String?,
     descripcion: m['descripcion'] as String,
@@ -1091,6 +1148,11 @@ class SupabaseService {
     vidaUtilAnos: m['vida_util_anos'] as int,
     metodoAmortizacion: m['metodo_amortizacion'] as String? ?? 'lineal',
     categoria: AssetCategory.fromDb(m['categoria'] as String? ?? 'otros'),
+    driveFileId: m['drive_file_id'] as String?,
+    driveFileUrl: m['drive_file_url'] as String?,
+    driveSyncedAt: m['drive_synced_at'] != null
+        ? DateTime.tryParse(m['drive_synced_at'].toString())
+        : null,
     documentoPath: m['documento_path'] as String?,
     notas: m['notas'] as String?,
     activo: m['activo'] as bool? ?? true,
@@ -1108,10 +1170,32 @@ class SupabaseService {
 
     var query = _client!.from(table).select().eq('user_id', uid);
     if (changedAfter != null) {
-      final iso = changedAfter.toUtc().toIso8601String();
-      query = includeDeletedAt
-          ? query.or('updated_at.gt.$iso,deleted_at.gt.$iso')
-          : query.gt('updated_at', iso);
+      // Margen anti-desfase entre relojes de dispositivos (clock skew).
+      // En la práctica hemos visto diferencias de varios minutos entre
+      // equipos que pueden ocultar soft-deletes en incremental.
+      final safeSince = changedAfter.toUtc().subtract(
+        const Duration(minutes: 15),
+      );
+      final iso = safeSince.toIso8601String();
+      if (includeDeletedAt) {
+        try {
+          query = query.or('updated_at.gt.$iso,deleted_at.gt.$iso');
+          return query;
+        } catch (e) {
+          final msg = e.toString().toLowerCase();
+          if (msg.contains('deleted_at') && msg.contains('does not exist')) {
+            // Fallback defensivo si alguna tabla remota aún no tiene deleted_at.
+            return _client!
+                .from(table)
+                .select()
+                .eq('user_id', uid)
+                .gt('updated_at', iso);
+          }
+          rethrow;
+        }
+      } else {
+        query = query.gt('updated_at', iso);
+      }
     }
     return query;
   }

@@ -27,6 +27,8 @@ import 'migrations/v24_attachment_health.dart';
 import 'migrations/v25_drive_account_name.dart';
 import 'migrations/v26_settings_sync_signature.dart';
 import 'migrations/v27_attachment_file_metadata.dart';
+import 'migrations/v28_drive_sync_queue_metadata.dart';
+import 'migrations/v29_drive_sync_queue_remote_fields.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._internal();
@@ -46,7 +48,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 27,
+      version: 29,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       onConfigure: (db) async {
@@ -142,6 +144,12 @@ class DatabaseHelper {
     if (version >= 27) {
       await _applyMigration(db, v27AttachmentFileMetadata);
     }
+    if (version >= 28) {
+      await _applyMigration(db, v28DriveSyncQueueMetadata);
+    }
+    if (version >= 29) {
+      await _applyMigration(db, v29DriveSyncQueueRemoteFields);
+    }
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -222,6 +230,12 @@ class DatabaseHelper {
     }
     if (oldVersion < 27) {
       await _applyMigration(db, v27AttachmentFileMetadata);
+    }
+    if (oldVersion < 28) {
+      await _applyMigration(db, v28DriveSyncQueueMetadata);
+    }
+    if (oldVersion < 29) {
+      await _applyMigration(db, v29DriveSyncQueueRemoteFields);
     }
   }
 

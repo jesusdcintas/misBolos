@@ -135,7 +135,7 @@ Checklist:
 - [x] Ejecutar `flutter test`.
 
 ## Estado actual
-- Completadas fases 1 a 4 en código.
+- Completadas fases 1 a 8 en código (con matices de validación real en Drive).
 - Preparada migración local para campos Drive y tabla `drive_sync_queue`.
 - Preparados campos Drive en modelos de facturas, gastos e inversiones.
 - Añadida tarjeta Google Drive en Mi Perfil con conexión, búsqueda, selección por `folderId`, apertura de carpeta y creación idempotente de estructura anual.
@@ -147,4 +147,41 @@ Checklist:
 - Implementado reintento manual de cola `drive_sync_queue` con límite de intentos y resumen de errores en UI.
 - No se ha ejecutado ninguna acción real sobre Drive desde código durante esta sesión; solo queda disponible para que el usuario la lance desde la carpeta seleccionada.
 - Pendiente restauración futura y pruebas E2E reales en Drive.
-- Pendiente crítico detectado en producción: en "Subir documentos a Drive" algunas inversiones/gastos existentes no se suben si el adjunto local se perdió y el registro ya existía; requiere cierre definitivo del flujo de recuperación/re-subida masiva para adjuntos no locales.
+- El flujo de recuperación/re-subida de adjuntos no locales está parcialmente cubierto: ya intenta descargar desde Drive (`_recoverFromDrive`) y, en re-subida masiva, copiar desde el `drive_file_id` previo al nuevo root (`copyFileToFolder`), pero sigue dependiendo de pruebas E2E reales para cerrar casos borde en producción.
+- Se añadieron advertencias de posible duplicado en formularios de gastos e inversiones (permite revisar o guardar igualmente).
+- Se añadió confirmación opcional para enviar a papelera en Drive al eliminar gasto/inversión/factura si existe `drive_file_id`.
+- Se reforzó la propagación de borrados entre dispositivos:
+  - Reintentos de `pending_deletions` para tablas core usando `soft-delete` (`deleted_at`) también en `expenses` y `assets`.
+  - Descarga incremental con margen anti-desfase de reloj ampliado.
+  - Pull defensivo completo en gastos/inversiones cuando el incremental llega vacío en sincronizaciones clave.
+
+## Validación contra código (2026-05-18)
+- Fase 2 validada en código:
+  - Login/conexión y desconexión de Drive implementados.
+  - Scopes de Drive presentes en móvil (`google_sign_in`) y desktop (`googleapis_auth`).
+- Fase 3 validada en código:
+  - Búsqueda de carpetas por nombre, selección por `folderId` y guardado en `app_settings`.
+- Fase 4 validada en código:
+  - `ensureRootFolder`, `ensureYearFolder`, `ensureQuarterFolder`, `ensureMonthFolder` y creación idempotente de estructura anual.
+- Fase 5 validada en código:
+  - Subida/actualización de factura por `drive_file_id`.
+  - Botón "Subir a Drive" en detalle.
+  - Auto-sync de factura al guardar en formulario.
+- Fase 6 validada en código:
+  - Sincronización de gastos/inversiones con detección de adjunto y MIME (`pdf`, `jpg`, `png`, `heic`, fallback).
+- Fase 7 validada en código:
+  - Backup JSON con datos de negocio + referencias Drive.
+  - Cola de fallo de backups en `drive_sync_queue`.
+- Fase 8 validada en código:
+  - Reintentos, límite de intentos, limpieza de inválidos, resumen en UI y `repairLegacyAttachmentPaths()`.
+- Fase 9 sigue futura:
+  - No existe aún servicio/UI de restauración de backups.
+- Fase 10 sigue pendiente en entorno real:
+  - Las pruebas automáticas locales (`flutter analyze` y `flutter test`) aparecen marcadas en el plan, pero la validación E2E real con Drive no está cerrada.
+
+## Pendientes operativos inmediatos
+- Verificar en entorno real Mac/iPhone que el borrado de gasto/inversión/factura se refleja en menos de 15 segundos sin pulsar "Sincronizar todo".
+- Ejecutar en Supabase remoto las migraciones:
+  - `supabase/migrations/202605180001_soft_delete_all_core_tables.sql`
+  - `supabase/migrations/202605180002_drive_metadata_columns.sql`
+- Validar E2E de deduplicación en Drive (no crear archivo nuevo si ya existe mismo documento lógico en carpeta destino).

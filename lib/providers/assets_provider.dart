@@ -8,8 +8,10 @@ import '../database/database_helper.dart';
 import '../models/asset.dart';
 import '../repositories/asset_repository.dart';
 import '../core/services/drive_document_sync_service.dart';
+import '../core/services/google_drive_service.dart';
 import '../services/supabase_service.dart';
 import '../services/ai_attachment_service.dart';
+import '../repositories/settings_repository.dart';
 
 final assetRepositoryProvider = Provider((ref) => AssetRepository.instance);
 
@@ -27,6 +29,7 @@ class AssetsNotifier extends AsyncNotifier<List<Asset>> {
 
   @override
   Future<List<Asset>> build() async {
+    _startRealtimeIfNeeded();
     return ref.read(assetRepositoryProvider).getAll();
   }
 
@@ -36,7 +39,8 @@ class AssetsNotifier extends AsyncNotifier<List<Asset>> {
   }
 
   void leaveScreen() {
-    _disposeRealtime();
+    // Mantener realtime activo aunque salgas de la pantalla para reflejar
+    // borrados/altas desde otros dispositivos sin sync manual.
   }
 
   Future<void> pullInitialFromCloud({bool force = false}) async {
@@ -144,6 +148,11 @@ class AssetsNotifier extends AsyncNotifier<List<Asset>> {
         vidaUtilAnos: (m['vida_util_anos'] as num?)?.toInt() ?? 1,
         metodoAmortizacion: (m['metodo_amortizacion'] ?? 'lineal').toString(),
         categoria: AssetCategory.fromDb((m['categoria'] ?? 'otros').toString()),
+        driveFileId: m['drive_file_id']?.toString(),
+        driveFileUrl: m['drive_file_url']?.toString(),
+        driveSyncedAt: m['drive_synced_at'] != null
+            ? DateTime.tryParse(m['drive_synced_at'].toString())
+            : null,
         documentoPath: m['documento_path']?.toString(),
         notas: m['notas']?.toString(),
         activo: m['activo'] as bool? ?? true,
@@ -165,10 +174,15 @@ class AssetsNotifier extends AsyncNotifier<List<Asset>> {
 
     try {
       _isApplyingRemoteChange = true;
-      if (event == PostgresChangeEvent.delete) {
+      if (event == PostgresChangeEvent.delete ||
+          (event == PostgresChangeEvent.update &&
+              payload.newRecord['deleted_at'] != null)) {
         final cloudId = payload.oldRecord['id']?.toString();
-        if (cloudId != null) {
-          await ref.read(assetRepositoryProvider).deleteByCloudId(cloudId);
+        final resolvedCloudId = cloudId ?? payload.newRecord['id']?.toString();
+        if (resolvedCloudId != null) {
+          await ref
+              .read(assetRepositoryProvider)
+              .deleteByCloudId(resolvedCloudId);
         }
       } else {
         final asset = _assetFromRealtimeRecord(payload.newRecord);
@@ -176,7 +190,9 @@ class AssetsNotifier extends AsyncNotifier<List<Asset>> {
         await ref.read(assetRepositoryProvider).upsertByCloudId(asset);
       }
       await reloadLocal();
-      debugPrint('[AssetsSync] Realtime ${event.name.toUpperCase()} asset_id=$id');
+      debugPrint(
+        '[AssetsSync] Realtime ${event.name.toUpperCase()} asset_id=$id',
+      );
     } catch (e) {
       debugPrint('[AssetsSync] Realtime error asset_id=$id: $e');
     } finally {
@@ -192,10 +208,7 @@ class AssetsNotifier extends AsyncNotifier<List<Asset>> {
   Future<void> add(Asset asset) async {
     final repo = ref.read(assetRepositoryProvider);
     final localId = await repo.insert(
-      asset.copyWith(
-        synced: false,
-        attachmentStatus: 'pending_upload',
-      ),
+      asset.copyWith(synced: false, attachmentStatus: 'pending_upload'),
     );
     final saved = await repo.getById(localId);
     if (saved != null && saved.documentoPath != null) {
@@ -212,10 +225,8 @@ class AssetsNotifier extends AsyncNotifier<List<Asset>> {
             attachmentStatus: 'pending_upload',
             attachmentError: null,
             attachmentOriginalPath: saved.documentoPath,
-            attachmentOriginalName:
-                AiAttachmentService.instance.normalizeOriginalFileName(
-              saved.documentoPath!,
-            ),
+            attachmentOriginalName: AiAttachmentService.instance
+                .normalizeOriginalFileName(saved.documentoPath!),
             attachmentStoredName: p.basename(stablePath),
             attachmentMimeType: _mimeTypeFor(stablePath),
             synced: false,
@@ -233,7 +244,8 @@ class AssetsNotifier extends AsyncNotifier<List<Asset>> {
       }
     }
     ref.invalidateSelf();
-    unawaited(_tryUploadAsset(localId));
+    await _tryUploadAsset(localId);
+    await _tryAutoSyncAssetToDrive(localId);
   }
 
   Future<void> updateAsset(Asset asset) async {
@@ -252,7 +264,8 @@ class AssetsNotifier extends AsyncNotifier<List<Asset>> {
           attachmentStatus: 'pending_upload',
           attachmentError: null,
           attachmentOriginalPath: asset.documentoPath,
-          attachmentOriginalName: asset.attachmentOriginalName ??
+          attachmentOriginalName:
+              asset.attachmentOriginalName ??
               AiAttachmentService.instance.normalizeOriginalFileName(
                 asset.documentoPath!,
               ),
@@ -270,7 +283,8 @@ class AssetsNotifier extends AsyncNotifier<List<Asset>> {
     await repo.update(updated);
     ref.invalidateSelf();
     if (asset.id != null) {
-      unawaited(_tryUploadAsset(asset.id!));
+      await _tryUploadAsset(asset.id!);
+      await _tryAutoSyncAssetToDrive(asset.id!);
     }
   }
 
@@ -291,12 +305,26 @@ class AssetsNotifier extends AsyncNotifier<List<Asset>> {
     }
   }
 
-  Future<void> remove(int id) async {
+  Future<void> remove(int id, {bool deleteFromDrive = false}) async {
     final repo = ref.read(assetRepositoryProvider);
     final existing = await repo.getById(id);
+    if (deleteFromDrive && existing?.driveFileId?.trim().isNotEmpty == true) {
+      try {
+        await GoogleDriveService.instance.trashFile(existing!.driveFileId!);
+      } catch (e) {
+        debugPrint('[AssetsSync] No se pudo enviar a papelera en Drive: $e');
+      }
+    }
     if (existing?.cloudId != null) {
-      await DatabaseHelper.instance.addPendingDeletion('assets', existing!.cloudId!);
-      unawaited(SupabaseService.instance.deleteAsset(existing.cloudId!));
+      await DatabaseHelper.instance.addPendingDeletion(
+        'assets',
+        existing!.cloudId!,
+      );
+      try {
+        await SupabaseService.instance.deleteAsset(existing.cloudId!);
+      } catch (e) {
+        debugPrint('[AssetsSync] deleteAsset directo falló: $e');
+      }
     }
     await repo.delete(id);
     await DriveDocumentSyncService.instance.removeQueueForEntity(
@@ -309,7 +337,9 @@ class AssetsNotifier extends AsyncNotifier<List<Asset>> {
   Future<void> darDeBaja(int id) async {
     final asset = await ref.read(assetRepositoryProvider).getById(id);
     if (asset == null) return;
-    await ref.read(assetRepositoryProvider).update(asset.copyWith(activo: false));
+    await ref
+        .read(assetRepositoryProvider)
+        .update(asset.copyWith(activo: false));
     ref.invalidateSelf();
   }
 
@@ -332,13 +362,27 @@ class AssetsNotifier extends AsyncNotifier<List<Asset>> {
       await repo.update(
         updated.copyWith(
           synced: true,
-          attachmentStatus:
-              updated.documentoPath == null ? updated.attachmentStatus : 'pending_upload',
+          attachmentStatus: updated.documentoPath == null
+              ? updated.attachmentStatus
+              : 'pending_upload',
         ),
       );
       await reloadLocal();
     } catch (e) {
       debugPrint('[AssetsSync] Upload directo error: $e');
+    }
+  }
+
+  Future<void> _tryAutoSyncAssetToDrive(int localId) async {
+    final settings = await SettingsRepository().get();
+    final ready =
+        settings.driveConnected &&
+        (settings.driveRootFolderId?.trim().isNotEmpty ?? false);
+    if (!ready) return;
+    try {
+      await DriveDocumentSyncService.instance.syncAssetById(localId);
+    } catch (e) {
+      debugPrint('[AssetsSync] Auto Drive sync error asset_id=$localId: $e');
     }
   }
 }
@@ -353,12 +397,13 @@ final assetsActivosProvider = FutureProvider<List<Asset>>((ref) {
 
 final assetAmortizacionTrimestreProvider =
     FutureProvider.family<double, ({int year, int quarter})>((ref, params) {
-  return ref
-      .read(assetRepositoryProvider)
-      .getTotalAmortizacionTrimestre(params.year, params.quarter);
-});
+      return ref
+          .read(assetRepositoryProvider)
+          .getTotalAmortizacionTrimestre(params.year, params.quarter);
+    });
 
-final assetsProximosAmortizarProvider =
-    FutureProvider.family<List<Asset>, int>((ref, meses) {
-  return ref.read(assetRepositoryProvider).getProximosAmortizar(meses);
-});
+final assetsProximosAmortizarProvider = FutureProvider.family<List<Asset>, int>(
+  (ref, meses) {
+    return ref.read(assetRepositoryProvider).getProximosAmortizar(meses);
+  },
+);
