@@ -54,6 +54,20 @@ class DriveUploadResult {
   const DriveUploadResult({required this.fileId, this.fileUrl});
 }
 
+class DriveBackupFile {
+  final String id;
+  final String name;
+  final DateTime? createdAt;
+  final int? sizeBytes;
+
+  const DriveBackupFile({
+    required this.id,
+    required this.name,
+    this.createdAt,
+    this.sizeBytes,
+  });
+}
+
 class DriveExistingFileResult {
   final String fileId;
   final String? fileUrl;
@@ -343,6 +357,46 @@ class GoogleDriveService {
       throw Exception('No se pudo subir el archivo a Drive.');
     }
     return DriveUploadResult(fileId: result.id!, fileUrl: result.webViewLink);
+  }
+
+  Future<List<DriveBackupFile>> listBackupFiles({int limit = 50}) async {
+    final api = await _driveApi();
+    final result = await api.files.list(
+      q:
+          "trashed = false "
+          "and mimeType = 'application/json' "
+          "and name contains 'backup_misbolos_'",
+      spaces: 'drive',
+      orderBy: 'createdTime desc',
+      pageSize: limit,
+      $fields: 'files(id,name,createdTime,size)',
+    );
+    final files = result.files ?? const <drive.File>[];
+    return files
+        .where((f) => f.id != null && f.name != null)
+        .map(
+          (f) => DriveBackupFile(
+            id: f.id!,
+            name: f.name!,
+            createdAt: f.createdTime,
+            sizeBytes: f.size != null ? int.tryParse(f.size!) : null,
+          ),
+        )
+        .toList();
+  }
+
+  Future<String> downloadTextFile(String fileId) async {
+    final api = await _driveApi();
+    final media = await api.files.get(
+      fileId,
+      downloadOptions: drive.DownloadOptions.fullMedia,
+    );
+    if (media is! drive.Media) {
+      throw Exception('No se pudo descargar el archivo de Drive.');
+    }
+    final chunks = await media.stream.toList();
+    final bytes = chunks.expand((c) => c).toList(growable: false);
+    return String.fromCharCodes(bytes);
   }
 
   Future<DriveExistingFileResult?> findFileInFolderByName({

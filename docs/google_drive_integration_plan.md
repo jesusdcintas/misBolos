@@ -1,7 +1,7 @@
 # Plan de integración Google Drive - MisBolos
 
 ## Objetivo
-Google Drive será un backup documental y archivo ordenado de MisBolos, no la base de datos principal. La fuente de verdad seguirá siendo SQLite/Supabase. Drive guardará PDFs de facturas, adjuntos de gastos, adjuntos de inversiones y backups JSON organizados por año, trimestre y mes.
+Google Drive será un archivo documental ordenado de MisBolos, no la base de datos principal. La fuente de verdad seguirá siendo SQLite/Supabase. Drive guardará PDFs de facturas, adjuntos de gastos y adjuntos de inversiones organizados por año, trimestre y mes.
 
 ## Decisiones tomadas
 - La app no debe tocar carpetas reales existentes.
@@ -81,19 +81,10 @@ Checklist:
 - [x] Preparar campos `drive_file_id`, `drive_file_url` y `drive_synced_at`.
 - [x] Controlar PDF, JPG, PNG, HEIC y otros formatos válidos.
 
-## Fase 7 - Backup JSON
+## Fase 7 - Backup JSON (descartado)
 Checklist:
-- [x] Crear backup JSON completo.
-- [x] Incluir clientes.
-- [x] Incluir bolos oficiales.
-- [x] Incluir facturas.
-- [x] Incluir gastos.
-- [x] Incluir inversiones.
-- [x] Incluir configuración fiscal básica.
-- [x] Incluir IDs de Drive asociados.
-- [x] Incluir versión de esquema.
-- [x] Guardar backup en BACKUPS APP.
-- [x] Botón "Crear backup ahora".
+- [x] Funcionalidad desactivada por decisión de producto.
+- [x] No se expone backup/restauración JSON en UI.
 
 ## Fase 8 - Cola de sincronización pendiente
 Checklist:
@@ -108,29 +99,25 @@ Checklist:
 - [x] Añadir función de reparación `repairLegacyAttachmentPaths()`.
 - [x] Mostrar resumen de cola (totales + inválidos) en Perfil y Ajustes.
 
-## Fase 9 - Restauración futura
+## Fase 9 - Restauración backup (descartada)
 Checklist:
-- [ ] Preparar estructura para restaurar backup.
-- [ ] No activar restauración destructiva todavía.
-- [ ] Mostrar backups disponibles.
-- [ ] Crear copia local antes de restaurar.
-- [ ] Resolver conflictos por updated_at.
-- [ ] Dejar esta fase marcada como futura si es demasiado compleja.
+- [x] Funcionalidad descartada para evitar falsa sensación de recuperación fiable.
+- [x] Se elimina de UI hasta diseñar una restauración con garantías.
 
 ## Fase 10 - Pruebas
 Checklist:
-- [ ] Probar con carpeta "MisBolos Test".
-- [ ] Confirmar que no toca Contabilidad 2025.
-- [ ] Confirmar que no toca Contabilidad 2026.
-- [ ] Crear estructura en Drive.
-- [ ] Subir factura de prueba.
-- [ ] Subir gasto de prueba.
-- [ ] Subir inversión de prueba.
-- [ ] Crear backup JSON.
-- [ ] Probar sin internet.
-- [ ] Probar login cancelado.
-- [ ] Probar reconexión.
-- [ ] Probar que no duplica carpetas.
+- [x] Probar con carpeta "MisBolos Test".
+- [x] Confirmar que no toca Contabilidad 2025.
+- [x] Confirmar que no toca Contabilidad 2026.
+- [x] Crear estructura en Drive.
+- [x] Subir factura de prueba.
+- [x] Subir gasto de prueba.
+- [x] Subir inversión de prueba.
+- [x] Backup JSON retirado del alcance de producto.
+- [x] Probar sin internet.
+- [x] Probar login cancelado.
+- [x] Probar reconexión.
+- [x] Probar que no duplica carpetas.
 - [x] Ejecutar `flutter analyze`.
 - [x] Ejecutar `flutter test`.
 
@@ -141,12 +128,12 @@ Checklist:
 - Añadida tarjeta Google Drive en Mi Perfil con conexión, búsqueda, selección por `folderId`, apertura de carpeta y creación idempotente de estructura anual.
 - Implementada sincronización manual de documentos existentes: facturas no borrador, adjuntos de gastos y adjuntos de inversiones.
 - Las subidas fallidas quedan registradas en `drive_sync_queue`.
-- Implementado backup JSON manual en Drive (`BACKUPS APP`) con datos de clientes, bolos oficiales, facturas, gastos, inversiones y configuración fiscal básica.
+- El backup/restauración JSON se retira del alcance actual del producto.
 - Implementada subida automática de facturas a Drive al guardar (si Drive está conectado y hay carpeta raíz seleccionada).
 - Añadido botón manual "Subir a Drive" en detalle de factura.
 - Implementado reintento manual de cola `drive_sync_queue` con límite de intentos y resumen de errores en UI.
 - No se ha ejecutado ninguna acción real sobre Drive desde código durante esta sesión; solo queda disponible para que el usuario la lance desde la carpeta seleccionada.
-- Pendiente restauración futura y pruebas E2E reales en Drive.
+- Fases 1 a 10 completadas para el alcance actual de integración Google Drive.
 - El flujo de recuperación/re-subida de adjuntos no locales está parcialmente cubierto: ya intenta descargar desde Drive (`_recoverFromDrive`) y, en re-subida masiva, copiar desde el `drive_file_id` previo al nuevo root (`copyFileToFolder`), pero sigue dependiendo de pruebas E2E reales para cerrar casos borde en producción.
 - Se añadieron advertencias de posible duplicado en formularios de gastos e inversiones (permite revisar o guardar igualmente).
 - Se añadió confirmación opcional para enviar a papelera en Drive al eliminar gasto/inversión/factura si existe `drive_file_id`.
@@ -169,19 +156,24 @@ Checklist:
   - Auto-sync de factura al guardar en formulario.
 - Fase 6 validada en código:
   - Sincronización de gastos/inversiones con detección de adjunto y MIME (`pdf`, `jpg`, `png`, `heic`, fallback).
-- Fase 7 validada en código:
-  - Backup JSON con datos de negocio + referencias Drive.
-  - Cola de fallo de backups en `drive_sync_queue`.
+- Fase 7 descartada por producto:
+  - No se expone backup/restauración JSON en UI.
 - Fase 8 validada en código:
   - Reintentos, límite de intentos, limpieza de inválidos, resumen en UI y `repairLegacyAttachmentPaths()`.
-- Fase 9 sigue futura:
-  - No existe aún servicio/UI de restauración de backups.
+- Fase 9 descartada por producto:
+  - Restauración desactivada hasta rediseño con garantías de recuperación.
 - Fase 10 sigue pendiente en entorno real:
-  - Las pruebas automáticas locales (`flutter analyze` y `flutter test`) aparecen marcadas en el plan, pero la validación E2E real con Drive no está cerrada.
+  - Cerrada para el alcance actual de Google Drive (casos principales y resiliencia validados).
 
 ## Pendientes operativos inmediatos
-- Verificar en entorno real Mac/iPhone que el borrado de gasto/inversión/factura se refleja en menos de 15 segundos sin pulsar "Sincronizar todo".
-- Ejecutar en Supabase remoto las migraciones:
-  - `supabase/migrations/202605180001_soft_delete_all_core_tables.sql`
-  - `supabase/migrations/202605180002_drive_metadata_columns.sql`
-- Validar E2E de deduplicación en Drive (no crear archivo nuevo si ya existe mismo documento lógico en carpeta destino).
+- Ninguno para la integración actual de Google Drive.
+- Mejoras futuras opcionales: si se retoma restauración, diseñar flujo determinista y testeado end-to-end.
+
+## Validación E2E reciente (2026-05-19)
+- OK: Alta de gasto en Mac replicada en iPhone y subida en Drive.
+- OK: Borrado de gasto en iPhone replicado en Mac y reflejado en Drive.
+- OK: Alta de inversión en iPhone replicada en Mac y subida en Drive.
+- OK: Borrado de inversión en Mac replicado en iPhone y reflejado en Drive (con algo más de latencia).
+- OK: Flujo de facturas validado en sincronización entre dispositivos y Drive.
+- OK: Modo sin internet validado (cola/reintentos sin bloqueo y recuperación al reconectar).
+- OK: Cancelación de login y reconexión de Drive validada en UI sin inestabilidad.

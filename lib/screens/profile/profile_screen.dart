@@ -6,7 +6,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_strings.dart';
-import '../../core/services/drive_backup_service.dart';
 import '../../core/services/drive_document_sync_service.dart';
 import '../../core/services/google_drive_service.dart';
 import '../../models/app_settings.dart';
@@ -379,7 +378,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   Text(
                     connected
                         ? accountLabel
-                        : 'Conecta Google Drive para activar el backup documental.',
+                        : 'Conecta Google Drive para activar la sincronización documental.',
                     style: const TextStyle(
                       fontSize: 12,
                       color: AppColors.textSecondary,
@@ -594,13 +593,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   onPressed: () => context.push('/attachments/broken'),
                   icon: const Icon(Icons.broken_image_outlined),
                   label: const Text('Adjuntos rotos'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: (!_driveBusy && driveReady)
-                      ? _createDriveBackupNow
-                      : null,
-                  icon: const Icon(Icons.backup_outlined),
-                  label: const Text('Crear backup ahora'),
                 ),
               ],
             ),
@@ -842,18 +834,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       },
       progressLabel: 'Subiendo documentos a Drive...',
       errorPrefix: 'No se pudieron subir documentos a Drive',
-    );
-  }
-
-  Future<void> _createDriveBackupNow() async {
-    await _runDriveAction(
-      () async {
-        final result = await DriveBackupService.instance.createBackupNow();
-        ref.invalidate(settingsProvider);
-        _showDriveMessage('Backup creado correctamente: ${result.fileName}');
-      },
-      progressLabel: 'Creando backup en Drive...',
-      errorPrefix: 'No se pudo crear el backup',
     );
   }
 
