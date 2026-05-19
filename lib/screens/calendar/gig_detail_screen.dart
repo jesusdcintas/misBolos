@@ -11,16 +11,11 @@ import '../../models/invoice.dart';
 import '../../providers/gig_provider.dart';
 import '../../providers/client_provider.dart';
 import '../../providers/invoice_provider.dart';
-import '../../providers/settings_provider.dart';
-import '../../services/pdf_service.dart';
-import '../../services/notification_service.dart';
 import '../../services/google_auth_service.dart';
 import '../../services/google_calendar_service.dart';
-import '../../services/whatsapp_service.dart';
 import '../../widgets/common/status_badge.dart';
 import '../../widgets/common/facturable_badge.dart';
 import '../../widgets/common/cobrado_confetti_button.dart';
-import 'package:share_plus/share_plus.dart';
 
 class GigDetailScreen extends ConsumerWidget {
   final String gigId;
@@ -175,31 +170,17 @@ class _GigDetailContent extends ConsumerWidget {
         case GigStatus.facturado:
           actions.addAll([
             _ActionButton(
-              label: AppStrings.verPDF,
+              label: 'Ver factura',
               icon: Icons.picture_as_pdf,
               color: AppColors.primary,
               onPressed: () => _viewPdf(context, ref, gig),
-            ),
-            const SizedBox(height: 8),
-            _ActionButton(
-              label: AppStrings.compartirPDF,
-              icon: Icons.share,
-              color: AppColors.primary,
-              onPressed: () => _sharePdf(context, ref, gig),
-            ),
-            const SizedBox(height: 8),
-            CobradoConfettiButton(
-              label: AppStrings.marcarPagado,
-              icon: Icons.check_circle,
-              color: AppColors.accentGreen,
-              onPressed: () => _markAsPaid(context, ref, gig),
             ),
           ]);
           break;
         case GigStatus.cobrado:
           actions.add(
             _ActionButton(
-              label: AppStrings.verPDF,
+              label: 'Ver factura',
               icon: Icons.picture_as_pdf,
               color: AppColors.primary,
               onPressed: () => _viewPdf(context, ref, gig),
@@ -242,19 +223,6 @@ class _GigDetailContent extends ConsumerWidget {
           icon: Icons.cancel,
           color: AppColors.accentRed,
           onPressed: () => _cancelGig(context, ref, gig),
-          outlined: true,
-        ),
-      ]);
-    }
-
-    if (gig.facturable) {
-      actions.addAll([
-        const SizedBox(height: 8),
-        _ActionButton(
-          label: 'Enviar por WhatsApp',
-          icon: Icons.chat_outlined,
-          color: AppColors.success,
-          onPressed: () => _openWhatsAppForGig(context, ref, gig),
           outlined: true,
         ),
       ]);
@@ -315,103 +283,6 @@ class _GigDetailContent extends ConsumerWidget {
       '[GigDetail] pdf invoice lookup done invoice_id=${invoice.id} gig_id=${invoice.gigId}',
     );
     context.push('/invoice/${invoice.id}');
-  }
-
-  Future<void> _openWhatsAppForGig(
-    BuildContext context,
-    WidgetRef ref,
-    Gig gig,
-  ) async {
-    final client = await ref.read(clientByIdProvider(gig.clientId).future);
-    if (client == null) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No se encontró el cliente')),
-        );
-      }
-      return;
-    }
-
-    final message =
-        'Hola ${client.nombre}, confirmamos el bolo del '
-        '${DateFormatter.dayOfWeek(gig.fecha)}'
-        '${gig.cachet != null ? ' por ${CurrencyFormatter.format(gig.cachet!)}' : ''}.';
-
-    final ok = await const WhatsAppService().openChat(
-      phone: client.whatsappPhone,
-      message: message,
-    );
-    if (!ok && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('El cliente no tiene un teléfono válido para WhatsApp'),
-        ),
-      );
-    }
-  }
-
-  Future<void> _sharePdf(BuildContext context, WidgetRef ref, Gig gig) async {
-    final box = context.findRenderObject() as RenderBox?;
-    final shareOrigin = box != null
-        ? box.localToGlobal(Offset.zero) & box.size
-        : const Rect.fromLTWH(0, 0, 100, 100);
-    try {
-      if (gig.invoiceId == null) return;
-      debugPrint(
-        '[GigDetail] pdf invoice lookup gig_id=${gig.id} invoice_id=${gig.invoiceId}',
-      );
-      var invoice = await ref.read(invoiceByIdProvider(gig.invoiceId!).future);
-      invoice ??= await ref.read(invoiceByGigProvider(gig.id).future);
-      final client = await ref.read(clientByIdProvider(gig.clientId).future);
-      final settings = await ref.read(settingsProvider.future);
-
-      if (invoice == null || client == null) return;
-
-      final file = await PdfService().generateInvoicePdf(
-        invoice: invoice,
-        client: client,
-        settings: settings,
-      );
-
-      await Share.shareXFiles([
-        XFile(file.path),
-      ], sharePositionOrigin: shareOrigin);
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
-      }
-    }
-  }
-
-  Future<void> _markAsPaid(BuildContext context, WidgetRef ref, Gig gig) async {
-    HapticFeedback.heavyImpact();
-    await ref
-        .read(gigsProvider.notifier)
-        .updateStatus(gig.id, GigStatus.cobrado);
-    if (gig.invoiceId != null) {
-      await ref
-          .read(invoicesProvider.notifier)
-          .updateStatus(gig.invoiceId!, InvoiceStatus.pagada);
-
-      final invoice = await ref.read(
-        invoiceByIdProvider(gig.invoiceId!).future,
-      );
-      if (invoice != null) {
-        await NotificationService.instance.cancelNotification(invoice.numero);
-      }
-    }
-    // Sync status to Google Calendar
-    final updatedGig = gig.copyWith(status: GigStatus.cobrado);
-    await _syncGigToCalendar(ref, updatedGig);
-
-    ref.invalidate(gigByIdProvider(gig.id));
-    if (context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Bolo marcado como pagado')));
-    }
   }
 
   Future<void> _markAsCobradoEnB(

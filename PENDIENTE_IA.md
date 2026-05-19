@@ -28,6 +28,7 @@ Fecha de actualización: 2026-05-07
   - tickets/facturas variados
   - validación de consistencia de importes, fecha y categoría
   - revisión de mensajes de error (rate limit, JSON inválido)
+  - Arreglar compartir por whatsapp
 
 ## Pendiente opcional
 

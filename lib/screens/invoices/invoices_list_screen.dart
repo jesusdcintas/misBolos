@@ -836,25 +836,9 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
                         ref,
                         selectedInvoices,
                       );
-                    } else if (value == 'editConcept') {
-                      await _showBulkConceptDialog(
-                        actionContext,
-                        ref,
-                        selectedInvoices,
-                      );
                     }
                   },
                   itemBuilder: (context) => [
-                    const PopupMenuItem(
-                      value: 'editConcept',
-                      child: Row(
-                        children: [
-                          Icon(Icons.edit_note, size: 20),
-                          SizedBox(width: 12),
-                          Text('Cambiar concepto'),
-                        ],
-                      ),
-                    ),
                     const PopupMenuItem(
                       value: 'sendEmail',
                       child: Row(
@@ -1050,116 +1034,6 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
         SnackBar(content: Text('Emails enviados: $sent · fallidos: $failed')),
       );
     }
-  }
-
-  Future<void> _showBulkConceptDialog(
-    BuildContext context,
-    WidgetRef ref,
-    Set<String> ids,
-  ) async {
-    if (ids.isEmpty) return;
-    final conceptController = TextEditingController();
-    var replaceAllLines = false;
-
-    final accepted = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setModalState) => AlertDialog(
-          title: Text('Cambiar concepto en ${ids.length} facturas'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TextField(
-                controller: conceptController,
-                decoration: const InputDecoration(
-                  labelText: 'Nuevo concepto',
-                  hintText: 'Ej: DJ SET',
-                ),
-                textCapitalization: TextCapitalization.characters,
-              ),
-              const SizedBox(height: 12),
-              CheckboxListTile(
-                value: replaceAllLines,
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Reemplazar todas las líneas'),
-                subtitle: const Text(
-                  'Si está desactivado, solo cambia la primera línea.',
-                ),
-                onChanged: (value) {
-                  setModalState(() {
-                    replaceAllLines = value ?? false;
-                  });
-                },
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancelar'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Aplicar'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    final newConcept = conceptController.text.trim();
-    conceptController.dispose();
-    if (accepted != true || newConcept.isEmpty) return;
-
-    final invoices = ref.read(invoicesProvider).valueOrNull ?? [];
-    final selected = invoices
-        .where((invoice) => ids.contains(invoice.id))
-        .toList();
-    if (selected.isEmpty) return;
-
-    var updatedCount = 0;
-    var skippedCount = 0;
-    var failedCount = 0;
-
-    for (final invoice in selected) {
-      try {
-        if (invoice.items.isEmpty) {
-          skippedCount++;
-          continue;
-        }
-        final updatedItems = <InvoiceLineItem>[];
-        for (var i = 0; i < invoice.items.length; i++) {
-          final line = invoice.items[i];
-          final shouldReplace = replaceAllLines || i == 0;
-          updatedItems.add(
-            InvoiceLineItem(
-              cantidad: line.cantidad,
-              descripcion: shouldReplace ? newConcept : line.descripcion,
-              precioUnitario: line.precioUnitario,
-              totalLinea: line.totalLinea,
-            ),
-          );
-        }
-
-        await ref
-            .read(invoicesProvider.notifier)
-            .updateInvoice(invoice.copyWith(items: updatedItems));
-        updatedCount++;
-      } catch (_) {
-        failedCount++;
-      }
-    }
-
-    if (!context.mounted) return;
-    final parts = <String>[
-      '$updatedCount actualizadas',
-      if (skippedCount > 0) '$skippedCount sin líneas',
-      if (failedCount > 0) '$failedCount con error',
-    ];
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Concepto masivo: ${parts.join(' · ')}')),
-    );
   }
 
   Future<void> _bulkMarkAs(

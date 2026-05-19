@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_strings.dart';
-import '../../core/services/drive_document_sync_service.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../models/invoice.dart';
@@ -519,15 +518,6 @@ class _InvoiceDetailContent extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 8),
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: () => _syncInvoiceToDrive(context, ref),
-            icon: const Icon(Icons.cloud_upload_outlined),
-            label: const Text('Subir a Drive'),
-          ),
-        ),
-        const SizedBox(height: 8),
 
         // Enviar por email
         SizedBox(
@@ -549,15 +539,6 @@ class _InvoiceDetailContent extends ConsumerWidget {
         ),
         const SizedBox(height: 8),
 
-        // Abrir WhatsApp con mensaje prellenado
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: () => _openWhatsApp(context, ref),
-            icon: const Icon(Icons.chat_outlined),
-            label: const Text('Enviar PDF por WhatsApp'),
-          ),
-        ),
         const SizedBox(height: 16),
 
         emailLogsAsync.when(
@@ -731,80 +712,6 @@ class _InvoiceDetailContent extends ConsumerWidget {
           SnackBar(content: Text('Error enviando email: $message')),
         );
       }
-    }
-  }
-
-  Future<void> _syncInvoiceToDrive(BuildContext context, WidgetRef ref) async {
-    try {
-      final settings = await ref.read(settingsProvider.future);
-      final hasDriveRoot = (settings.driveRootFolderId ?? '').isNotEmpty;
-      if (!settings.driveConnected || !hasDriveRoot) {
-        if (!context.mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Selecciona una carpeta de trabajo antes de sincronizar.',
-            ),
-          ),
-        );
-        return;
-      }
-      await DriveDocumentSyncService.instance.syncInvoiceById(invoice.id);
-      ref.invalidate(invoicesProvider);
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Factura subida a Drive.')));
-    } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'No se pudo subir el archivo. Se añadirá a pendientes. Error: $e',
-          ),
-        ),
-      );
-    }
-  }
-
-  Future<void> _openWhatsApp(BuildContext context, WidgetRef ref) async {
-    final client = await ref.read(clientByIdProvider(invoice.clientId).future);
-    if (client == null) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No se encontró el cliente')),
-        );
-      }
-      return;
-    }
-    if (!context.mounted) return;
-
-    final message =
-        'Hola ${client.nombre}, te comparto la factura #${invoice.numero} '
-        'por ${CurrencyFormatter.format(invoice.total)}. '
-        'Fecha: ${DateFormatter.short(invoice.fecha)}.';
-    final box = context.findRenderObject() as RenderBox?;
-    final shareOrigin = box != null
-        ? box.localToGlobal(Offset.zero) & box.size
-        : const Rect.fromLTWH(0, 0, 100, 100);
-    try {
-      final settings = await ref.read(settingsProvider.future);
-      final file = await PdfService().generateInvoicePdf(
-        invoice: invoice,
-        client: client,
-        settings: settings,
-      );
-      await Share.shareXFiles(
-        [XFile(file.path)],
-        text: message,
-        subject: 'Factura #${invoice.numero}',
-        sharePositionOrigin: shareOrigin,
-      );
-    } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo compartir por WhatsApp: $e')),
-      );
     }
   }
 
