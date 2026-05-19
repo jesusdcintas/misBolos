@@ -22,6 +22,26 @@ import '../../services/ai_attachment_service.dart';
 import '../../services/supabase_service.dart';
 import 'google_drive_service.dart';
 
+class DriveProgressSnapshot {
+  final bool active;
+  final String label;
+  final int processed;
+  final int total;
+
+  const DriveProgressSnapshot({
+    this.active = false,
+    this.label = '',
+    this.processed = 0,
+    this.total = 0,
+  });
+
+  double? get progress {
+    if (!active) return null;
+    if (total <= 0) return null;
+    return (processed / total).clamp(0.0, 1.0);
+  }
+}
+
 class DriveDocumentSyncResult {
   final int invoicesUploaded;
   final int expensesUploaded;
@@ -172,9 +192,33 @@ class DriveDocumentSyncService {
   static const String statusInvalidLocalFile = 'invalid_local_file';
   static const String statusInternalBug = 'internal_bug';
   static Future<DriveDocumentSyncResult>? _documentSyncInFlight;
+  final ValueNotifier<DriveProgressSnapshot> progress =
+      ValueNotifier<DriveProgressSnapshot>(const DriveProgressSnapshot());
   int _driveListMs = 0;
   int _driveUploadMs = 0;
   int _driveDownloadMs = 0;
+
+  void _startProgress({required String label, required int total}) {
+    progress.value = DriveProgressSnapshot(
+      active: true,
+      label: label,
+      processed: 0,
+      total: total,
+    );
+  }
+
+  void _updateProgress({required String label, required int processed, required int total}) {
+    progress.value = DriveProgressSnapshot(
+      active: true,
+      label: label,
+      processed: processed,
+      total: total,
+    );
+  }
+
+  void _finishProgress() {
+    progress.value = const DriveProgressSnapshot();
+  }
 
   Future<DriveDocumentSyncResult> syncExistingDocuments({
     String reason = 'drive_sync',
@@ -192,6 +236,7 @@ class DriveDocumentSyncService {
     try {
       return await _documentSyncInFlight!;
     } finally {
+      _finishProgress();
       debugPrint('[SYNC] total: ${totalWatch.elapsedMilliseconds} ms');
       _documentSyncInFlight = null;
     }
@@ -216,7 +261,22 @@ class DriveDocumentSyncService {
     var broken = 0;
 
     final invoices = await _invoiceRepository.getAll();
+    final expenses = await _expenseRepository.getAll();
+    final assets = await _assetRepository.getAll();
+    final totalItems = invoices.length + expenses.length + assets.length;
+    var processedItems = 0;
+    _startProgress(
+      label: 'Sincronizando documentos con Drive...',
+      total: totalItems,
+    );
+
     for (final baseInvoice in invoices) {
+      processedItems++;
+      _updateProgress(
+        label: 'Sincronizando facturas ($processedItems/$totalItems)',
+        processed: processedItems,
+        total: totalItems,
+      );
       final invoice = await _invoiceRepository.getById(baseInvoice.id);
       if (invoice == null) {
         result = result.copyWith(skipped: result.skipped + 1);
@@ -246,8 +306,13 @@ class DriveDocumentSyncService {
       }
     }
 
-    final expenses = await _expenseRepository.getAll();
     for (final expense in expenses) {
+      processedItems++;
+      _updateProgress(
+        label: 'Sincronizando gastos ($processedItems/$totalItems)',
+        processed: processedItems,
+        total: totalItems,
+      );
       if (expense.id == null) {
         debugPrint(
           '[DRIVE][UPLOAD] skipped_reason=missing_entity_id entity_type=expense',
@@ -306,8 +371,13 @@ class DriveDocumentSyncService {
       }
     }
 
-    final assets = await _assetRepository.getAll();
     for (final asset in assets) {
+      processedItems++;
+      _updateProgress(
+        label: 'Sincronizando inversiones ($processedItems/$totalItems)',
+        processed: processedItems,
+        total: totalItems,
+      );
       if (asset.id == null) {
         debugPrint(
           '[DRIVE][UPLOAD] skipped_reason=missing_entity_id entity_type=asset',
@@ -551,6 +621,10 @@ class DriveDocumentSyncService {
       '[DRIVE][REUPLOAD] expenses found=${expenses.length} years=$expenseYears',
     );
     final assets = await _assetRepository.getAll();
+    final totalItems =
+        invoices.length + expenses.where((e) => e.id != null).length + assets.where((a) => a.id != null).length;
+    var processedItems = 0;
+    _startProgress(label: 'Subiendo documentos a Drive...', total: totalItems);
     final assetYears = assets.map((e) => e.fechaCompra.year).toSet().toList()
       ..sort();
     debugPrint(
@@ -576,6 +650,12 @@ class DriveDocumentSyncService {
     }
 
     for (final invoice in invoices) {
+      processedItems++;
+      _updateProgress(
+        label: 'Subiendo facturas ($processedItems/$totalItems)',
+        processed: processedItems,
+        total: totalItems,
+      );
       try {
         var candidate = invoice;
         final existingId = invoice.driveFileId?.trim();
@@ -635,6 +715,12 @@ class DriveDocumentSyncService {
 
     for (final expense in expenses) {
       if (expense.id == null) continue;
+      processedItems++;
+      _updateProgress(
+        label: 'Subiendo gastos ($processedItems/$totalItems)',
+        processed: processedItems,
+        total: totalItems,
+      );
       try {
         var candidate = expense;
         final existingId = candidate.driveFileId?.trim();
@@ -724,6 +810,12 @@ class DriveDocumentSyncService {
 
     for (final asset in assets) {
       if (asset.id == null) continue;
+      processedItems++;
+      _updateProgress(
+        label: 'Subiendo inversiones ($processedItems/$totalItems)',
+        processed: processedItems,
+        total: totalItems,
+      );
       try {
         var candidate = asset;
         final existingId = candidate.driveFileId?.trim();
@@ -822,6 +914,7 @@ class DriveDocumentSyncService {
     debugPrint(
       '[DRIVE][REUPLOAD] done time=${totalWatch.elapsedMilliseconds} ms',
     );
+    _finishProgress();
 
     return DriveReuploadResult(
       uploaded: uploaded,

@@ -285,4 +285,20 @@ class DatabaseHelper {
     final db = await database;
     await db.delete('pending_deletions', where: 'id = ?', whereArgs: [id]);
   }
+
+  Future<void> clearUserScopedData() async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.delete('invoice_email_logs');
+      await txn.delete('invoice_number_changes');
+      await txn.delete('sync_queue');
+      await txn.delete('pending_deletions');
+      await txn.delete('drive_sync_queue');
+      await txn.delete('expenses');
+      await txn.delete('assets');
+      await txn.delete('invoices');
+      await txn.delete('gigs');
+      await txn.delete('clients');
+    });
+  }
 }

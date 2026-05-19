@@ -10,6 +10,7 @@ import '../../core/services/drive_document_sync_service.dart';
 import '../../core/services/google_drive_service.dart';
 import '../../models/app_settings.dart';
 import '../../providers/assets_provider.dart';
+import '../../providers/auth_controller.dart';
 import '../../providers/expenses_provider.dart';
 import '../../providers/invoice_provider.dart';
 import '../../providers/settings_provider.dart';
@@ -41,9 +42,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   List<DriveFolderResult> _driveFolderResults = [];
   bool _driveBusy = false;
   String _driveProgressLabel = '';
+  double? _driveProgressValue;
+
+  @override
+  void initState() {
+    super.initState();
+    DriveDocumentSyncService.instance.progress.addListener(_handleDriveProgress);
+  }
 
   @override
   void dispose() {
+    DriveDocumentSyncService.instance.progress.removeListener(
+      _handleDriveProgress,
+    );
     _nombreController.dispose();
     _nifController.dispose();
     _direccionController.dispose();
@@ -55,6 +66,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     _ibanController.dispose();
     _driveSearchController.dispose();
     super.dispose();
+  }
+
+  void _handleDriveProgress() {
+    if (!mounted) return;
+    final snapshot = DriveDocumentSyncService.instance.progress.value;
+    setState(() {
+      _driveBusy = snapshot.active;
+      _driveProgressLabel = snapshot.label;
+      _driveProgressValue = snapshot.progress;
+    });
   }
 
   void _loadSettings(AppSettings s) {
@@ -302,14 +323,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             if (_driveBusy) ...[
               const SizedBox(height: 10),
               LinearProgressIndicator(
+                value: _driveProgressValue,
                 minHeight: 6,
                 borderRadius: BorderRadius.circular(6),
               ),
               const SizedBox(height: 6),
               Text(
-                _driveProgressLabel.isEmpty
+                (_driveProgressLabel.isEmpty
                     ? 'Procesando en Google Drive...'
-                    : _driveProgressLabel,
+                    : _driveProgressLabel) +
+                    (_driveProgressValue != null
+                        ? ' · ${(_driveProgressValue! * 100).toStringAsFixed(0)}%'
+                        : ''),
                 style: const TextStyle(
                   fontSize: 12,
                   color: AppColors.textSecondary,
@@ -404,7 +429,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         OutlinedButton.icon(
                           onPressed: _driveBusy ? null : _disconnectDrive,
                           icon: const Icon(Icons.logout),
-                          label: const Text('Desconectar'),
+                          label: const Text('Desconectar Drive'),
                         ),
                       ],
                     ],
@@ -1008,12 +1033,12 @@ class _GoogleSection extends ConsumerWidget {
               ),
               const SizedBox(height: 12),
               const Text(
-                'Conecta tu cuenta de Google',
+                'Conexiones de Google',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 4),
               const Text(
-                'Sincroniza Google Calendar con tus bolos',
+                'Conecta Calendar para sincronizar bolos y agenda',
                 style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
                 textAlign: TextAlign.center,
               ),
@@ -1105,10 +1130,12 @@ class _GoogleSection extends ConsumerWidget {
                   ref.read(googleAuthProvider.notifier).connectCalendarOnly(),
             ),
           const Divider(height: 1),
-          ListTile(
-            leading: const Icon(Icons.logout, color: AppColors.accentRed),
-            title: const Text('Cerrar sesión de Google'),
-            onTap: () => ref.read(googleAuthProvider.notifier).signOut(),
+          const ListTile(
+            leading: Icon(Icons.info_outline, color: AppColors.textSecondary),
+            title: Text('Sesión principal'),
+            subtitle: Text(
+              'Para salir de MisBolos usa "Cerrar sesión" en Sincronización en la nube.',
+            ),
           ),
         ],
       ),
@@ -1374,6 +1401,15 @@ class _SyncSection extends ConsumerWidget {
                         .syncAll(reason: 'manual_button'),
                   ),
                 ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.logout),
+                    label: const Text('Cerrar sesión (MisBolos)'),
+                    onPressed: () => _signOut(context, ref),
+                  ),
+                ),
               ],
 
               // Estado de sincronización
@@ -1448,5 +1484,25 @@ class _SyncSection extends ConsumerWidget {
     if (diff.inMinutes < 60) return 'Hace ${diff.inMinutes} min';
     if (diff.inHours < 24) return 'Hace ${diff.inHours} h';
     return '${dt.day}/${dt.month}/${dt.year}';
+  }
+
+  Future<void> _signOut(BuildContext context, WidgetRef ref) async {
+    final ok = await ref.read(authControllerProvider.notifier).signOut();
+    if (!context.mounted) return;
+    if (ok) {
+      ref.invalidate(syncProvider);
+      ref.invalidate(invoicesProvider);
+      ref.invalidate(expensesProvider);
+      ref.invalidate(assetsProvider);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(
+        const SnackBar(content: Text('Sesión de MisBolos cerrada')),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo cerrar sesión')),
+      );
+    }
   }
 }

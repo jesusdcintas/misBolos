@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/theme/app_theme.dart';
 import 'providers/settings_provider.dart';
@@ -26,6 +27,10 @@ import 'screens/settings/settings_screen.dart';
 import 'screens/settings/broken_attachments_screen.dart';
 import 'screens/dashboard/financial_summary_screen.dart';
 import 'screens/profile/profile_screen.dart';
+import 'screens/auth/login_screen.dart';
+import 'screens/auth/register_screen.dart';
+import 'screens/auth/forgot_password_screen.dart';
+import 'screens/auth/reset_password_screen.dart';
 import 'screens/expenses/expense_form_screen.dart';
 import 'screens/expenses/expense_detail_screen.dart';
 import 'screens/assets/asset_form_screen.dart';
@@ -54,10 +59,51 @@ final _rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
 
 final routerProvider = Provider<GoRouter>((ref) {
+  final authRefresh = GoRouterRefreshStream(
+    Supabase.instance.client.auth.onAuthStateChange.map((_) => null),
+  );
+  ref.onDispose(authRefresh.dispose);
+
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
+    refreshListenable: authRefresh,
     initialLocation: '/',
+    redirect: (context, state) {
+      final session = Supabase.instance.client.auth.currentSession;
+      final isResetPassword = state.matchedLocation == '/reset-password';
+      final loggingIn = state.matchedLocation == '/login' ||
+          state.matchedLocation == '/register' ||
+          state.matchedLocation == '/forgot-password';
+
+      if (session == null && !loggingIn && !isResetPassword) return '/login';
+      if (isResetPassword) return null;
+      if (session != null && loggingIn) return '/';
+      return null;
+    },
     routes: [
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/login',
+        pageBuilder: (context, state) => _slideUpPage(const LoginScreen(), state),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/register',
+        pageBuilder: (context, state) =>
+            _slideUpPage(const RegisterScreen(), state),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/forgot-password',
+        pageBuilder: (context, state) =>
+            _slideUpPage(const ForgotPasswordScreen(), state),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/reset-password',
+        pageBuilder: (context, state) =>
+            _slideUpPage(const ResetPasswordScreen(), state),
+      ),
       ShellRoute(
         navigatorKey: _shellNavigatorKey,
         builder: (context, state, child) => _ScaffoldWithNavBar(child: child),
@@ -277,6 +323,7 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp>
   Timer? _autoSyncTimer;
   Timer? _queueRetryTimer;
   Timer? _autoCloudSyncTimer;
+  StreamSubscription<AuthState>? _authStateSub;
 
   @override
   void initState() {
@@ -292,16 +339,31 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp>
     _autoCloudSyncTimer = Timer.periodic(const Duration(seconds: 45), (_) {
       unawaited(_autoCloudSyncTick());
     });
+    _authStateSub = Supabase.instance.client.auth.onAuthStateChange.listen((
+      authState,
+    ) {
+      if (authState.event == AuthChangeEvent.passwordRecovery) {
+        ref.read(routerProvider).go('/reset-password');
+      }
+      if (authState.session == null) return;
+      unawaited(_syncAfterLogin());
+    });
   }
 
   Future<void> _autoSync() async {
     if (_synced) return;
-    _synced = true;
     if (!mounted) return;
     final notifier = ref.read(syncProvider.notifier);
-    if (notifier.isAuthenticated) {
-      await notifier.syncAll(reason: 'app_start');
-    }
+    if (!notifier.isAuthenticated) return;
+    _synced = true;
+    await notifier.syncAll(reason: 'app_start');
+  }
+
+  Future<void> _syncAfterLogin() async {
+    if (!mounted) return;
+    final notifier = ref.read(syncProvider.notifier);
+    if (!notifier.isAuthenticated) return;
+    await notifier.syncAll(reason: 'auth_signed_in');
   }
 
   Future<void> _restoreDriveSilently() async {
@@ -337,6 +399,7 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp>
     _autoSyncTimer?.cancel();
     _queueRetryTimer?.cancel();
     _autoCloudSyncTimer?.cancel();
+    _authStateSub?.cancel();
     super.dispose();
   }
 
@@ -359,6 +422,23 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp>
         GlobalCupertinoLocalizations.delegate,
       ],
     );
+  }
+}
+
+class GoRouterRefreshStream extends ChangeNotifier {
+  GoRouterRefreshStream(Stream<dynamic> stream) {
+    notifyListeners();
+    _subscription = stream.asBroadcastStream().listen(
+          (_) => notifyListeners(),
+        );
+  }
+
+  late final StreamSubscription<dynamic> _subscription;
+
+  @override
+  void dispose() {
+    _subscription.cancel();
+    super.dispose();
   }
 }
 

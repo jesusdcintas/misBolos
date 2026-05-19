@@ -100,6 +100,50 @@ class SupabaseService {
     debugPrint('[Supabase] Signed out');
   }
 
+  Future<AuthResponse> signInWithEmailPassword({
+    required String email,
+    required String password,
+  }) async {
+    if (_client == null) {
+      throw StateError('Supabase no está inicializado');
+    }
+    return _client!.auth.signInWithPassword(email: email, password: password);
+  }
+
+  Future<AuthResponse> signUpWithEmailPassword({
+    required String email,
+    required String password,
+  }) async {
+    if (_client == null) {
+      throw StateError('Supabase no está inicializado');
+    }
+    return _client!.auth.signUp(email: email, password: password);
+  }
+
+  Future<void> sendPasswordResetEmail({
+    required String email,
+    String? redirectTo,
+  }) async {
+    if (_client == null) {
+      throw StateError('Supabase no está inicializado');
+    }
+    final effectiveRedirect = redirectTo ??
+        (Platform.isIOS || Platform.isAndroid || Platform.isMacOS
+            ? 'misbolos://reset-password'
+            : null);
+    await _client!.auth.resetPasswordForEmail(
+      email,
+      redirectTo: effectiveRedirect,
+    );
+  }
+
+  Future<UserResponse> updatePassword(String newPassword) async {
+    if (_client == null) {
+      throw StateError('Supabase no está inicializado');
+    }
+    return _client!.auth.updateUser(UserAttributes(password: newPassword));
+  }
+
   Future<dynamic> invokeFunction(
     String functionName, {
     required Map<String, dynamic> body,

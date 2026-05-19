@@ -297,20 +297,58 @@ class SyncNotifier extends StateNotifier<SyncState> {
       final settingsRepo = SettingsRepository();
       final settings = await settingsRepo.get();
       final lastSyncAt = settings.lastCloudSyncAt;
+      final localClients = await ClientRepository.instance.getAll();
+      final localGigs = await GigRepository.instance.getAll();
+      final localInvoices = await InvoiceRepository.instance.getAll();
 
       // Descargar solo cambios desde Supabase
       final clientsWatch = Stopwatch()..start();
-      final cloudClients = await _supabase.downloadClientsChangesSince(
+      var cloudClients = await _supabase.downloadClientsChangesSince(
         lastSyncAt,
       );
+      if (cloudClients.isEmpty &&
+          localClients.isEmpty &&
+          lastSyncAt != null &&
+          _shouldRunDefensiveCloudPull(reason)) {
+        debugPrint(
+          '[SYNC][DATA] clients incremental vacío con local vacío; ejecutando pull defensivo completo',
+        );
+        cloudClients = await _supabase.downloadClientsChangesSince(null);
+      }
       clientsWatch.stop();
       final gigsWatch = Stopwatch()..start();
-      final cloudGigs = await _supabase.downloadGigs(changedAfter: lastSyncAt);
+      var cloudGigs = await _supabase.downloadGigs(changedAfter: lastSyncAt);
+      if (cloudGigs.isEmpty &&
+          localGigs.isEmpty &&
+          lastSyncAt != null &&
+          _shouldRunDefensiveCloudPull(reason)) {
+        debugPrint(
+          '[SYNC][DATA] gigs incremental vacío con local vacío; ejecutando pull defensivo completo',
+        );
+        cloudGigs = await _supabase.downloadGigs(changedAfter: null);
+      }
       gigsWatch.stop();
       final invoicesWatch = Stopwatch()..start();
-      final cloudInvoices = await _supabase.downloadInvoices(
-        changedAfter: lastSyncAt,
+      final forceFullInvoicesPull =
+          (reason == 'manual_button' || reason == 'auth_signed_in') &&
+          _shouldRunDefensiveCloudPull(reason);
+      var cloudInvoices = await _supabase.downloadInvoices(
+        changedAfter: forceFullInvoicesPull ? null : lastSyncAt,
       );
+      if (forceFullInvoicesPull) {
+        debugPrint(
+          '[SYNC][DATA] invoices pull completo forzado (reason=$reason)',
+        );
+      }
+      if (cloudInvoices.isEmpty &&
+          localInvoices.isEmpty &&
+          lastSyncAt != null &&
+          _shouldRunDefensiveCloudPull(reason)) {
+        debugPrint(
+          '[SYNC][DATA] invoices incremental vacío con local vacío; ejecutando pull defensivo completo',
+        );
+        cloudInvoices = await _supabase.downloadInvoices(changedAfter: null);
+      }
       invoicesWatch.stop();
       final cloudSettings = await _supabase.downloadSettings(
         changedAfter: lastSyncAt,
@@ -402,22 +440,17 @@ class SyncNotifier extends StateNotifier<SyncState> {
         );
         if (hasPending) continue;
         final local = await InvoiceRepository.instance.getById(invoice.id);
-        if (local == null || invoice.updatedAt.isAfter(local.updatedAt)) {
+        final numberDiffers = local != null && local.numero != invoice.numero;
+        if (local == null || invoice.updatedAt.isAfter(local.updatedAt) || numberDiffers) {
           String? source;
-          if (local != null && local.numero != invoice.numero) {
-            final authorized = await _supabase.hasAuthorizedInvoiceNumberChange(
-              invoiceId: invoice.id,
-              newNumber: invoice.numero,
+          if (numberDiffers) {
+            // En descarga cloud->local la numeración remota debe prevalecer:
+            // evita divergencias entre dispositivos cuando un local quedó desfasado.
+            source = InvoiceNumberChangeSource.manualRenumber;
+            debugPrint(
+              '[InvoiceNumber] download aplicando número remoto '
+              'invoice_id=${invoice.id} local=${local.numero} remote=${invoice.numero}',
             );
-            if (authorized) {
-              source = InvoiceNumberChangeSource.manualRenumber;
-            } else {
-              debugPrint(
-                '[InvoiceNumber][CRITICAL] download ignorará número remoto sin auditoría '
-                'invoice_id=${invoice.id} local=${local.numero} remote=${invoice.numero}',
-              );
-              debugPrintStack(stackTrace: StackTrace.current);
-            }
           }
           await InvoiceRepository.instance.upsert(
             invoice,

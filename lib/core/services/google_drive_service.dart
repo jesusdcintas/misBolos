@@ -288,7 +288,6 @@ class GoogleDriveService {
       rootFolderId: rootFolderId,
       year: date.year,
     );
-    await ensureFolder(parentId: yearFolderId, folderName: 'BACKUPS APP');
 
     final quarterFolderId = await ensureQuarterFolder(
       yearFolderId: yearFolderId,
@@ -326,10 +325,35 @@ class GoogleDriveService {
       rootFolderId: rootFolderId,
       year: year,
     );
-    await ensureFolder(parentId: yearFolderId, folderName: 'BACKUPS APP');
+    await _deleteLegacyBackupFolder(yearFolderId);
 
     for (var month = 1; month <= 12; month++) {
       await ensureMonthStructure(DateTime(year, month));
+    }
+  }
+
+  Future<void> _deleteLegacyBackupFolder(String yearFolderId) async {
+    final api = await _driveApi();
+    final result = await api.files.list(
+      q:
+          "trashed = false "
+          "and mimeType = 'application/vnd.google-apps.folder' "
+          "and '${_escapeQuery(yearFolderId)}' in parents "
+          "and name = 'BACKUPS APP'",
+      spaces: 'drive',
+      $fields: 'files(id,name)',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    );
+    final folders = result.files ?? const <drive.File>[];
+    for (final folder in folders) {
+      final id = folder.id;
+      if (id == null || id.isEmpty) continue;
+      try {
+        await api.files.delete(id, supportsAllDrives: true);
+      } catch (e) {
+        debugPrint('[Drive] No se pudo eliminar carpeta legacy BACKUPS APP: $e');
+      }
     }
   }
 
