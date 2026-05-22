@@ -1,0 +1,15 @@
+{
+  "java.import.gradle.enabled": false,
+  "java.import.maven.enabled": false,
+  "java.project.importOnFirstTimeStartup": "disabled",
+  "search.exclude": {
+    "**/.pub-cache": true,
+    "**/build": true,
+    "**/.gradle": true
+  },
+  "files.watcherExclude": {
+    "**/.pub-cache/**": true,
+    "**/build/**": true,
+    "**/.gradle/**": true
+  }
+}

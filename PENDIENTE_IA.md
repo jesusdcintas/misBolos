@@ -1,6 +1,6 @@
 # Pendiente IA - MisBolos
 
-Fecha de actualización: 2026-05-07
+Fecha de actualización: 2026-05-19
 
 ## Ya implementado
 
@@ -19,16 +19,22 @@ Fecha de actualización: 2026-05-07
 
 ## Pendiente inmediato
 
-- Retirar opción "Cambio de concepto masivo" en Facturas (marcada como temporal).
+- Reestructurar UI de Perfil para unificar y simplificar conexiones:
+  - cuenta principal (sesión MisBolos)
+  - cuenta de Google
+  - Google Drive
+  - Google Calendar
+  - eliminar redundancias y dejar flujo más intuitivo/consistente.
 - Exponer en UI de uso diario:
   - redacción IA de WhatsApp para facturas/clientes
   - redacción IA de email para facturas
   - resúmenes IA (cliente, bolo, factura)
-- QA E2E en dos dispositivos con casos reales:
-  - tickets/facturas variados
-  - validación de consistencia de importes, fecha y categoría
-  - revisión de mensajes de error (rate limit, JSON inválido)
-  - Arreglar compartir por whatsapp
+
+## Completado reciente
+
+- Retirada la opción "Cambio de concepto masivo" en Facturas.
+- QA E2E en dos dispositivos completado para casos principales.
+- Arreglado compartir por WhatsApp dentro del alcance acordado.
 
 ## Pendiente opcional
 

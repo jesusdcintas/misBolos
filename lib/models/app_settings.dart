@@ -23,6 +23,12 @@ class AppSettings {
   final DateTime? lastDriveSyncAt;
   final DateTime? lastCloudSyncAt;
   final String? cloudSettingsSignature;
+  final bool autoCloudSyncEnabled;
+  final int autoCloudSyncIntervalSeconds;
+  final String appThemeMode;
+  final bool securityPinEnabled;
+  final String securityPinCode;
+  final bool securityBiometricEnabled;
 
   AppSettings({
     this.logoPath = '',
@@ -49,6 +55,12 @@ class AppSettings {
     this.lastDriveSyncAt,
     this.lastCloudSyncAt,
     this.cloudSettingsSignature,
+    this.autoCloudSyncEnabled = true,
+    this.autoCloudSyncIntervalSeconds = 45,
+    this.appThemeMode = 'light',
+    this.securityPinEnabled = false,
+    this.securityPinCode = '',
+    this.securityBiometricEnabled = false,
   });
 
   AppSettings copyWith({
@@ -76,6 +88,12 @@ class AppSettings {
     DateTime? lastDriveSyncAt,
     DateTime? lastCloudSyncAt,
     String? cloudSettingsSignature,
+    bool? autoCloudSyncEnabled,
+    int? autoCloudSyncIntervalSeconds,
+    String? appThemeMode,
+    bool? securityPinEnabled,
+    String? securityPinCode,
+    bool? securityBiometricEnabled,
     bool clearDriveRootFolder = false,
     bool clearDriveAccount = false,
     bool clearLastDriveBackupAt = false,
@@ -120,6 +138,14 @@ class AppSettings {
       lastCloudSyncAt: lastCloudSyncAt ?? this.lastCloudSyncAt,
       cloudSettingsSignature:
           cloudSettingsSignature ?? this.cloudSettingsSignature,
+      autoCloudSyncEnabled: autoCloudSyncEnabled ?? this.autoCloudSyncEnabled,
+      autoCloudSyncIntervalSeconds:
+          autoCloudSyncIntervalSeconds ?? this.autoCloudSyncIntervalSeconds,
+      appThemeMode: appThemeMode ?? this.appThemeMode,
+      securityPinEnabled: securityPinEnabled ?? this.securityPinEnabled,
+      securityPinCode: securityPinCode ?? this.securityPinCode,
+      securityBiometricEnabled:
+          securityBiometricEnabled ?? this.securityBiometricEnabled,
     );
   }
 
@@ -149,6 +175,12 @@ class AppSettings {
       'last_drive_sync_at': lastDriveSyncAt?.toIso8601String(),
       'last_cloud_sync_at': lastCloudSyncAt?.toIso8601String(),
       'cloud_settings_signature': cloudSettingsSignature,
+      'auto_cloud_sync_enabled': autoCloudSyncEnabled ? 1 : 0,
+      'auto_cloud_sync_interval_seconds': autoCloudSyncIntervalSeconds,
+      'app_theme_mode': appThemeMode,
+      'security_pin_enabled': securityPinEnabled ? 1 : 0,
+      'security_pin_code': securityPinCode,
+      'security_biometric_enabled': securityBiometricEnabled ? 1 : 0,
     };
   }
 
@@ -184,6 +216,14 @@ class AppSettings {
           ? DateTime.tryParse(map['last_cloud_sync_at'] as String)
           : null,
       cloudSettingsSignature: map['cloud_settings_signature'] as String?,
+      autoCloudSyncEnabled: (map['auto_cloud_sync_enabled'] as int? ?? 1) == 1,
+      autoCloudSyncIntervalSeconds:
+          map['auto_cloud_sync_interval_seconds'] as int? ?? 45,
+      appThemeMode: map['app_theme_mode'] as String? ?? 'light',
+      securityPinEnabled: (map['security_pin_enabled'] as int? ?? 0) == 1,
+      securityPinCode: map['security_pin_code'] as String? ?? '',
+      securityBiometricEnabled:
+          (map['security_biometric_enabled'] as int? ?? 0) == 1,
     );
   }
 }

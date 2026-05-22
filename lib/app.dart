@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/theme/app_theme.dart';
+import 'models/app_settings.dart';
 import 'providers/settings_provider.dart';
 import 'providers/sync_provider.dart';
 import 'core/services/google_drive_service.dart';
@@ -16,7 +17,6 @@ import 'screens/dashboard/dashboard_screen.dart';
 import 'screens/calendar/calendar_screen.dart';
 import 'screens/calendar/gig_detail_screen.dart';
 import 'screens/calendar/gig_form_screen.dart';
-import 'screens/clients/clients_list_screen.dart';
 import 'screens/clients/client_detail_screen.dart';
 import 'screens/clients/client_form_screen.dart';
 import 'screens/invoices/invoice_detail_screen.dart';
@@ -129,20 +129,20 @@ final routerProvider = Provider<GoRouter>((ref) {
             ),
           ),
           GoRoute(
-            path: '/clients',
+            path: '/finanzas',
             pageBuilder: (context, state) => CustomTransitionPage(
               key: state.pageKey,
-              child: const ClientsListScreen(),
+              child: const FinanzasScreen(),
               transitionDuration: const Duration(milliseconds: 200),
               transitionsBuilder: (context, animation, secondary, child) =>
                   FadeTransition(opacity: animation, child: child),
             ),
           ),
           GoRoute(
-            path: '/finanzas',
+            path: '/settings',
             pageBuilder: (context, state) => CustomTransitionPage(
               key: state.pageKey,
-              child: const FinanzasScreen(),
+              child: const SettingsScreen(),
               transitionDuration: const Duration(milliseconds: 200),
               transitionsBuilder: (context, animation, secondary, child) =>
                   FadeTransition(opacity: animation, child: child),
@@ -159,12 +159,6 @@ final routerProvider = Provider<GoRouter>((ref) {
             ),
           ),
         ],
-      ),
-      GoRoute(
-        parentNavigatorKey: _rootNavigatorKey,
-        path: '/settings',
-        pageBuilder: (context, state) =>
-            _slideUpPage(const SettingsScreen(), state),
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
@@ -320,10 +314,13 @@ class MisBolosApp extends ConsumerStatefulWidget {
 class _MisBolosAppState extends ConsumerState<MisBolosApp>
     with WidgetsBindingObserver {
   bool _synced = false;
+  bool _autoCloudSyncEnabled = true;
+  Duration _autoCloudSyncInterval = const Duration(seconds: 45);
   Timer? _autoSyncTimer;
   Timer? _queueRetryTimer;
   Timer? _autoCloudSyncTimer;
   StreamSubscription<AuthState>? _authStateSub;
+  ProviderSubscription<AsyncValue<AppSettings>>? _settingsSub;
 
   @override
   void initState() {
@@ -336,9 +333,13 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp>
         SyncQueueProcessor.instance.processPending(reason: 'periodic_retry'),
       );
     });
-    _autoCloudSyncTimer = Timer.periodic(const Duration(seconds: 45), (_) {
-      unawaited(_autoCloudSyncTick());
-    });
+    _settingsSub = ref.listenManual<AsyncValue<AppSettings>>(
+      settingsProvider,
+      (_, next) {
+        next.whenData(_applyRuntimeSettings);
+      },
+      fireImmediately: true,
+    );
     _authStateSub = Supabase.instance.client.auth.onAuthStateChange.listen((
       authState,
     ) {
@@ -378,10 +379,23 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp>
   }
 
   Future<void> _autoCloudSyncTick() async {
+    if (!_autoCloudSyncEnabled) return;
     if (!mounted) return;
     final notifier = ref.read(syncProvider.notifier);
     if (!notifier.isAuthenticated) return;
     await notifier.syncAll(reason: 'periodic_auto');
+  }
+
+  void _applyRuntimeSettings(AppSettings settings) {
+    _autoCloudSyncEnabled = settings.autoCloudSyncEnabled;
+    final seconds = settings.autoCloudSyncIntervalSeconds.clamp(15, 3600);
+    _autoCloudSyncInterval = Duration(seconds: seconds);
+    _autoCloudSyncTimer?.cancel();
+    if (_autoCloudSyncEnabled) {
+      _autoCloudSyncTimer = Timer.periodic(_autoCloudSyncInterval, (_) {
+        unawaited(_autoCloudSyncTick());
+      });
+    }
   }
 
   @override
@@ -400,19 +414,28 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp>
     _queueRetryTimer?.cancel();
     _autoCloudSyncTimer?.cancel();
     _authStateSub?.cancel();
+    _settingsSub?.close();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final router = ref.watch(routerProvider);
+    final settings = ref.watch(settingsProvider).valueOrNull;
+
+    final themeMode = switch (settings?.appThemeMode) {
+      'dark' => ThemeMode.dark,
+      'system' => ThemeMode.system,
+      _ => ThemeMode.light,
+    };
 
     return MaterialApp.router(
       title: 'MisBolos',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
-      themeMode: ThemeMode.light,
+      themeMode: themeMode,
+      themeAnimationDuration: Duration.zero,
       routerConfig: router,
       locale: const Locale('es', 'ES'),
       supportedLocales: const [Locale('es', 'ES')],
@@ -451,14 +474,14 @@ class _ScaffoldWithNavBar extends StatefulWidget {
 }
 
 class _ScaffoldWithNavBarState extends State<_ScaffoldWithNavBar> {
-  static const _paths = ['/', '/calendar', '/finanzas', '/clients', '/profile'];
+  static const _paths = ['/', '/calendar', '/finanzas', '/profile', '/settings'];
 
   static int _indexFromLocation(String location) {
     if (location == '/') return 0;
     if (location.startsWith('/calendar')) return 1;
     if (location.startsWith('/finanzas')) return 2;
-    if (location.startsWith('/clients')) return 3;
-    if (location.startsWith('/profile')) return 4;
+    if (location.startsWith('/profile')) return 3;
+    if (location.startsWith('/settings')) return 4;
     return 0;
   }
 
@@ -499,14 +522,14 @@ class _ScaffoldWithNavBarState extends State<_ScaffoldWithNavBar> {
             label: 'Finanzas',
           ),
           NavigationDestination(
-            icon: Icon(Icons.people_outline),
-            selectedIcon: Icon(Icons.people),
-            label: 'Clientes',
-          ),
-          NavigationDestination(
             icon: Icon(Icons.person_outline),
             selectedIcon: Icon(Icons.person),
             label: 'Perfil',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings),
+            label: 'Ajustes',
           ),
         ],
       ),

@@ -1,20 +1,10 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_strings.dart';
 import '../../models/app_settings.dart';
-import '../../models/gig.dart';
 import '../../models/pdf_theme.dart';
 import '../../providers/settings_provider.dart';
-import '../../providers/client_provider.dart';
-import '../../providers/gig_provider.dart';
-import '../../providers/invoice_provider.dart';
-import '../../services/supabase_service.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
-import 'import_screen.dart';
-import 'duplicate_clients_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -29,6 +19,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   String _pdfTheme = 'clasico';
   bool _notificaciones = true;
   int _diasRecordatorio = 7;
+  bool _autoCloudSyncEnabled = true;
+  int _autoCloudSyncIntervalSeconds = 45;
+  String _appThemeMode = 'light';
+  bool _securityPinEnabled = false;
+  String _securityPinCode = '';
+  bool _securityBiometricEnabled = false;
   bool _loaded = false;
 
   void _loadSettings(AppSettings s) {
@@ -39,6 +35,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _pdfTheme = s.pdfTheme;
     _notificaciones = s.notificacionesActivas;
     _diasRecordatorio = s.diasRecordatorio;
+    _autoCloudSyncEnabled = s.autoCloudSyncEnabled;
+    _autoCloudSyncIntervalSeconds = s.autoCloudSyncIntervalSeconds;
+    _appThemeMode = s.appThemeMode;
+    _securityPinEnabled = s.securityPinEnabled;
+    _securityPinCode = s.securityPinCode;
+    _securityBiometricEnabled = s.securityBiometricEnabled;
   }
 
   @override
@@ -202,6 +204,95 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               const SizedBox(height: 24),
 
+              Text(
+                'Preferencias de sincronización',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              SwitchListTile(
+                title: const Text('Auto-sync'),
+                subtitle: const Text('Sincronización automática en segundo plano'),
+                value: _autoCloudSyncEnabled,
+                onChanged: (v) => setState(() => _autoCloudSyncEnabled = v),
+              ),
+              if (_autoCloudSyncEnabled)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Frecuencia de sync'),
+                  trailing: DropdownButton<int>(
+                    value: _autoCloudSyncIntervalSeconds,
+                    items: const [
+                      DropdownMenuItem(value: 30, child: Text('30 segundos')),
+                      DropdownMenuItem(value: 45, child: Text('45 segundos')),
+                      DropdownMenuItem(value: 60, child: Text('1 minuto')),
+                      DropdownMenuItem(value: 120, child: Text('2 minutos')),
+                      DropdownMenuItem(value: 300, child: Text('5 minutos')),
+                    ],
+                    onChanged: (v) => setState(
+                      () => _autoCloudSyncIntervalSeconds = v ?? 45,
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 24),
+
+              Text(
+                'Apariencia',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(value: 'light', label: Text('Claro')),
+                  ButtonSegment(value: 'dark', label: Text('Oscuro')),
+                  ButtonSegment(value: 'system', label: Text('Sistema')),
+                ],
+                selected: {_appThemeMode},
+                onSelectionChanged: (v) => setState(() => _appThemeMode = v.first),
+              ),
+              const SizedBox(height: 24),
+
+              Text(
+                'Seguridad',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              SwitchListTile(
+                title: const Text('Bloqueo con PIN'),
+                subtitle: const Text('Solicitar PIN al desbloquear la app'),
+                value: _securityPinEnabled,
+                onChanged: (v) => setState(() {
+                  _securityPinEnabled = v;
+                  if (!v) {
+                    _securityPinCode = '';
+                  }
+                }),
+              ),
+              if (_securityPinEnabled)
+                TextFormField(
+                  initialValue: _securityPinCode,
+                  decoration: const InputDecoration(
+                    labelText: 'PIN (4-8 dígitos)',
+                    hintText: 'Ejemplo: 1234',
+                  ),
+                  keyboardType: TextInputType.number,
+                  obscureText: true,
+                  onChanged: (v) => _securityPinCode = v,
+                ),
+              const SizedBox(height: 8),
+              SwitchListTile(
+                title: const Text('Bloqueo biométrico'),
+                subtitle: const Text('Huellas/Face ID cuando el dispositivo lo permita'),
+                value: _securityBiometricEnabled,
+                onChanged: (v) => setState(() => _securityBiometricEnabled = v),
+              ),
+              const SizedBox(height: 24),
+
               // Guardar
               SizedBox(
                 width: double.infinity,
@@ -216,88 +307,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
               const SizedBox(height: 32),
 
-              // Sincronización
-              Text(
-                'Sincronización',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              ElevatedButton.icon(
-                onPressed: _syncSupabase,
-                icon: const Icon(Icons.sync),
-                label: const Text(AppStrings.sincronizar),
-              ),
-              const SizedBox(height: 24),
-
-              // Exportar CSV
-              Text(
-                AppStrings.exportarCSV,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => _exportCsv(oficialOnly: true),
-                      child: const Text('Solo oficiales'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => _showExportWarning(),
-                      child: const Text('Todos los datos'),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-
-              // Importar historial
-              Text(
-                'Importar historial',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const ImportScreen()),
-                  ),
-                  icon: const Icon(Icons.upload_file),
-                  label: const Text('Importar desde Excel o CSV'),
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // Herramientas
-              Text(
-                'Herramientas',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const DuplicateClientsScreen(),
-                    ),
-                  ),
-                  icon: const Icon(Icons.people_outline),
-                  label: const Text('Buscar clientes duplicados'),
-                ),
-              ),
               const SizedBox(height: 32),
 
               // Aviso legal
@@ -343,6 +352,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       pdfTheme: _pdfTheme,
       notificacionesActivas: _notificaciones,
       diasRecordatorio: _diasRecordatorio,
+      autoCloudSyncEnabled: _autoCloudSyncEnabled,
+      autoCloudSyncIntervalSeconds: _autoCloudSyncIntervalSeconds,
+      appThemeMode: _appThemeMode,
+      securityPinEnabled: _securityPinEnabled,
+      securityPinCode: _securityPinCode.trim(),
+      securityBiometricEnabled: _securityBiometricEnabled,
     );
 
     await ref.read(settingsProvider.notifier).save(settings);
@@ -352,116 +367,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         context,
       ).showSnackBar(const SnackBar(content: Text('Ajustes guardados')));
     }
-  }
-
-  Future<void> _syncSupabase() async {
-    try {
-      final service = SupabaseService.instance;
-      if (!service.isAuthenticated) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('No estás autenticado en la nube')),
-          );
-        }
-        return;
-      }
-
-      final clients = await ref.read(clientsProvider.future);
-      final gigs = await ref.read(gigsProvider.future);
-      final invoices = await ref.read(invoicesProvider.future);
-      final settings = await ref.read(settingsProvider.future);
-
-      await service.uploadAll(clients: clients, gigs: gigs, invoices: invoices);
-      await service.uploadSettings(settings);
-      await ref
-          .read(settingsProvider.notifier)
-          .save(
-            settings.copyWith(
-              cloudSettingsSignature: service.settingsSyncSignature(settings),
-            ),
-          );
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Sincronización completada')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error de sincronización: $e')));
-      }
-    }
-  }
-
-  Future<void> _exportCsv({required bool oficialOnly}) async {
-    final box = context.findRenderObject() as RenderBox?;
-    final shareOrigin = box != null
-        ? box.localToGlobal(Offset.zero) & box.size
-        : const Rect.fromLTWH(0, 0, 100, 100);
-    try {
-      final gigs = await ref.read(gigsProvider.future);
-      final invoices = await ref.read(invoicesProvider.future);
-
-      final rows = <List<dynamic>>[
-        ['Fecha', 'ClienteId', 'Caché', 'Facturable', 'Estado', 'Nº Factura'],
-      ];
-
-      for (final gig in gigs) {
-        if (oficialOnly && !gig.facturable) continue;
-        final inv = invoices.where((i) => i.gigId == gig.id).firstOrNull;
-        rows.add([
-          gig.fecha.toIso8601String().substring(0, 10),
-          gig.facturable ? gig.clientId : 'PRIVADO',
-          gig.cachet ?? 0,
-          gig.facturable ? 'Sí' : 'No',
-          gig.status.label,
-          inv?.numero ?? '',
-        ]);
-      }
-
-      final csv = rows.map((r) => r.map((e) => '"$e"').join(',')).join('\n');
-      final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/misbolos_export.csv');
-      await file.writeAsString(csv);
-
-      await Share.shareXFiles([
-        XFile(file.path),
-      ], sharePositionOrigin: shareOrigin);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
-      }
-    }
-  }
-
-  void _showExportWarning() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('⚠️ Atención'),
-        content: const Text(
-          'Esta exportación incluirá datos de bolos no facturados. '
-          'Los nombres de clientes se ocultarán en estos registros.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text(AppStrings.cancelar),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _exportCsv(oficialOnly: false);
-            },
-            child: const Text('Exportar'),
-          ),
-        ],
-      ),
-    );
   }
 
   Color _pdfThemeColor(PdfTheme theme) {

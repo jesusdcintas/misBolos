@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/theme/app_theme_colors.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../models/invoice.dart';
@@ -73,6 +74,8 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+    final scheme = Theme.of(context).colorScheme;
     final invoicesAsync = ref.watch(invoicesProvider);
     final filter = ref.watch(invoiceStatusFilterProvider);
     final sortOption = ref.watch(invoiceSortProvider);
@@ -165,47 +168,47 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
                           horizontal: 16,
                           vertical: 12,
                         ),
-                        color: AppColors.primaryLight,
+                        color: colors.surfaceContainer,
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(
+                            Icon(
                               Icons.receipt_long,
-                              color: AppColors.primary,
+                              color: scheme.primary,
                               size: 20,
                             ),
                             const SizedBox(width: 6),
                             Text(
                               '$filteredCount facturas',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
-                                color: AppColors.primary,
+                                color: scheme.primary,
                               ),
                             ),
                             const SizedBox(width: 8),
-                            const Text(
+                            Text(
                               '·',
                               style: TextStyle(
                                 fontSize: 16,
-                                color: AppColors.primary,
+                                color: scheme.primary,
                               ),
                             ),
                             const SizedBox(width: 8),
                             Text(
                               CurrencyFormatter.format(filteredTotal),
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
-                                color: AppColors.primary,
+                                color: scheme.primary,
                               ),
                             ),
                             const SizedBox(width: 8),
-                            const Text(
+                            Text(
                               'IVA incluido',
                               style: TextStyle(
                                 fontSize: 13,
-                                color: AppColors.textSecondary,
+                                color: colors.textSecondary,
                               ),
                             ),
                           ],
@@ -384,24 +387,23 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
   }
 
   Widget _buildHeader(int pendingCount) {
+    final colors = context.colors;
     return Container(
       height: 48,
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        border: Border(
-          bottom: BorderSide(color: AppColors.cardBorder, width: 0.5),
-        ),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        border: Border(bottom: BorderSide(color: colors.border, width: 0.6)),
       ),
       child: Row(
         children: [
-          const Expanded(
+          Expanded(
             child: Text(
               AppStrings.facturas,
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w500,
-                color: AppColors.textPrimary,
+                color: colors.textPrimary,
               ),
             ),
           ),
@@ -409,16 +411,16 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: AppColors.warningBg,
+                color: colors.warningBg,
                 borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: AppColors.warning),
+                border: Border.all(color: colors.warning),
               ),
               child: Text(
                 '$pendingCount',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.warning,
+                  color: colors.warning,
                 ),
               ),
             ),
@@ -520,6 +522,7 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
           const SizedBox(width: 8),
           Expanded(
             child: PopupMenuButton<InvoiceViewMode>(
+              color: context.colors.surfaceElevated,
               onSelected: (value) {
                 ref.read(_viewModeProvider.notifier).state = value;
               },
@@ -532,16 +535,16 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
                         Icons.view_agenda_outlined,
                         size: 20,
                         color: viewMode == InvoiceViewMode.list
-                            ? AppColors.primary
-                            : AppColors.textSecondary,
+                            ? Theme.of(context).colorScheme.primary
+                            : context.colors.textSecondary,
                       ),
                       const SizedBox(width: 12),
                       Text(
                         'Lista',
                         style: TextStyle(
                           color: viewMode == InvoiceViewMode.list
-                              ? AppColors.primary
-                              : AppColors.textPrimary,
+                              ? Theme.of(context).colorScheme.primary
+                              : context.colors.textPrimary,
                           fontWeight: viewMode == InvoiceViewMode.list
                               ? FontWeight.w700
                               : FontWeight.w500,
@@ -558,16 +561,16 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
                         Icons.grid_view_outlined,
                         size: 20,
                         color: viewMode == InvoiceViewMode.grid
-                            ? AppColors.primary
-                            : AppColors.textSecondary,
+                            ? Theme.of(context).colorScheme.primary
+                            : context.colors.textSecondary,
                       ),
                       const SizedBox(width: 12),
                       Text(
                         'Cuadrícula',
                         style: TextStyle(
                           color: viewMode == InvoiceViewMode.grid
-                              ? AppColors.primary
-                              : AppColors.textPrimary,
+                              ? Theme.of(context).colorScheme.primary
+                              : context.colors.textPrimary,
                           fontWeight: viewMode == InvoiceViewMode.grid
                               ? FontWeight.w700
                               : FontWeight.w500,
@@ -720,14 +723,13 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
     WidgetRef ref,
     Set<String> selectedInvoices,
   ) {
+    final colors = context.colors;
     return Container(
       height: 56,
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        border: Border(
-          bottom: BorderSide(color: AppColors.cardBorder, width: 0.5),
-        ),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        border: Border(bottom: BorderSide(color: colors.border, width: 0.6)),
       ),
       alignment: Alignment.centerLeft,
       child: MediaQuery(
@@ -736,10 +738,10 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
           '${selectedInvoices.length} seleccionadas',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 17,
             fontWeight: FontWeight.w500,
-            color: AppColors.textPrimary,
+            color: colors.textPrimary,
           ),
         ),
       ),
@@ -755,14 +757,14 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
 
     return Builder(
       builder: (actionContext) => Material(
-        color: AppColors.surface,
+        color: context.colors.surface,
         child: Container(
           height: 70,
           margin: const EdgeInsets.fromLTRB(12, 0, 12, 10),
           decoration: BoxDecoration(
-            color: AppColors.surface,
+            color: context.colors.surface,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.cardBorder),
+            border: Border.all(color: context.colors.border),
           ),
           child: Row(
             children: [
@@ -1476,16 +1478,27 @@ class _FilterChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = context.colors;
+    final scheme = Theme.of(context).colorScheme;
+    final selectedText = isDark ? scheme.primary : Colors.white;
+    final unselectedText = isDark ? colors.textPrimary : AppColors.textPrimary;
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: ChoiceChip(
         label: Text(label),
         selected: selected,
         onSelected: (_) => onTap(),
-        selectedColor: AppColors.primary,
-        labelStyle: TextStyle(
-          color: selected ? Colors.white : AppColors.textPrimary,
+        backgroundColor: isDark ? colors.surfaceContainer : AppColors.surface,
+        selectedColor: isDark
+            ? scheme.primary.withValues(alpha: 0.22)
+            : AppColors.primary,
+        side: BorderSide(
+          color: selected
+              ? (isDark ? scheme.primary : AppColors.primary)
+              : (isDark ? colors.border : AppColors.cardBorder),
         ),
+        labelStyle: TextStyle(color: selected ? selectedText : unselectedText),
       ),
     );
   }
@@ -1525,18 +1538,20 @@ class _InlineActionButtonContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+    final scheme = Theme.of(context).colorScheme;
     return Container(
       height: 40,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: colors.cardBackground,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.cardBorder),
+        border: Border.all(color: colors.border),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, size: 18, color: AppColors.primary),
+          Icon(icon, size: 18, color: scheme.primary),
           const SizedBox(width: 6),
           Flexible(
             child: MediaQuery(
@@ -1547,10 +1562,10 @@ class _InlineActionButtonContent extends StatelessWidget {
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: AppColors.primary,
+                  color: scheme.primary,
                 ),
               ),
             ),
@@ -1650,7 +1665,19 @@ class _InvoiceTile extends ConsumerWidget {
     this.onLongPress,
   });
 
-  Color get _statusBgColor {
+  Color _statusBgColor(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = context.colors;
+    if (isDark) {
+      switch (invoice.status) {
+        case InvoiceStatus.borrador:
+          return colors.surfaceElevated;
+        case InvoiceStatus.enviada:
+          return colors.warningBg.withValues(alpha: 0.55);
+        case InvoiceStatus.pagada:
+          return colors.successBg.withValues(alpha: 0.58);
+      }
+    }
     switch (invoice.status) {
       case InvoiceStatus.borrador:
         return AppColors.draftBg;
@@ -1661,7 +1688,19 @@ class _InvoiceTile extends ConsumerWidget {
     }
   }
 
-  Color get _statusTextColor {
+  Color _statusTextColor(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = context.colors;
+    if (isDark) {
+      switch (invoice.status) {
+        case InvoiceStatus.borrador:
+          return colors.textSecondary;
+        case InvoiceStatus.enviada:
+          return colors.warning;
+        case InvoiceStatus.pagada:
+          return colors.success;
+      }
+    }
     switch (invoice.status) {
       case InvoiceStatus.borrador:
         return AppColors.draft;
@@ -1674,10 +1713,15 @@ class _InvoiceTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colors = context.colors;
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final clientAsync = ref.watch(clientByIdProvider(invoice.clientId));
 
     return Card(
-      color: isSelected ? AppColors.primaryLight : null,
+      color: isDark
+          ? (isSelected ? colors.surfaceElevated : colors.cardBackground)
+          : (isSelected ? colors.infoBg : null),
       child: ListTile(
         onTap: selectionMode
             ? () => onSelect?.call(!isSelected)
@@ -1690,20 +1734,23 @@ class _InvoiceTile extends ConsumerWidget {
             ? Checkbox(
                 value: isSelected,
                 onChanged: (v) => onSelect?.call(v ?? false),
-                activeColor: AppColors.primary,
+                activeColor: scheme.primary,
               )
             : Container(
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: _statusBgColor,
+                  color: _statusBgColor(context),
                   borderRadius: BorderRadius.circular(12),
+                  border: isDark
+                      ? Border.all(color: colors.border.withValues(alpha: 0.65))
+                      : null,
                 ),
                 child: Center(
                   child: Text(
                     '#${invoice.numero}',
                     style: TextStyle(
-                      color: _statusTextColor,
+                      color: _statusTextColor(context),
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
@@ -1711,12 +1758,22 @@ class _InvoiceTile extends ConsumerWidget {
                 ),
               ),
         title: clientAsync.when(
-          data: (c) =>
-              Text(c?.alias.isNotEmpty == true ? c!.alias : c?.nombre ?? ''),
+          data: (c) => Text(
+            c?.alias.isNotEmpty == true ? c!.alias : c?.nombre ?? '',
+            style: TextStyle(
+              color: isDark ? colors.textPrimary : AppColors.textPrimary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           loading: () => const Text('...'),
           error: (_, __) => const Text('Error'),
         ),
-        subtitle: Text(DateFormatter.dayOfWeekFull(invoice.fecha)),
+        subtitle: Text(
+          DateFormatter.dayOfWeekFull(invoice.fecha),
+          style: TextStyle(
+            color: isDark ? colors.textSecondary : AppColors.textSecondary,
+          ),
+        ),
         trailing: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
@@ -1724,21 +1781,28 @@ class _InvoiceTile extends ConsumerWidget {
           children: [
             Text(
               CurrencyFormatter.format(invoice.total),
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 16,
+                color: isDark ? colors.textPrimary : AppColors.textPrimary,
+              ),
             ),
             const SizedBox(height: 2),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
-                color: _statusBgColor,
+                color: _statusBgColor(context),
                 borderRadius: BorderRadius.circular(20),
+                border: isDark
+                    ? Border.all(color: colors.border.withValues(alpha: 0.6))
+                    : null,
               ),
               child: Text(
                 invoice.status.label,
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w600,
-                  color: _statusTextColor,
+                  color: _statusTextColor(context),
                 ),
               ),
             ),
@@ -1764,7 +1828,19 @@ class _InvoiceGridCard extends ConsumerWidget {
     this.onLongPress,
   });
 
-  Color get _statusBgColor {
+  Color _statusBgColor(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = context.colors;
+    if (isDark) {
+      switch (invoice.status) {
+        case InvoiceStatus.borrador:
+          return colors.surfaceElevated;
+        case InvoiceStatus.enviada:
+          return colors.warningBg.withValues(alpha: 0.55);
+        case InvoiceStatus.pagada:
+          return colors.successBg.withValues(alpha: 0.58);
+      }
+    }
     switch (invoice.status) {
       case InvoiceStatus.borrador:
         return AppColors.draftBg;
@@ -1775,7 +1851,19 @@ class _InvoiceGridCard extends ConsumerWidget {
     }
   }
 
-  Color get _statusTextColor {
+  Color _statusTextColor(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = context.colors;
+    if (isDark) {
+      switch (invoice.status) {
+        case InvoiceStatus.borrador:
+          return colors.textSecondary;
+        case InvoiceStatus.enviada:
+          return colors.warning;
+        case InvoiceStatus.pagada:
+          return colors.success;
+      }
+    }
     switch (invoice.status) {
       case InvoiceStatus.borrador:
         return AppColors.draft;
@@ -1798,6 +1886,9 @@ class _InvoiceGridCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colors = context.colors;
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final clientAsync = ref.watch(clientByIdProvider(invoice.clientId));
     return Material(
       color: Colors.transparent,
@@ -1812,7 +1903,7 @@ class _InvoiceGridCard extends ConsumerWidget {
               },
         child: Card(
           margin: EdgeInsets.zero,
-          color: isSelected ? AppColors.primaryLight : AppColors.surface,
+          color: isSelected ? colors.infoBg : colors.cardBackground,
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Column(
@@ -1824,7 +1915,7 @@ class _InvoiceGridCard extends ConsumerWidget {
                       Checkbox(
                         value: isSelected,
                         onChanged: (v) => onSelect?.call(v ?? false),
-                        activeColor: AppColors.primary,
+                        activeColor: scheme.primary,
                       )
                     else
                       Container(
@@ -1833,13 +1924,18 @@ class _InvoiceGridCard extends ConsumerWidget {
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: _statusBgColor,
+                          color: _statusBgColor(context),
                           borderRadius: BorderRadius.circular(10),
+                          border: isDark
+                              ? Border.all(
+                                  color: colors.border.withValues(alpha: 0.65),
+                                )
+                              : null,
                         ),
                         child: Text(
                           '#${invoice.numero}',
                           style: TextStyle(
-                            color: _statusTextColor,
+                            color: _statusTextColor(context),
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
                           ),
@@ -1852,15 +1948,20 @@ class _InvoiceGridCard extends ConsumerWidget {
                         vertical: 3,
                       ),
                       decoration: BoxDecoration(
-                        color: _statusBgColor,
+                        color: _statusBgColor(context),
                         borderRadius: BorderRadius.circular(999),
+                        border: isDark
+                            ? Border.all(
+                                color: colors.border.withValues(alpha: 0.6),
+                              )
+                            : null,
                       ),
                       child: Text(
                         invoice.status.label,
                         style: TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.w700,
-                          color: _statusTextColor,
+                          color: _statusTextColor(context),
                         ),
                       ),
                     ),
@@ -1872,10 +1973,12 @@ class _InvoiceGridCard extends ConsumerWidget {
                     c?.alias.isNotEmpty == true ? c!.alias : c?.nombre ?? '',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 17,
                       fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
+                      color: isDark
+                          ? colors.textPrimary
+                          : AppColors.textPrimary,
                     ),
                   ),
                   loading: () => const Text('...'),
@@ -1886,9 +1989,11 @@ class _InvoiceGridCard extends ConsumerWidget {
                   DateFormatter.dayOfWeekFull(invoice.fecha),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
-                    color: AppColors.textSecondary,
+                    color: isDark
+                        ? colors.textSecondary
+                        : AppColors.textSecondary,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -1896,19 +2001,21 @@ class _InvoiceGridCard extends ConsumerWidget {
                   _conceptSummary,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
-                    color: AppColors.textPrimary,
+                    color: isDark
+                        ? colors.textSecondary
+                        : AppColors.textPrimary,
                   ),
                 ),
                 const Spacer(),
                 Text(
                   CurrencyFormatter.format(invoice.total),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w800,
                     fontSize: 18,
-                    color: AppColors.textPrimary,
+                    color: isDark ? colors.textPrimary : AppColors.textPrimary,
                   ),
                 ),
               ],
@@ -2456,14 +2563,17 @@ class _SecondaryFilterButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = context.colors;
+    final primary = Theme.of(context).colorScheme.primary;
     final disabled = onTap == null;
     final bgColor = active
-        ? AppColors.warningBg
+        ? (isDark ? colors.surfaceContainer : AppColors.warningBg)
         : disabled
-        ? AppColors.surface
-        : AppColors.surface;
+        ? (isDark ? colors.cardBackground : AppColors.surface)
+        : (isDark ? colors.cardBackground : AppColors.surface);
     final fgColor = active
-        ? AppColors.warning
+        ? (isDark ? primary : AppColors.warning)
         : disabled
         ? AppColors.textSecondary.withValues(alpha: 0.5)
         : AppColors.textSecondary;
@@ -2477,8 +2587,10 @@ class _SecondaryFilterButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: active
-                ? AppColors.warning.withValues(alpha: 0.3)
-                : AppColors.cardBorder,
+                ? (isDark
+                      ? primary.withValues(alpha: 0.45)
+                      : AppColors.warning.withValues(alpha: 0.3))
+                : (isDark ? colors.border : AppColors.cardBorder),
           ),
         ),
         child: Row(
@@ -2511,24 +2623,35 @@ class _InvClearFiltersButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = context.colors;
+    final fg = isDark ? colors.error.withValues(alpha: 0.95) : AppColors.error;
+    final bg = isDark
+        ? colors.errorBg.withValues(alpha: 0.62)
+        : AppColors.errorBg;
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: AppColors.errorBg,
+          color: bg,
           borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isDark
+                ? colors.error.withValues(alpha: 0.42)
+                : Colors.transparent,
+          ),
         ),
-        child: const Row(
+        child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.close, size: 14, color: AppColors.error),
-            SizedBox(width: 4),
+            Icon(Icons.close, size: 14, color: fg),
+            const SizedBox(width: 4),
             Text(
               'Limpiar',
               style: TextStyle(
                 fontSize: 12,
-                color: AppColors.error,
+                color: fg,
                 fontWeight: FontWeight.w600,
               ),
             ),

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/theme/app_theme_colors.dart';
 import '../../models/asset.dart';
 import '../../providers/assets_provider.dart';
 import '../../providers/sync_provider.dart';
@@ -166,22 +167,23 @@ class _CompactHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Container(
       height: 48,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       alignment: Alignment.centerLeft,
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
+      decoration: BoxDecoration(
+        color: colors.surface,
         border: Border(
-          bottom: BorderSide(color: AppColors.cardBorder, width: 0.5),
+          bottom: BorderSide(color: colors.border, width: 0.6),
         ),
       ),
       child: Text(
         title,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 20,
           fontWeight: FontWeight.w500,
-          color: AppColors.textPrimary,
+          color: colors.textPrimary,
         ),
       ),
     );
@@ -312,6 +314,8 @@ class _ResumenBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+    final primary = Theme.of(context).colorScheme.primary;
     final fmt = NumberFormat.currency(locale: 'es_ES', symbol: '€');
     final totalInversion = assets.fold<double>(
       0.0,
@@ -326,9 +330,9 @@ class _ResumenBanner extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: AppColors.primaryLight,
+        color: colors.surfaceContainer,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.cardBorder),
+        border: Border.all(color: colors.border),
       ),
       child: Column(
         children: [
@@ -340,7 +344,7 @@ class _ResumenBanner extends StatelessWidget {
                   value: fmt.format(totalInversion),
                 ),
               ),
-              Container(width: 1, height: 32, color: AppColors.divider),
+              Container(width: 1, height: 32, color: colors.border),
               Expanded(
                 child: _Stat(
                   label: 'Valor contable',
@@ -352,17 +356,17 @@ class _ResumenBanner extends StatelessWidget {
           const SizedBox(height: 8),
           Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.trending_down,
                 size: 14,
-                color: AppColors.textSecondary,
+                color: colors.textSecondary,
               ),
               const SizedBox(width: 4),
               Text(
                 'Amortización T$quarter $year: ',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
-                  color: AppColors.textSecondary,
+                  color: colors.textSecondary,
                 ),
               ),
               amortizacionTrimestreAsync.when(
@@ -374,10 +378,10 @@ class _ResumenBanner extends StatelessWidget {
                 error: (_, __) => const Text('-'),
                 data: (v) => Text(
                   fmt.format(v),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
-                    color: AppColors.primary,
+                    color: primary,
                   ),
                 ),
               ),
@@ -397,20 +401,22 @@ class _Stat extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+    final primary = Theme.of(context).colorScheme.primary;
     return Column(
       children: [
         Text(
           value,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.bold,
-            color: AppColors.primary,
+            color: primary,
           ),
         ),
         const SizedBox(height: 2),
         Text(
           label,
-          style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+          style: TextStyle(fontSize: 11, color: colors.textSecondary),
         ),
       ],
     );
@@ -430,15 +436,17 @@ class _ActionPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = active ? AppColors.primary : AppColors.textPrimary;
+    final colors = context.colors;
+    final primary = Theme.of(context).colorScheme.primary;
+    final color = active ? primary : colors.textPrimary;
     return Container(
       height: 40,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: colors.cardBackground,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: active ? AppColors.primary : AppColors.cardBorder,
+          color: active ? primary : colors.border,
         ),
       ),
       child: Row(
@@ -477,6 +485,7 @@ class _AssetCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final fmt = NumberFormat.currency(locale: 'es_ES', symbol: '€');
     final pct = asset.importeTotal > 0
         ? (asset.amortizacionAcumulada / asset.importeTotal).clamp(0.0, 1.0)
@@ -497,16 +506,16 @@ class _AssetCard extends StatelessWidget {
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
                       color: asset.activo
-                          ? AppColors.primaryLight
-                          : Colors.grey.shade100,
+                          ? context.colors.infoBg
+                          : context.colors.surfaceContainer,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(
                       asset.categoria.icono,
                       size: 20,
                       color: asset.activo
-                          ? AppColors.primary
-                          : AppColors.textSecondary,
+                          ? Theme.of(context).colorScheme.primary
+                          : context.colors.textSecondary,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -519,8 +528,8 @@ class _AssetCard extends StatelessWidget {
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             color: asset.activo
-                                ? AppColors.textPrimary
-                                : AppColors.textSecondary,
+                                ? colors.textPrimary
+                                : colors.textSecondary,
                             decoration: asset.activo
                                 ? null
                                 : TextDecoration.lineThrough,
@@ -530,9 +539,9 @@ class _AssetCard extends StatelessWidget {
                         ),
                         Text(
                           asset.categoria.label,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: AppColors.textSecondary,
+                            color: colors.textSecondary,
                           ),
                         ),
                       ],
@@ -543,16 +552,16 @@ class _AssetCard extends StatelessWidget {
                     children: [
                       Text(
                         fmt.format(asset.valorContable),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          color: AppColors.primary,
+                          color: Theme.of(context).colorScheme.primary,
                         ),
                       ),
                       Text(
                         'Valor contable',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 10,
-                          color: AppColors.textSecondary,
+                          color: colors.textSecondary,
                         ),
                       ),
                     ],
@@ -568,19 +577,19 @@ class _AssetCard extends StatelessWidget {
                       child: LinearProgressIndicator(
                         value: pct,
                         minHeight: 6,
-                        backgroundColor: AppColors.cardBorder,
+                        backgroundColor: colors.border,
                         color: asset.estaAmortizado
                             ? AppColors.success
-                            : AppColors.primary,
+                            : Theme.of(context).colorScheme.primary,
                       ),
                     ),
                   ),
                   const SizedBox(width: 8),
                   Text(
                     '${(pct * 100).toStringAsFixed(0)}%',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
-                      color: AppColors.textSecondary,
+                      color: colors.textSecondary,
                     ),
                   ),
                 ],
@@ -591,9 +600,9 @@ class _AssetCard extends StatelessWidget {
                 children: [
                   Text(
                     '${fmt.format(asset.cuotaAnual)}/año',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
-                      color: AppColors.textSecondary,
+                      color: colors.textSecondary,
                     ),
                   ),
                   if (asset.estaAmortizado)
@@ -621,14 +630,14 @@ class _AssetCard extends StatelessWidget {
                         vertical: 2,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
+                        color: colors.surfaceContainer,
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: const Text(
+                      child: Text(
                         'Dado de baja',
                         style: TextStyle(
                           fontSize: 10,
-                          color: AppColors.textSecondary,
+                          color: colors.textSecondary,
                         ),
                       ),
                     ),

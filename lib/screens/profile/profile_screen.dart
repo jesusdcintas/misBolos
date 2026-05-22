@@ -3,21 +3,28 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/services/drive_document_sync_service.dart';
 import '../../core/services/google_drive_service.dart';
 import '../../models/app_settings.dart';
+import '../../models/gig.dart';
 import '../../providers/assets_provider.dart';
 import '../../providers/auth_controller.dart';
 import '../../providers/expenses_provider.dart';
+import '../../providers/gig_provider.dart';
 import '../../providers/invoice_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/sync_provider.dart';
+import '../settings/duplicate_clients_screen.dart';
+import '../settings/import_screen.dart';
 import '../../services/google_auth_service.dart';
 import '../../services/platform_auth_service.dart';
 import '../../services/supabase_service.dart';
+
+enum _StatusKind { ok, warn, error }
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -97,6 +104,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   Widget build(BuildContext context) {
     final settingsAsync = ref.watch(settingsProvider);
     final googleAuth = ref.watch(googleAuthProvider);
+    final syncState = ref.watch(syncProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -115,16 +123,25 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              // ── Cuenta Google ──
-              _GoogleSection(auth: googleAuth),
+              _buildStatusOverview(settings, googleAuth),
+              const SizedBox(height: 16),
+
+              _buildAccountSection(),
               const SizedBox(height: 16),
 
               // ── Archivo documental ──
               _buildGoogleDriveSection(settings),
               const SizedBox(height: 16),
 
+              _buildCalendarSection(googleAuth),
+              const SizedBox(height: 16),
+
               // ── Sincronización Cloud ──
               const _SyncSection(),
+              if (syncState.message != null) const SizedBox(height: 8),
+              const SizedBox(height: 24),
+
+              _buildToolsSection(),
               const SizedBox(height: 24),
 
               // ── Logo ──
@@ -244,6 +261,277 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         },
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Error: $e')),
+      ),
+    );
+  }
+
+  Widget _buildStatusOverview(AppSettings settings, GoogleAuthState googleAuth) {
+    final driveConnected = settings.driveConnected;
+    final hasDriveFolder =
+        (settings.driveRootFolderId?.trim().isNotEmpty ?? false) &&
+        (settings.driveRootFolderName?.trim().isNotEmpty ?? false);
+    final misBolosOk = SupabaseService.instance.isAuthenticated;
+    final googleOk = googleAuth.isSignedIn;
+    final driveOk = driveConnected && hasDriveFolder;
+    final driveWarn = driveConnected && !hasDriveFolder;
+    final calendarOk = googleAuth.calendarConnected;
+    final calendarWarn = googleAuth.isSignedIn && !googleAuth.calendarConnected;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _statusChip('MisBolos', misBolosOk ? _StatusKind.ok : _StatusKind.error),
+            _statusChip('Google', googleOk ? _StatusKind.ok : _StatusKind.error),
+            _statusChip(
+              'Drive',
+              driveOk
+                  ? _StatusKind.ok
+                  : driveWarn
+                  ? _StatusKind.warn
+                  : _StatusKind.error,
+            ),
+            _statusChip(
+              'Calendar',
+              calendarOk
+                  ? _StatusKind.ok
+                  : calendarWarn
+                  ? _StatusKind.warn
+                  : _StatusKind.error,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAccountSection() {
+    final email = SupabaseService.instance.userEmail ?? 'Sin sesión activa';
+    final connected = SupabaseService.instance.isAuthenticated;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Cuenta',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              email,
+              style: const TextStyle(color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Icon(
+                  connected ? Icons.check_circle : Icons.error_outline,
+                  size: 18,
+                  color: connected ? AppColors.success : AppColors.error,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  connected ? 'Sesión de MisBolos activa' : 'Sesión cerrada',
+                  style: TextStyle(
+                    color: connected ? AppColors.success : AppColors.error,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCalendarSection(GoogleAuthState auth) {
+    final connected = auth.calendarConnected;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Google Calendar',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              connected
+                  ? 'Calendario conectado'
+                  : 'Sincronización de calendario no conectada',
+              style: const TextStyle(color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (!connected)
+                  ElevatedButton.icon(
+                    onPressed: () =>
+                        ref.read(googleAuthProvider.notifier).connectCalendarOnly(),
+                    icon: const Icon(Icons.calendar_month),
+                    label: const Text('Conectar Calendar'),
+                  )
+                else
+                  OutlinedButton.icon(
+                    onPressed: () =>
+                        ref.read(googleAuthProvider.notifier).signOut(),
+                    icon: const Icon(Icons.link_off),
+                    label: const Text('Desconectar Calendar'),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildToolsSection() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Herramientas',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const ImportScreen()),
+                ),
+                icon: const Icon(Icons.upload_file),
+                label: const Text('Importar Excel o CSV'),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _showExportWarning,
+                icon: const Icon(Icons.download),
+                label: const Text('Exportar CSV'),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const DuplicateClientsScreen(),
+                  ),
+                ),
+                icon: const Icon(Icons.people_outline),
+                label: const Text('Buscar clientes duplicados'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _statusChip(String label, _StatusKind kind) {
+    final (bg, fg, icon) = switch (kind) {
+      _StatusKind.ok => (AppColors.successBg, AppColors.success, Icons.check_circle),
+      _StatusKind.warn => (AppColors.warningBg, AppColors.warning, Icons.warning_amber_rounded),
+      _StatusKind.error => (AppColors.errorBg, AppColors.error, Icons.error_outline),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(999)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: fg),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(color: fg, fontWeight: FontWeight.w700, fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _exportCsv({required bool oficialOnly}) async {
+    final box = context.findRenderObject() as RenderBox?;
+    final shareOrigin = box != null
+        ? box.localToGlobal(Offset.zero) & box.size
+        : const Rect.fromLTWH(0, 0, 100, 100);
+    try {
+      final gigs = await ref.read(gigsProvider.future);
+      final invoices = await ref.read(invoicesProvider.future);
+      final rows = <List<dynamic>>[
+        ['Fecha', 'ClienteId', 'Caché', 'Facturable', 'Estado', 'Nº Factura'],
+      ];
+      for (final gig in gigs) {
+        if (oficialOnly && !gig.facturable) continue;
+        final inv = invoices.where((i) => i.gigId == gig.id).firstOrNull;
+        rows.add([
+          gig.fecha.toIso8601String().substring(0, 10),
+          gig.facturable ? gig.clientId : 'PRIVADO',
+          gig.cachet ?? 0,
+          gig.facturable ? 'Sí' : 'No',
+          gig.status.dbValue,
+          inv?.numero ?? '',
+        ]);
+      }
+      final csv = rows.map((r) => r.map((e) => '"$e"').join(',')).join('\n');
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/misbolos_export.csv');
+      await file.writeAsString(csv);
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        sharePositionOrigin: shareOrigin,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error exportando CSV: $e')));
+    }
+  }
+
+  void _showExportWarning() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Exportar CSV'),
+        content: const Text(
+          '¿Quieres exportar solo bolos oficiales facturables o todos los datos?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _exportCsv(oficialOnly: true);
+            },
+            child: const Text('Solo oficiales'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _exportCsv(oficialOnly: false);
+            },
+            child: const Text('Todos'),
+          ),
+        ],
       ),
     );
   }
@@ -1014,6 +1302,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
 // ── Google Account Section ──
 
+// ignore: unused_element
 class _GoogleSection extends ConsumerWidget {
   final GoogleAuthState auth;
   const _GoogleSection({required this.auth});

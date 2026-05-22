@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/theme/app_theme_colors.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../core/utils/app_haptics.dart';
@@ -137,6 +138,8 @@ class _GigsListScreenState extends ConsumerState<GigsListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+    final primary = Theme.of(context).colorScheme.primary;
     final gigsAsync = ref.watch(gigsProvider);
     final clientsAsync = ref.watch(clientsProvider);
     final statusFilter = ref.watch(gigStatusFilterProvider);
@@ -273,48 +276,38 @@ class _GigsListScreenState extends ConsumerState<GigsListScreen> {
                     horizontal: 16,
                     vertical: 12,
                   ),
-                  color: AppColors.primaryLight,
+                  color: colors.surfaceContainer,
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(
-                        Icons.music_note,
-                        color: AppColors.primary,
-                        size: 20,
-                      ),
+                      Icon(Icons.music_note, color: primary, size: 20),
                       const SizedBox(width: 6),
                       Text(
                         '$filteredCount bolos',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: AppColors.primary,
+                          color: primary,
                         ),
                       ),
                       const SizedBox(width: 8),
-                      const Text(
-                        '·',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: AppColors.primary,
-                        ),
-                      ),
+                      Text('·', style: TextStyle(fontSize: 16, color: primary)),
                       const SizedBox(width: 8),
                       Text(
                         CurrencyFormatter.format(filteredCachet),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: AppColors.primary,
+                          color: primary,
                         ),
                       ),
                       if (hasActiveFilters) ...[
                         const SizedBox(width: 8),
                         Text(
                           '[de $totalCount]',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13,
-                            color: AppColors.textSecondary,
+                            color: colors.textSecondary,
                           ),
                         ),
                       ],
@@ -583,7 +576,7 @@ class _GigsListScreenState extends ConsumerState<GigsListScreen> {
             ? SafeArea(
                 top: false,
                 child: Material(
-                  color: AppColors.surface,
+                  color: colors.surface,
                   elevation: 8,
                   child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
@@ -606,8 +599,7 @@ class _GigsListScreenState extends ConsumerState<GigsListScreen> {
                         ),
                         IconButton(
                           tooltip: 'En B',
-                          onPressed: () =>
-                              _applyBulkStatus(GigStatus.cobradoB),
+                          onPressed: () => _applyBulkStatus(GigStatus.cobradoB),
                           icon: const Icon(
                             Icons.account_balance_wallet_outlined,
                           ),
@@ -923,6 +915,8 @@ class _StatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+    final primary = Theme.of(context).colorScheme.primary;
     return Padding(
       padding: const EdgeInsets.only(right: 6),
       child: ChoiceChip(
@@ -932,10 +926,11 @@ class _StatusChip extends StatelessWidget {
         labelStyle: TextStyle(
           fontSize: 12,
           fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-          color: selected ? Colors.white : AppColors.textPrimary,
+          color: selected ? primary : colors.textPrimary,
         ),
-        selectedColor: AppColors.primary,
-        backgroundColor: AppColors.surface,
+        selectedColor: primary.withValues(alpha: 0.22),
+        backgroundColor: colors.surfaceContainer,
+        side: BorderSide(color: selected ? primary : colors.border),
         visualDensity: VisualDensity.compact,
       ),
     );
@@ -957,17 +952,18 @@ class _FilterButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final disabled = onTap == null;
     final bgColor = active
-        ? AppColors.warningBg
+        ? colors.warningBg
         : disabled
-        ? AppColors.surface
-        : AppColors.surface;
+        ? colors.cardBackground
+        : colors.cardBackground;
     final fgColor = active
-        ? AppColors.warning
+        ? colors.warning
         : disabled
-        ? AppColors.textSecondary.withValues(alpha: 0.5)
-        : AppColors.textSecondary;
+        ? colors.textSecondary.withValues(alpha: 0.5)
+        : colors.textSecondary;
 
     return GestureDetector(
       onTap: onTap,
@@ -978,8 +974,8 @@ class _FilterButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: active
-                ? AppColors.warning.withValues(alpha: 0.3)
-                : AppColors.cardBorder,
+                ? colors.warning.withValues(alpha: 0.3)
+                : colors.border,
           ),
         ),
         child: Row(
@@ -1012,24 +1008,33 @@ class _ClearFiltersButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = context.colors;
+    final fg = isDark ? colors.error.withValues(alpha: 0.95) : colors.error;
+    final bg = isDark ? colors.errorBg.withValues(alpha: 0.62) : colors.errorBg;
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: AppColors.errorBg,
+          color: bg,
           borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isDark
+                ? colors.error.withValues(alpha: 0.42)
+                : Colors.transparent,
+          ),
         ),
-        child: const Row(
+        child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.close, size: 14, color: AppColors.error),
+            Icon(Icons.close, size: 14, color: fg),
             SizedBox(width: 4),
             Text(
               'Limpiar',
               style: TextStyle(
                 fontSize: 12,
-                color: AppColors.error,
+                color: fg,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -1071,25 +1076,26 @@ class _InlineActionButtonContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Container(
       height: 40,
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: colors.cardBackground,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.cardBorder),
+        border: Border.all(color: colors.border),
       ),
       alignment: Alignment.center,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, size: 16, color: AppColors.textSecondary),
+          Icon(icon, size: 16, color: colors.textSecondary),
           const SizedBox(width: 6),
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
+              color: colors.textPrimary,
             ),
           ),
         ],
@@ -1362,7 +1368,10 @@ class _GigListTile extends ConsumerWidget {
                     children: [
                       FacturableBadge(facturable: gig.facturable),
                       const SizedBox(height: 4),
-                      StatusBadge(status: gig.status, facturable: gig.facturable),
+                      StatusBadge(
+                        status: gig.status,
+                        facturable: gig.facturable,
+                      ),
                     ],
                   ),
             isThreeLine: true,

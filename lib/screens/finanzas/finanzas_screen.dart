@@ -1,11 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/constants/app_colors.dart';
+import '../../core/theme/app_theme_colors.dart';
 import '../../providers/invoice_provider.dart';
 import '../invoices/invoices_list_screen.dart';
 import '../expenses/expenses_screen.dart';
 import '../assets/assets_screen.dart';
+import '../clients/clients_list_screen.dart';
 
 class FinanzasScreen extends ConsumerStatefulWidget {
   const FinanzasScreen({super.key});
@@ -48,17 +49,19 @@ class _FinanzasScreenState extends ConsumerState<FinanzasScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+    final scheme = Theme.of(context).colorScheme;
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: Column(
         children: [
           const SafeArea(bottom: false, child: SizedBox(height: 12)),
           Material(
-            color: AppColors.primary,
+            color: colors.surface,
             child: TabBar(
-              labelColor: Colors.white,
-              unselectedLabelColor: Colors.white.withValues(alpha: 0.6),
-              indicatorColor: Colors.white,
+              labelColor: scheme.primary,
+              unselectedLabelColor: colors.textSecondary,
+              indicatorColor: scheme.primary,
               indicatorWeight: 3,
               tabs: const [
                 Tab(icon: Icon(Icons.receipt_long_outlined), text: 'Facturas'),
@@ -67,6 +70,7 @@ class _FinanzasScreenState extends ConsumerState<FinanzasScreen> {
                   icon: Icon(Icons.inventory_2_outlined),
                   text: 'Inversiones',
                 ),
+                Tab(icon: Icon(Icons.people_outline), text: 'Clientes'),
               ],
             ),
           ),
@@ -77,6 +81,7 @@ class _FinanzasScreenState extends ConsumerState<FinanzasScreen> {
                 InvoicesListScreen(),
                 ExpensesScreen(),
                 AssetsScreen(),
+                ClientsListScreen(embedded: true),
               ],
             ),
           ),

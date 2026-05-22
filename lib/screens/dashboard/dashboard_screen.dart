@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/theme/app_theme_colors.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../models/gig.dart';
@@ -682,6 +683,7 @@ class DashboardScreen extends ConsumerWidget {
   }
 
   Widget _buildUpcomingGigs(BuildContext context, List<Gig> upcoming) {
+    final colors = context.colors;
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final futureGigs = upcoming
@@ -707,22 +709,22 @@ class DashboardScreen extends ConsumerWidget {
             width: double.infinity,
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: AppColors.surface,
+              color: colors.cardBackground,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.cardBorder, width: 0.5),
+              border: Border.all(color: colors.border, width: 0.6),
             ),
             child: Column(
               children: [
                 Icon(
                   Icons.event_available,
                   size: 40,
-                  color: AppColors.textSecondary,
+                  color: colors.textSecondary,
                 ),
                 const SizedBox(height: 8),
-                const Text(
+                Text(
                   'No tienes bolos programados',
                   style: TextStyle(
-                    color: AppColors.textSecondary,
+                    color: colors.textSecondary,
                     fontSize: 14,
                   ),
                 ),
@@ -755,6 +757,8 @@ class DashboardScreen extends ConsumerWidget {
 class _PeriodSelector extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colors = context.colors;
+    final primary = Theme.of(context).colorScheme.primary;
     final period = ref.watch(dashboardPeriodProvider);
 
     return Column(
@@ -762,7 +766,7 @@ class _PeriodSelector extends ConsumerWidget {
         // Mode toggle: Mes / Trimestre / Año
         Container(
           decoration: BoxDecoration(
-            color: AppColors.primaryLight,
+            color: colors.surfaceContainer,
             borderRadius: BorderRadius.circular(10),
           ),
           padding: const EdgeInsets.all(3),
@@ -790,7 +794,7 @@ class _PeriodSelector extends ConsumerWidget {
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     decoration: BoxDecoration(
                       color: isSelected
-                          ? AppColors.primary
+                          ? primary
                           : Colors.transparent,
                       borderRadius: BorderRadius.circular(8),
                     ),
@@ -800,7 +804,7 @@ class _PeriodSelector extends ConsumerWidget {
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: isSelected ? Colors.white : AppColors.primary,
+                        color: isSelected ? Colors.white : primary,
                       ),
                     ),
                   ),
@@ -841,15 +845,15 @@ class _PeriodSelector extends ConsumerWidget {
                   vertical: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: AppColors.primaryLight,
+                  color: colors.surfaceContainer,
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
                   period.label,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
-                    color: AppColors.primary,
+                    color: primary,
                   ),
                 ),
               ),
@@ -858,7 +862,7 @@ class _PeriodSelector extends ConsumerWidget {
               icon: Icon(
                 Icons.chevron_right,
                 size: 28,
-                color: period.isFuture ? AppColors.cardBorder : null,
+                color: period.isFuture ? colors.border : null,
               ),
               onPressed: period.isFuture
                   ? null
@@ -883,6 +887,8 @@ class _FinancialBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+    final primary = Theme.of(context).colorScheme.primary;
     return GestureDetector(
       onTap: () => context.push('/financial'),
       child: Card(
@@ -893,8 +899,8 @@ class _FinancialBanner extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
             gradient: LinearGradient(
               colors: [
-                AppColors.primary,
-                AppColors.primary.withValues(alpha: 0.8),
+                primary,
+                primary.withValues(alpha: 0.78),
               ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
@@ -934,7 +940,7 @@ class _FinancialBanner extends StatelessWidget {
                       label: 'Pendiente de cobro',
                       subtitle: '(oficial + B)',
                       value: stats.pendienteTotal,
-                      color: Colors.amber[200]!,
+                      color: colors.warningBg,
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -943,7 +949,7 @@ class _FinancialBanner extends StatelessWidget {
                       label: 'Total previsto',
                       subtitle: '(si todo se cobra)',
                       value: stats.totalPrevistoGlobal,
-                      color: Colors.greenAccent[100]!,
+                      color: colors.successBg,
                     ),
                   ),
                 ],
@@ -1028,6 +1034,8 @@ class _GigTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colors = context.colors;
+    final primary = Theme.of(context).colorScheme.primary;
     final clientAsync = ref.watch(clientByIdProvider(gig.clientId));
 
     return Card(
@@ -1037,12 +1045,12 @@ class _GigTile extends ConsumerWidget {
           width: 44,
           height: 44,
           decoration: BoxDecoration(
-            color: gig.facturable ? AppColors.primaryLight : AppColors.purpleBg,
+            color: gig.facturable ? colors.infoBg : AppColors.purpleBg,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(
             Icons.music_note_outlined,
-            color: gig.facturable ? AppColors.primary : AppColors.purple,
+            color: gig.facturable ? primary : AppColors.purple,
             size: 22,
           ),
         ),
@@ -1073,6 +1081,8 @@ class _UpcomingGigTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colors = context.colors;
+    final primary = Theme.of(context).colorScheme.primary;
     final clientAsync = ref.watch(clientByIdProvider(gig.clientId));
 
     String badgeText;
@@ -1088,8 +1098,8 @@ class _UpcomingGigTile extends ConsumerWidget {
       badgeTextColor = AppColors.warning;
     } else {
       badgeText = 'en $daysLeft días';
-      badgeBg = AppColors.primaryLight;
-      badgeTextColor = AppColors.primary;
+      badgeBg = colors.infoBg;
+      badgeTextColor = primary;
     }
 
     return Card(
@@ -1099,12 +1109,12 @@ class _UpcomingGigTile extends ConsumerWidget {
           width: 44,
           height: 44,
           decoration: BoxDecoration(
-            color: gig.facturable ? AppColors.primaryLight : AppColors.purpleBg,
+            color: gig.facturable ? colors.infoBg : AppColors.purpleBg,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(
             Icons.music_note_outlined,
-            color: gig.facturable ? AppColors.primary : AppColors.purple,
+            color: gig.facturable ? primary : AppColors.purple,
             size: 22,
           ),
         ),

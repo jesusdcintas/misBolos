@@ -30,6 +30,7 @@ class AssetsNotifier extends AsyncNotifier<List<Asset>> {
   @override
   Future<List<Asset>> build() async {
     _startRealtimeIfNeeded();
+    await pullInitialFromCloud(updateState: false);
     return ref.read(assetRepositoryProvider).getAll();
   }
 
@@ -43,7 +44,10 @@ class AssetsNotifier extends AsyncNotifier<List<Asset>> {
     // borrados/altas desde otros dispositivos sin sync manual.
   }
 
-  Future<void> pullInitialFromCloud({bool force = false}) async {
+  Future<void> pullInitialFromCloud({
+    bool force = false,
+    bool updateState = true,
+  }) async {
     final supabase = SupabaseService.instance;
     if (!supabase.isAuthenticated) return;
     if (!force && _initialPullDone) return;
@@ -62,7 +66,9 @@ class AssetsNotifier extends AsyncNotifier<List<Asset>> {
         _isApplyingRemoteChange = false;
       }
       _initialPullDone = true;
-      await reloadLocal();
+      if (updateState) {
+        await reloadLocal();
+      }
     } catch (e) {
       debugPrint('[AssetsSync] Pull inicial error: $e');
     } finally {

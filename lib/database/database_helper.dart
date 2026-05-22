@@ -29,6 +29,8 @@ import 'migrations/v26_settings_sync_signature.dart';
 import 'migrations/v27_attachment_file_metadata.dart';
 import 'migrations/v28_drive_sync_queue_metadata.dart';
 import 'migrations/v29_drive_sync_queue_remote_fields.dart';
+import 'migrations/v30_settings_sync_security_theme.dart';
+import 'migrations/v31_expenses_assets_soft_delete.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._internal();
@@ -48,7 +50,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 29,
+      version: 31,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       onConfigure: (db) async {
@@ -150,6 +152,12 @@ class DatabaseHelper {
     if (version >= 29) {
       await _applyMigration(db, v29DriveSyncQueueRemoteFields);
     }
+    if (version >= 30) {
+      await _applyMigration(db, v30SettingsSyncSecurityTheme);
+    }
+    if (version >= 31) {
+      await _applyMigration(db, v31ExpensesAssetsSoftDelete);
+    }
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -236,6 +244,12 @@ class DatabaseHelper {
     }
     if (oldVersion < 29) {
       await _applyMigration(db, v29DriveSyncQueueRemoteFields);
+    }
+    if (oldVersion < 30) {
+      await _applyMigration(db, v30SettingsSyncSecurityTheme);
+    }
+    if (oldVersion < 31) {
+      await _applyMigration(db, v31ExpensesAssetsSoftDelete);
     }
   }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/theme/app_theme_colors.dart';
 
 class FacturableBadge extends StatelessWidget {
   final bool facturable;
@@ -13,8 +14,22 @@ class FacturableBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bgColor = facturable ? AppColors.successBg : AppColors.purpleBg;
-    final textColor = facturable ? AppColors.success : AppColors.purple;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = context.colors;
+    final bgColor = isDark
+        ? facturable
+              ? colors.successBg.withValues(alpha: 0.6)
+              : colors.surfaceElevated
+        : facturable
+        ? AppColors.successBg
+        : AppColors.purpleBg;
+    final textColor = isDark
+        ? facturable
+              ? colors.success
+              : colors.textSecondary
+        : facturable
+        ? AppColors.success
+        : AppColors.purple;
     final label = facturable ? 'Facturable' : 'En B';
 
     return Container(
@@ -25,6 +40,9 @@ class FacturableBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(20),
+        border: isDark
+            ? Border.all(color: colors.border.withValues(alpha: 0.6))
+            : null,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

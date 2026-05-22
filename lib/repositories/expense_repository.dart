@@ -9,7 +9,11 @@ class ExpenseRepository {
 
   Future<List<Expense>> getAll() async {
     final db = await DatabaseHelper.instance.database;
-    final maps = await db.query('expenses', orderBy: 'fecha DESC');
+    final maps = await db.query(
+      'expenses',
+      where: 'deleted_at IS NULL',
+      orderBy: 'fecha DESC',
+    );
     return maps.map((m) => Expense.fromMap(m)).toList();
   }
 
@@ -17,7 +21,7 @@ class ExpenseRepository {
     final db = await DatabaseHelper.instance.database;
     final maps = await db.query(
       'expenses',
-      where: 'fecha >= ? AND fecha <= ?',
+      where: 'fecha >= ? AND fecha <= ? AND deleted_at IS NULL',
       whereArgs: [from.toIso8601String(), to.toIso8601String()],
       orderBy: 'fecha DESC',
     );
@@ -28,7 +32,7 @@ class ExpenseRepository {
     final db = await DatabaseHelper.instance.database;
     final maps = await db.query(
       'expenses',
-      where: 'categoria = ?',
+      where: 'categoria = ? AND deleted_at IS NULL',
       whereArgs: [categoria.dbValue],
       orderBy: 'fecha DESC',
     );
@@ -37,7 +41,11 @@ class ExpenseRepository {
 
   Future<Expense?> getById(int id) async {
     final db = await DatabaseHelper.instance.database;
-    final maps = await db.query('expenses', where: 'id = ?', whereArgs: [id]);
+    final maps = await db.query(
+      'expenses',
+      where: 'id = ? AND deleted_at IS NULL',
+      whereArgs: [id],
+    );
     if (maps.isEmpty) return null;
     return Expense.fromMap(maps.first);
   }
@@ -109,7 +117,7 @@ class ExpenseRepository {
     final db = await DatabaseHelper.instance.database;
     final maps = await db.query(
       'expenses',
-      where: 'fecha >= ? AND fecha <= ?',
+      where: 'fecha >= ? AND fecha <= ? AND deleted_at IS NULL',
       whereArgs: [range.$1.toIso8601String(), range.$2.toIso8601String()],
     );
     final totales = <String, double>{};
@@ -126,7 +134,8 @@ class ExpenseRepository {
     final db = await DatabaseHelper.instance.database;
     final maps = await db.query(
       'expenses',
-      where: 'fecha >= ? AND fecha <= ? AND es_deducible = 1',
+      where:
+          'fecha >= ? AND fecha <= ? AND es_deducible = 1 AND deleted_at IS NULL',
       whereArgs: [range.$1.toIso8601String(), range.$2.toIso8601String()],
     );
     return maps.fold<double>(0.0, (sum, m) {
@@ -141,7 +150,8 @@ class ExpenseRepository {
     final db = await DatabaseHelper.instance.database;
     final maps = await db.query(
       'expenses',
-      where: 'fecha >= ? AND fecha <= ? AND es_deducible = 1',
+      where:
+          'fecha >= ? AND fecha <= ? AND es_deducible = 1 AND deleted_at IS NULL',
       whereArgs: [range.$1.toIso8601String(), range.$2.toIso8601String()],
     );
     return maps.fold<double>(0.0, (sum, m) {

@@ -8,7 +8,8 @@ import '../../widgets/common/skeleton_loading.dart';
 import '../../core/utils/app_haptics.dart';
 
 class ClientsListScreen extends ConsumerStatefulWidget {
-  const ClientsListScreen({super.key});
+  final bool embedded;
+  const ClientsListScreen({super.key, this.embedded = false});
 
   @override
   ConsumerState<ClientsListScreen> createState() => _ClientsListScreenState();
@@ -23,10 +24,8 @@ class _ClientsListScreenState extends ConsumerState<ClientsListScreen> {
         ? ref.watch(clientsProvider)
         : ref.watch(clientSearchProvider(_searchQuery));
 
-    return Scaffold(
-      appBar: AppBar(title: const Text(AppStrings.clientes)),
-      body: Column(
-        children: [
+    final content = Column(
+      children: [
           Padding(
             padding: const EdgeInsets.all(16),
             child: TextField(
@@ -77,8 +76,28 @@ class _ClientsListScreenState extends ConsumerState<ClientsListScreen> {
               error: (e, _) => Center(child: Text('Error: $e')),
             ),
           ),
+      ],
+    );
+
+    if (widget.embedded) {
+      return Stack(
+        children: [
+          content,
+          Positioned(
+            right: 16,
+            bottom: 16,
+            child: FloatingActionButton(
+              onPressed: () => context.push('/client/new'),
+              child: const Icon(Icons.add),
+            ),
+          ),
         ],
-      ),
+      );
+    }
+
+    return Scaffold(
+      appBar: AppBar(title: const Text(AppStrings.clientes)),
+      body: content,
       floatingActionButton: FloatingActionButton(
         onPressed: () => context.push('/client/new'),
         child: const Icon(Icons.add),

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:table_calendar/table_calendar.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/theme/app_theme_colors.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../models/gig.dart';
@@ -82,7 +83,9 @@ class CalendarScreen extends ConsumerWidget {
       final service = GoogleCalendarService();
       for (final gig in gigs) {
         try {
-          final client = await ref.read(clientByIdProvider(gig.clientId).future);
+          final client = await ref.read(
+            clientByIdProvider(gig.clientId).future,
+          );
           await service.syncGig(
             gig: gig,
             clientName: client?.nombre ?? 'Cliente',
@@ -102,9 +105,9 @@ class CalendarScreen extends ConsumerWidget {
     final message = failed == 0
         ? 'Google Calendar sincronizado ($synced bolos)'
         : 'Sincronizados $synced bolos · $failed con error';
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   /// Repara estados de bolos según sus facturas vinculadas.
@@ -231,7 +234,9 @@ class CalendarScreen extends ConsumerWidget {
                     tooltip: 'Sincronizar con Google Calendar',
                     onPressed: () {
                       final gigs = gigsAsync.valueOrNull;
-                      if (gigs != null) _syncToGoogleCalendar(context, ref, gigs);
+                      if (gigs != null) {
+                        _syncToGoogleCalendar(context, ref, gigs);
+                      }
                     },
                   ),
           if (!isCalendarView)
@@ -385,10 +390,7 @@ class CalendarScreen extends ConsumerWidget {
                 spacing: 12,
                 runSpacing: 4,
                 children: [
-                  _LegendItem(
-                    color: AppColors.primary,
-                    label: 'Confirmado',
-                  ),
+                  _LegendItem(color: AppColors.primary, label: 'Confirmado'),
                   _LegendItem(
                     color: AppColors.accentPurple,
                     label: 'Confirmado/Realizado en B',
@@ -540,6 +542,7 @@ class CalendarScreen extends ConsumerWidget {
           final m = DateFormat.MMM('es').format(DateTime(2024, selectedMonth));
           monthLabel = m[0].toUpperCase() + m.substring(1);
         }
+        final isDark = Theme.of(context).brightness == Brightness.dark;
 
         return Column(
           children: [
@@ -547,7 +550,9 @@ class CalendarScreen extends ConsumerWidget {
             // ── Resumen dinámico ──
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              color: AppColors.primaryLight,
+              color: isDark
+                  ? context.colors.surfaceContainer
+                  : AppColors.primaryLight,
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -851,13 +856,18 @@ class CalendarScreen extends ConsumerWidget {
 
   Widget _buildGigsSelectionHeader(BuildContext context, WidgetRef ref) {
     final selected = ref.watch(_selectedGigIdsProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = context.colors;
     return Container(
       height: 56,
       padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
+      decoration: BoxDecoration(
+        color: isDark ? colors.surface : AppColors.surface,
         border: Border(
-          bottom: BorderSide(color: AppColors.cardBorder, width: 0.5),
+          bottom: BorderSide(
+            color: isDark ? colors.border : AppColors.cardBorder,
+            width: 0.5,
+          ),
         ),
       ),
       child: Row(
@@ -955,6 +965,9 @@ class CalendarScreen extends ConsumerWidget {
     WidgetRef ref,
     Map<int, int> monthsWithData,
   ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = context.colors;
+    final primary = Theme.of(context).colorScheme.primary;
     final selectedMonth = ref.read(_monthFilterProvider);
 
     showModalBottomSheet(
@@ -962,111 +975,139 @@ class CalendarScreen extends ConsumerWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Filtrar por mes',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            ListTile(
-              leading: Icon(
-                selectedMonth == null
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_unchecked,
-                color: selectedMonth == null
-                    ? AppColors.primary
-                    : AppColors.textSecondary,
+      builder: (ctx) => Container(
+        decoration: BoxDecoration(
+          color: isDark ? colors.modalBackground : null,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Filtrar por mes',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? colors.textPrimary : null,
+                ),
               ),
-              title: const Text('Todos los meses'),
-              contentPadding: EdgeInsets.zero,
-              onTap: () {
-                ref.read(_monthFilterProvider.notifier).state = null;
-                Navigator.pop(ctx);
-              },
-            ),
-            const SizedBox(height: 8),
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 6,
-                childAspectRatio: 1.6,
-                crossAxisSpacing: 8,
-                mainAxisSpacing: 8,
+              const SizedBox(height: 12),
+              ListTile(
+                leading: Icon(
+                  selectedMonth == null
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_unchecked,
+                  color: selectedMonth == null ? primary : colors.textSecondary,
+                ),
+                title: Text(
+                  'Todos los meses',
+                  style: TextStyle(color: isDark ? colors.textPrimary : null),
+                ),
+                contentPadding: EdgeInsets.zero,
+                onTap: () {
+                  ref.read(_monthFilterProvider.notifier).state = null;
+                  Navigator.pop(ctx);
+                },
               ),
-              itemCount: 12,
-              itemBuilder: (context, index) {
-                final month = index + 1;
-                final hasData = monthsWithData.containsKey(month);
-                final isSelected = selectedMonth == month;
-                final raw = DateFormat.MMM('es').format(DateTime(2024, month));
-                final name = raw[0].toUpperCase() + raw.substring(1);
+              const SizedBox(height: 8),
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 6,
+                  childAspectRatio: 1.6,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
+                ),
+                itemCount: 12,
+                itemBuilder: (context, index) {
+                  final month = index + 1;
+                  final hasData = monthsWithData.containsKey(month);
+                  final isSelected = selectedMonth == month;
+                  final raw = DateFormat.MMM(
+                    'es',
+                  ).format(DateTime(2024, month));
+                  final name = raw[0].toUpperCase() + raw.substring(1);
 
-                return GestureDetector(
-                  onTap: hasData
-                      ? () {
-                          ref.read(_monthFilterProvider.notifier).state = month;
-                          Navigator.pop(ctx);
-                        }
-                      : null,
-                  child: Container(
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? AppColors.primary
-                          : hasData
-                          ? AppColors.primaryLight
-                          : AppColors.surface,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
+                  return GestureDetector(
+                    onTap: hasData
+                        ? () {
+                            ref.read(_monthFilterProvider.notifier).state =
+                                month;
+                            Navigator.pop(ctx);
+                          }
+                        : null,
+                    child: Container(
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        // Keep light mode untouched; only dark uses theme surfaces.
                         color: isSelected
-                            ? AppColors.primary
+                            ? (isDark ? colors.infoBg : AppColors.primary)
                             : hasData
-                            ? AppColors.cardBorder
-                            : AppColors.divider,
-                      ),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          name,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: isSelected
-                                ? FontWeight.bold
-                                : FontWeight.normal,
-                            color: isSelected
-                                ? Colors.white
-                                : hasData
-                                ? AppColors.textPrimary
-                                : AppColors.textSecondary.withValues(
-                                    alpha: 0.4,
-                                  ),
-                          ),
+                            ? (Theme.of(context).brightness == Brightness.dark
+                                  ? context.colors.surfaceContainer
+                                  : AppColors.primaryLight)
+                            : (Theme.of(context).brightness == Brightness.dark
+                                  ? context.colors.cardBackground
+                                  : AppColors.surface),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: isSelected
+                              ? (isDark ? primary : AppColors.primary)
+                              : hasData
+                              ? (isDark ? colors.border : AppColors.cardBorder)
+                              : (isDark
+                                    ? colors.border.withValues(alpha: 0.55)
+                                    : AppColors.divider),
                         ),
-                        if (hasData)
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
                           Text(
-                            '${monthsWithData[month]}',
+                            name,
                             style: TextStyle(
-                              fontSize: 10,
+                              fontSize: 12,
+                              fontWeight: isSelected
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
                               color: isSelected
-                                  ? Colors.white70
-                                  : AppColors.textSecondary,
+                                  ? (isDark ? colors.textPrimary : Colors.white)
+                                  : hasData
+                                  ? (isDark
+                                        ? colors.textPrimary
+                                        : AppColors.textPrimary)
+                                  : (isDark
+                                            ? colors.textSecondary
+                                            : AppColors.textSecondary)
+                                        .withValues(alpha: 0.4),
                             ),
                           ),
-                      ],
+                          if (hasData)
+                            Text(
+                              '${monthsWithData[month]}',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: isSelected
+                                    ? (isDark
+                                          ? colors.textSecondary
+                                          : Colors.white70)
+                                    : (isDark
+                                          ? colors.textSecondary
+                                          : AppColors.textSecondary),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
-                  ),
-                );
-              },
-            ),
-          ],
+                  );
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1224,6 +1265,12 @@ class _StatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = context.colors;
+    final selectedText = isDark
+        ? Theme.of(context).colorScheme.primary
+        : Colors.white;
+    final unselectedText = isDark ? colors.textPrimary : AppColors.textPrimary;
     return Padding(
       padding: const EdgeInsets.only(right: 6),
       child: ChoiceChip(
@@ -1233,10 +1280,19 @@ class _StatusChip extends StatelessWidget {
         labelStyle: TextStyle(
           fontSize: 12,
           fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-          color: selected ? Colors.white : AppColors.textPrimary,
+          color: selected ? selectedText : unselectedText,
         ),
-        selectedColor: AppColors.primary,
-        backgroundColor: AppColors.surface,
+        selectedColor: isDark
+            ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.22)
+            : AppColors.primary,
+        backgroundColor: isDark ? colors.surfaceContainer : AppColors.surface,
+        side: BorderSide(
+          color: selected
+              ? (isDark
+                    ? Theme.of(context).colorScheme.primary
+                    : AppColors.primary)
+              : (isDark ? colors.border : AppColors.cardBorder),
+        ),
         visualDensity: VisualDensity.compact,
       ),
     );
@@ -1258,13 +1314,19 @@ class _FilterButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = context.colors;
     final disabled = onTap == null;
-    final bgColor = active ? AppColors.warningBg : AppColors.surface;
+    final bgColor = active
+        ? (isDark ? colors.surfaceContainer : AppColors.warningBg)
+        : (isDark ? colors.cardBackground : AppColors.surface);
     final fgColor = active
-        ? AppColors.warning
+        ? (isDark ? Theme.of(context).colorScheme.primary : AppColors.warning)
         : disabled
-        ? AppColors.textSecondary.withValues(alpha: 0.5)
-        : AppColors.textSecondary;
+        ? (isDark
+              ? colors.textSecondary.withValues(alpha: 0.6)
+              : AppColors.textSecondary.withValues(alpha: 0.5))
+        : (isDark ? colors.textSecondary : AppColors.textSecondary);
 
     return GestureDetector(
       onTap: onTap,
@@ -1275,8 +1337,12 @@ class _FilterButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: active
-                ? AppColors.warning.withValues(alpha: 0.3)
-                : AppColors.cardBorder,
+                ? (isDark
+                      ? Theme.of(
+                          context,
+                        ).colorScheme.primary.withValues(alpha: 0.45)
+                      : AppColors.warning.withValues(alpha: 0.3))
+                : (isDark ? colors.border : AppColors.cardBorder),
           ),
         ),
         child: Row(
@@ -1309,24 +1375,35 @@ class _ClearFiltersButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = context.colors;
+    final fg = isDark ? colors.error.withValues(alpha: 0.95) : AppColors.error;
+    final bg = isDark
+        ? colors.errorBg.withValues(alpha: 0.62)
+        : AppColors.errorBg;
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: AppColors.errorBg,
+          color: bg,
           borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isDark
+                ? colors.error.withValues(alpha: 0.42)
+                : Colors.transparent,
+          ),
         ),
-        child: const Row(
+        child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.close, size: 14, color: AppColors.error),
-            SizedBox(width: 4),
+            Icon(Icons.close, size: 14, color: fg),
+            const SizedBox(width: 4),
             Text(
               'Limpiar',
               style: TextStyle(
                 fontSize: 12,
-                color: AppColors.error,
+                color: fg,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -1467,15 +1544,23 @@ class _GigListTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = context.colors;
     final clientAsync = ref.watch(clientByIdProvider(gig.clientId));
 
     return Card(
-      color: isSelected ? AppColors.primaryLight : null,
+      color: isDark
+          ? (isSelected ? colors.surfaceElevated : colors.cardBackground)
+          : (isSelected ? AppColors.primaryLight : null),
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
-          color: isSelected ? AppColors.primary : AppColors.cardBorder,
+          color: isDark
+              ? (isSelected
+                    ? colors.info.withValues(alpha: 0.55)
+                    : colors.border.withValues(alpha: 0.75))
+              : (isSelected ? AppColors.primary : AppColors.cardBorder),
           width: isSelected ? 1.1 : 0.8,
         ),
       ),
@@ -1500,14 +1585,20 @@ class _GigListTile extends ConsumerWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: gig.facturable
+                  color: isDark
+                      ? colors.surfaceContainer
+                      : gig.facturable
                       ? AppColors.primaryLight
                       : AppColors.purpleBg,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
                   Icons.music_note_outlined,
-                  color: gig.facturable ? AppColors.primary : AppColors.purple,
+                  color: isDark
+                      ? colors.textSecondary
+                      : gig.facturable
+                      ? AppColors.primary
+                      : AppColors.purple,
                   size: 22,
                 ),
               ),
@@ -1523,10 +1614,12 @@ class _GigListTile extends ConsumerWidget {
                             : client?.nombre ?? 'Cliente desconocido',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 15,
-                          fontWeight: FontWeight.w500,
-                          color: Color(0xFF0D1B2A),
+                          fontWeight: FontWeight.w600,
+                          color: isDark
+                              ? colors.textPrimary
+                              : const Color(0xFF0D1B2A),
                         ),
                       ),
                       loading: () => const Text('...'),
@@ -1536,9 +1629,11 @@ class _GigListTile extends ConsumerWidget {
                     Text(
                       '${DateFormatter.dayOfWeekFull(gig.fecha)}${gig.cachet != null ? ' · ${CurrencyFormatter.format(gig.cachet!)}' : ''}',
                       softWrap: true,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: Color(0xFF8C95A6),
+                        color: isDark
+                            ? colors.textSecondary
+                            : const Color(0xFF8C95A6),
                       ),
                     ),
                     const SizedBox(height: 6),
@@ -1623,9 +1718,17 @@ class _BulkGigsActionsBar extends ConsumerWidget {
     return Container(
       height: 84,
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        border: Border(top: BorderSide(color: AppColors.cardBorder)),
+      decoration: BoxDecoration(
+        color: Theme.of(context).brightness == Brightness.dark
+            ? context.colors.surface
+            : AppColors.surface,
+        border: Border(
+          top: BorderSide(
+            color: Theme.of(context).brightness == Brightness.dark
+                ? context.colors.border
+                : AppColors.cardBorder,
+          ),
+        ),
       ),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
@@ -1763,12 +1866,16 @@ class _InlineActionButtonContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = context.colors;
     return Container(
       height: 40,
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: isDark ? colors.cardBackground : AppColors.surface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.cardBorder),
+        border: Border.all(
+          color: isDark ? colors.border : AppColors.cardBorder,
+        ),
       ),
       alignment: Alignment.center,
       child: Row(

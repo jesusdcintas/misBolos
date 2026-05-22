@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/theme/app_theme_colors.dart';
 import '../../models/expense.dart';
 import '../../providers/expenses_provider.dart';
 import '../../providers/sync_provider.dart';
@@ -179,22 +180,21 @@ class _CompactHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Container(
       height: 48,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       alignment: Alignment.centerLeft,
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        border: Border(
-          bottom: BorderSide(color: AppColors.cardBorder, width: 0.5),
-        ),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        border: Border(bottom: BorderSide(color: colors.border, width: 0.6)),
       ),
       child: Text(
         title,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 20,
           fontWeight: FontWeight.w500,
-          color: AppColors.textPrimary,
+          color: colors.textPrimary,
         ),
       ),
     );
@@ -280,25 +280,29 @@ class _ResumenBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+    final primary = Theme.of(context).colorScheme.primary;
     final fmt = NumberFormat.currency(locale: 'es_ES', symbol: '€');
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: AppColors.primaryLight,
+        color: colors.surfaceContainer,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.cardBorder),
+        border: Border.all(color: colors.border),
       ),
       child: Row(
         children: [
           Expanded(
             child: _Stat(label: 'Total gastos', value: fmt.format(total)),
           ),
-          Container(width: 1, height: 32, color: AppColors.divider),
+          Container(width: 1, height: 32, color: colors.border),
           Expanded(
             child: _Stat(
               label: 'IVA soportado',
               value: fmt.format(ivaSoportado),
+              primary: primary,
+              secondary: colors.textSecondary,
             ),
           ),
         ],
@@ -310,8 +314,15 @@ class _ResumenBanner extends StatelessWidget {
 class _Stat extends StatelessWidget {
   final String label;
   final String value;
+  final Color? primary;
+  final Color? secondary;
 
-  const _Stat({required this.label, required this.value});
+  const _Stat({
+    required this.label,
+    required this.value,
+    this.primary,
+    this.secondary,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -319,16 +330,19 @@ class _Stat extends StatelessWidget {
       children: [
         Text(
           value,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.bold,
-            color: AppColors.primary,
+            color: primary ?? Theme.of(context).colorScheme.primary,
           ),
         ),
         const SizedBox(height: 2),
         Text(
           label,
-          style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+          style: TextStyle(
+            fontSize: 11,
+            color: secondary ?? context.colors.textSecondary,
+          ),
         ),
       ],
     );
@@ -348,6 +362,9 @@ class _FiltroMes extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = context.colors;
+    final primary = Theme.of(context).colorScheme.primary;
     final months = [
       'Ene',
       'Feb',
@@ -375,10 +392,22 @@ class _FiltroMes extends StatelessWidget {
             return FilterChip(
               label: const Text('Todo'),
               selected: selected,
-              selectedColor: AppColors.primary,
-              checkmarkColor: Colors.white,
+              selectedColor: isDark
+                  ? primary.withValues(alpha: 0.22)
+                  : AppColors.primary,
+              backgroundColor: isDark
+                  ? colors.surfaceContainer
+                  : AppColors.surface,
+              side: BorderSide(
+                color: selected
+                    ? (isDark ? primary : AppColors.primary)
+                    : (isDark ? colors.border : AppColors.cardBorder),
+              ),
+              checkmarkColor: isDark ? primary : Colors.white,
               labelStyle: TextStyle(
-                color: selected ? Colors.white : AppColors.textPrimary,
+                color: selected
+                    ? (isDark ? primary : Colors.white)
+                    : (isDark ? colors.textPrimary : AppColors.textPrimary),
               ),
               onSelected: (_) => onChanged(year, null),
             );
@@ -388,10 +417,22 @@ class _FiltroMes extends StatelessWidget {
           return FilterChip(
             label: Text(months[m - 1]),
             selected: selected,
-            selectedColor: AppColors.primary,
-            checkmarkColor: Colors.white,
+            selectedColor: isDark
+                ? primary.withValues(alpha: 0.22)
+                : AppColors.primary,
+            backgroundColor: isDark
+                ? colors.surfaceContainer
+                : AppColors.surface,
+            side: BorderSide(
+              color: selected
+                  ? (isDark ? primary : AppColors.primary)
+                  : (isDark ? colors.border : AppColors.cardBorder),
+            ),
+            checkmarkColor: isDark ? primary : Colors.white,
             labelStyle: TextStyle(
-              color: selected ? Colors.white : AppColors.textPrimary,
+              color: selected
+                  ? (isDark ? primary : Colors.white)
+                  : (isDark ? colors.textPrimary : AppColors.textPrimary),
             ),
             onSelected: (_) => onChanged(year, selected ? null : m),
           );
@@ -414,16 +455,16 @@ class _ActionPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = active ? AppColors.primary : AppColors.textPrimary;
+    final colors = context.colors;
+    final primary = Theme.of(context).colorScheme.primary;
+    final color = active ? primary : colors.textPrimary;
     return Container(
       height: 40,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: colors.cardBackground,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: active ? AppColors.primary : AppColors.cardBorder,
-        ),
+        border: Border.all(color: active ? primary : colors.border),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -461,6 +502,7 @@ class _ExpenseCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final fmt = NumberFormat.currency(locale: 'es_ES', symbol: '€');
     final dateFmt = DateFormat('d MMM', 'es_ES');
 
@@ -468,7 +510,7 @@ class _ExpenseCard extends StatelessWidget {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: AppColors.cardBorder),
+        side: BorderSide(color: colors.border),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
@@ -481,13 +523,13 @@ class _ExpenseCard extends StatelessWidget {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: AppColors.primaryLight,
+                  color: context.colors.infoBg,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(
                   _categoryIcon(expense.categoria),
                   size: 20,
-                  color: AppColors.primary,
+                  color: Theme.of(context).colorScheme.primary,
                 ),
               ),
               const SizedBox(width: 12),
@@ -497,9 +539,9 @@ class _ExpenseCard extends StatelessWidget {
                   children: [
                     Text(
                       expense.concepto,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
+                        color: colors.textPrimary,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -507,9 +549,9 @@ class _ExpenseCard extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       '${expense.categoria.label}  ·  ${dateFmt.format(expense.fecha)}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: AppColors.textSecondary,
+                        color: colors.textSecondary,
                       ),
                     ),
                   ],
@@ -521,18 +563,15 @@ class _ExpenseCard extends StatelessWidget {
                 children: [
                   Text(
                     fmt.format(expense.total),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
+                      color: colors.textPrimary,
                     ),
                   ),
                   if (!expense.esDeducible)
-                    const Text(
+                    Text(
                       'No deducible',
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: AppColors.textMuted,
-                      ),
+                      style: TextStyle(fontSize: 10, color: colors.textMuted),
                     ),
                 ],
               ),

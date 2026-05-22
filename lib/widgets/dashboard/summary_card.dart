@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../core/constants/app_colors.dart';
+import '../../core/theme/app_theme_colors.dart';
 import '../common/animated_counter.dart';
 
 class SummaryCard extends StatelessWidget {
@@ -30,12 +30,13 @@ class SummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final card = Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: backgroundColor ?? AppColors.surface,
+        color: backgroundColor ?? colors.cardBackground,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.cardBorder, width: 0.5),
+        border: Border.all(color: colors.border, width: 0.6),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -54,10 +55,10 @@ class SummaryCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   title.toUpperCase(),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w500,
-                    color: AppColors.textSecondary,
+                    color: colors.textSecondary,
                     letterSpacing: 0.3,
                   ),
                   maxLines: 2,
@@ -67,14 +68,18 @@ class SummaryCard extends StatelessWidget {
               if (onInfoTap != null)
                 GestureDetector(
                   onTap: onInfoTap,
-                  child: const Icon(Icons.info_outline, size: 16, color: Color(0xFF8C95A6)),
+                  child: Icon(
+                    Icons.info_outline,
+                    size: 16,
+                    color: colors.textSecondary,
+                  ),
                 )
               else if (showChevron)
-                const Text(
+                Text(
                   '›',
                   style: TextStyle(
                     fontSize: 16,
-                    color: AppColors.cardBorder,
+                    color: colors.border,
                     fontWeight: FontWeight.w300,
                   ),
                 ),
@@ -84,19 +89,19 @@ class SummaryCard extends StatelessWidget {
           if (numericValue != null)
             AnimatedCounter(
               value: numericValue!,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
+                color: colors.textPrimary,
               ),
             )
           else
             Text(
               value,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
+                color: colors.textPrimary,
               ),
             ),
           if (subtitle != null) ...[

@@ -8,7 +8,11 @@ class AssetRepository {
 
   Future<List<Asset>> getAll() async {
     final db = await DatabaseHelper.instance.database;
-    final maps = await db.query('assets', orderBy: 'fecha_compra DESC');
+    final maps = await db.query(
+      'assets',
+      where: 'deleted_at IS NULL',
+      orderBy: 'fecha_compra DESC',
+    );
     return maps.map(Asset.fromMap).toList();
   }
 
@@ -16,7 +20,7 @@ class AssetRepository {
     final db = await DatabaseHelper.instance.database;
     final maps = await db.query(
       'assets',
-      where: 'activo = 1',
+      where: 'activo = 1 AND deleted_at IS NULL',
       orderBy: 'fecha_compra DESC',
     );
     return maps.map(Asset.fromMap).toList();
@@ -24,7 +28,11 @@ class AssetRepository {
 
   Future<Asset?> getById(int id) async {
     final db = await DatabaseHelper.instance.database;
-    final maps = await db.query('assets', where: 'id = ?', whereArgs: [id]);
+    final maps = await db.query(
+      'assets',
+      where: 'id = ? AND deleted_at IS NULL',
+      whereArgs: [id],
+    );
     if (maps.isEmpty) return null;
     return Asset.fromMap(maps.first);
   }
