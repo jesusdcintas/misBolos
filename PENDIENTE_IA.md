@@ -1,5 +1,7 @@
 # Pendiente IA - MisBolos
 
+> Nota: este estado está consolidado en [`docs/plan_maestro_implementacion.md`](./docs/plan_maestro_implementacion.md).
+
 Fecha de actualización: 2026-05-19
 
 ## Ya implementado

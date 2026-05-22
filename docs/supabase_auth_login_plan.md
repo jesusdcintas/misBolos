@@ -1,5 +1,7 @@
 # Plan de implementación - Login principal con Supabase Auth (MisBolos)
 
+> Nota: este plan está consolidado en [`docs/plan_maestro_implementacion.md`](./plan_maestro_implementacion.md).
+
 ## Objetivo
 Forzar autenticación al abrir la app usando Supabase Auth como fuente única de identidad, con soporte de:
 - Email + contraseña (login/registro/recover)
@@ -88,66 +90,76 @@ Mostrar mensajes claros para:
 ## Checklist técnica
 
 ### Fase 1 - Email/Password + sesión persistente
-- [ ] Crear `AuthController` (estado de sesión + acciones auth).
-- [ ] Crear pantalla `LoginScreen` (`/login`).
-- [ ] Crear pantalla `RegisterScreen` (`/register`).
-- [ ] Crear pantalla `ForgotPasswordScreen` (`/forgot-password`).
-- [ ] Integrar flujo de login email/password con Supabase.
-- [ ] Integrar flujo de registro con Supabase.
-- [ ] Integrar recuperación de contraseña.
-- [ ] Integrar sesión persistente en arranque (`currentSession`).
-- [ ] Implementar guardas de rutas públicas/privadas en GoRouter.
-- [ ] Añadir botón “Cerrar sesión” en Perfil.
-- [ ] Implementar limpieza de estado al logout (providers/sync/UI).
-- [ ] Revisar repositorios SQLite para filtrar por `user_id`.
-- [ ] Revisar escritura de `user_id` en altas/updates.
-- [ ] Revisar RLS de tablas core en Supabase.
-- [ ] Probar modo offline con sesión guardada.
-- [ ] Probar bloqueo de acceso sin sesión y sin red.
+- [x] Crear `AuthController` (estado de sesión + acciones auth).
+- [x] Crear pantalla `LoginScreen` (`/login`).
+- [x] Crear pantalla `RegisterScreen` (`/register`).
+- [x] Crear pantalla `ForgotPasswordScreen` (`/forgot-password`).
+- [x] Integrar flujo de login email/password con Supabase.
+- [x] Integrar flujo de registro con Supabase.
+- [x] Integrar recuperación de contraseña.
+- [x] Integrar sesión persistente en arranque (`currentSession`).
+- [x] Implementar guardas de rutas públicas/privadas en GoRouter.
+- [x] Añadir botón “Cerrar sesión” en Perfil.
+- [x] Implementar limpieza de estado al logout (providers/sync/UI).
+- [x] Revisar repositorios SQLite para filtrar por `user_id`.
+- [x] Revisar escritura de `user_id` en altas/updates.
+- [x] Revisar RLS de tablas core en Supabase.
+- [x] Probar modo offline con sesión guardada.
+- [x] Probar bloqueo de acceso sin sesión y sin red.
 
 ### Fase 2 - Google Sign-In
-- [ ] Implementar login Google iOS/Android (`google_sign_in` + tokens a Supabase).
-- [ ] Integrar flujo compatible en macOS (OAuth actual).
-- [ ] Mapear errores Google (cancelado/red/token inválido).
-- [ ] Validar coexistencia con login email/password.
+- [x] Implementar login Google iOS/Android (`google_sign_in` + tokens a Supabase).
+- [x] Integrar flujo compatible en macOS (OAuth actual).
+- [x] Mapear errores Google (cancelado/red/token inválido).
+- [x] Validar coexistencia con login email/password.
 
 ---
 
 ## Checklist QA (manual)
 
 ### Autenticación
-- [ ] Login correcto con email/contraseña.
-- [ ] Error visible con contraseña incorrecta.
-- [ ] Registro correcto de nuevo usuario.
-- [ ] Recuperación de contraseña envía email/reset.
-- [ ] Redirección automática a app privada tras login.
-- [ ] Redirección a login al hacer logout.
+- [x] Login correcto con email/contraseña.
+- [x] Error visible con contraseña incorrecta.
+- [x] Registro correcto de nuevo usuario.
+- [x] Recuperación de contraseña envía email/reset.
+- [x] Redirección automática a app privada tras login.
+- [x] Redirección a login al hacer logout.
 
 ### Sesión y routing
-- [ ] Con sesión activa, app abre en privado sin pedir login.
-- [ ] Sin sesión, app abre en `/login`.
-- [ ] Ruta privada no accesible sin sesión.
+- [x] Con sesión activa, app abre en privado sin pedir login.
+- [x] Sin sesión, app abre en `/login`.
+- [x] Ruta privada no accesible sin sesión.
 
 ### Datos por usuario
-- [ ] Usuario A no ve datos de usuario B en ninguna pantalla.
-- [ ] Sync solo sube/descarga datos del `user_id` activo.
-- [ ] Logout/login con otro usuario no mezcla datos.
+- [x] Usuario A no ve datos de usuario B en ninguna pantalla.
+- [x] Sync solo sube/descarga datos del `user_id` activo.
+- [x] Logout/login con otro usuario no mezcla datos.
 
 ### Offline
-- [ ] Con sesión persistida y sin internet, se puede entrar.
-- [ ] Sin sesión y sin internet, login bloqueado con mensaje claro.
+- [x] Con sesión persistida y sin internet, se puede entrar.
+- [x] Sin sesión y sin internet, login bloqueado con mensaje claro.
 
 ### Google (fase 2)
-- [ ] Login Google correcto.
-- [ ] Cancelación Google muestra mensaje controlado.
-- [ ] Usuario Google entra en rutas privadas como email/password.
+- [x] Login Google correcto.
+- [x] Cancelación Google muestra mensaje controlado.
+- [x] Usuario Google entra en rutas privadas como email/password.
 
 ---
 
 ## Riesgos y decisiones
 - Riesgo principal: fuga de datos entre usuarios por consultas SQLite sin filtro.
-- Decisión inicial: no borrar SQLite en logout por defecto; aislar por `user_id`.
+- Decisión actual implementada: limpieza de datos locales de usuario al hacer logout (`clearUserScopedData`) para evitar cualquier fuga entre sesiones en el mismo dispositivo.
 - Si se detectan datos legacy sin `user_id`, preparar migración de saneo.
+
+---
+
+## Estado validado en código (2026-05-22)
+- AuthController, pantallas Auth y rutas públicas/privadas: implementado.
+- Login/registro/recuperación/reset: implementado.
+- Sesión persistente + guardas GoRouter: implementado.
+- Login Google (iOS/Android/macOS) y manejo de errores: implementado.
+- Logout en Perfil y limpieza de estado/sesión: implementado.
+- Filtrado y sync por `user_id` con RLS en tablas core: implementado.
 
 ---
 

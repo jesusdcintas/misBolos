@@ -1,5 +1,7 @@
 # Plan de integración Google Drive - MisBolos
 
+> Nota: este plan está consolidado en [`docs/plan_maestro_implementacion.md`](./plan_maestro_implementacion.md).
+
 ## Objetivo
 Google Drive será un archivo documental ordenado de MisBolos, no la base de datos principal. La fuente de verdad seguirá siendo SQLite/Supabase. Drive guardará PDFs de facturas, adjuntos de gastos y adjuntos de inversiones organizados por año, trimestre y mes.
 
