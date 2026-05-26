@@ -46,6 +46,8 @@
 	<string>MisBolos necesita acceder a tus fotos para seleccionar facturas o tickets.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>MisBolos puede guardar documentos generados si decides compartirlos o exportarlos.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>MisBolos usa Face ID para desbloquear la app de forma segura.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

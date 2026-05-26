@@ -213,7 +213,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               const SizedBox(height: 8),
               SwitchListTile(
                 title: const Text('Auto-sync'),
-                subtitle: const Text('Sincronización automática en segundo plano'),
+                subtitle: const Text(
+                  'Sincronización automática en segundo plano',
+                ),
                 value: _autoCloudSyncEnabled,
                 onChanged: (v) => setState(() => _autoCloudSyncEnabled = v),
               ),
@@ -230,9 +232,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       DropdownMenuItem(value: 120, child: Text('2 minutos')),
                       DropdownMenuItem(value: 300, child: Text('5 minutos')),
                     ],
-                    onChanged: (v) => setState(
-                      () => _autoCloudSyncIntervalSeconds = v ?? 45,
-                    ),
+                    onChanged: (v) =>
+                        setState(() => _autoCloudSyncIntervalSeconds = v ?? 45),
                   ),
                 ),
               const SizedBox(height: 24),
@@ -251,7 +252,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ButtonSegment(value: 'system', label: Text('Sistema')),
                 ],
                 selected: {_appThemeMode},
-                onSelectionChanged: (v) => setState(() => _appThemeMode = v.first),
+                onSelectionChanged: (v) =>
+                    setState(() => _appThemeMode = v.first),
               ),
               const SizedBox(height: 24),
 
@@ -287,7 +289,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               const SizedBox(height: 8),
               SwitchListTile(
                 title: const Text('Bloqueo biométrico'),
-                subtitle: const Text('Huellas/Face ID cuando el dispositivo lo permita'),
+                subtitle: const Text(
+                  'Huellas/Face ID cuando el dispositivo lo permita',
+                ),
                 value: _securityBiometricEnabled,
                 onChanged: (v) => setState(() => _securityBiometricEnabled = v),
               ),
@@ -344,6 +348,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _save() async {
+    final pin = _securityPinCode.trim();
+    if (_securityPinEnabled && !RegExp(r'^\d{4,8}$').hasMatch(pin)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('El PIN debe tener entre 4 y 8 dígitos numéricos.'),
+          ),
+        );
+      }
+      return;
+    }
+
     // Preserve profile fields that are edited in ProfileScreen
     final current = await ref.read(settingsProvider.future);
     final settings = current.copyWith(
@@ -356,7 +372,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       autoCloudSyncIntervalSeconds: _autoCloudSyncIntervalSeconds,
       appThemeMode: _appThemeMode,
       securityPinEnabled: _securityPinEnabled,
-      securityPinCode: _securityPinCode.trim(),
+      securityPinCode: pin,
       securityBiometricEnabled: _securityBiometricEnabled,
     );
 

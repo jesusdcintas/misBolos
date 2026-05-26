@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'core/security/app_lock_manager.dart';
 import 'core/theme/app_theme.dart';
 import 'models/app_settings.dart';
 import 'providers/settings_provider.dart';
@@ -31,6 +32,7 @@ import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
 import 'screens/auth/forgot_password_screen.dart';
 import 'screens/auth/reset_password_screen.dart';
+import 'screens/auth/lock_screen.dart';
 import 'screens/expenses/expense_form_screen.dart';
 import 'screens/expenses/expense_detail_screen.dart';
 import 'screens/assets/asset_form_screen.dart';
@@ -71,7 +73,8 @@ final routerProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final session = Supabase.instance.client.auth.currentSession;
       final isResetPassword = state.matchedLocation == '/reset-password';
-      final loggingIn = state.matchedLocation == '/login' ||
+      final loggingIn =
+          state.matchedLocation == '/login' ||
           state.matchedLocation == '/register' ||
           state.matchedLocation == '/forgot-password';
 
@@ -84,7 +87,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/login',
-        pageBuilder: (context, state) => _slideUpPage(const LoginScreen(), state),
+        pageBuilder: (context, state) =>
+            _slideUpPage(const LoginScreen(), state),
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
@@ -321,6 +325,9 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp>
   Timer? _autoCloudSyncTimer;
   StreamSubscription<AuthState>? _authStateSub;
   ProviderSubscription<AsyncValue<AppSettings>>? _settingsSub;
+  final AppLockManager _lockManager = AppLockManager(
+    lockAfterBackground: const Duration(seconds: 4),
+  );
 
   @override
   void initState() {
@@ -333,19 +340,19 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp>
         SyncQueueProcessor.instance.processPending(reason: 'periodic_retry'),
       );
     });
-    _settingsSub = ref.listenManual<AsyncValue<AppSettings>>(
-      settingsProvider,
-      (_, next) {
-        next.whenData(_applyRuntimeSettings);
-      },
-      fireImmediately: true,
-    );
+    _settingsSub = ref.listenManual<AsyncValue<AppSettings>>(settingsProvider, (
+      _,
+      next,
+    ) {
+      next.whenData(_applyRuntimeSettings);
+    }, fireImmediately: true);
     _authStateSub = Supabase.instance.client.auth.onAuthStateChange.listen((
       authState,
     ) {
       if (authState.event == AuthChangeEvent.passwordRecovery) {
         ref.read(routerProvider).go('/reset-password');
       }
+      _lockManager.onAuthStateChanged(authState);
       if (authState.session == null) return;
       unawaited(_syncAfterLogin());
     });
@@ -396,10 +403,16 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp>
         unawaited(_autoCloudSyncTick());
       });
     }
+    _lockManager.updateSettings(
+      pinEnabled: settings.securityPinEnabled,
+      pinCode: settings.securityPinCode,
+      biometricEnabled: settings.securityBiometricEnabled,
+    );
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    _lockManager.onLifecycleChanged(state);
     if (state != AppLifecycleState.resumed) return;
     unawaited(
       SyncQueueProcessor.instance.processPending(reason: 'app_resumed'),
@@ -415,6 +428,7 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp>
     _autoCloudSyncTimer?.cancel();
     _authStateSub?.cancel();
     _settingsSub?.close();
+    _lockManager.dispose();
     super.dispose();
   }
 
@@ -444,6 +458,31 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp>
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
+      builder: (context, child) {
+        final content = child ?? const SizedBox.shrink();
+        return AnimatedBuilder(
+          animation: _lockManager,
+          builder: (context, _) {
+            return Stack(
+              fit: StackFit.expand,
+              children: [
+                content,
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 260),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  child: _lockManager.isLocked
+                      ? LockScreen(
+                          key: const ValueKey('app-lock-screen'),
+                          manager: _lockManager,
+                        )
+                      : const SizedBox.shrink(),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -451,9 +490,7 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp>
 class GoRouterRefreshStream extends ChangeNotifier {
   GoRouterRefreshStream(Stream<dynamic> stream) {
     notifyListeners();
-    _subscription = stream.asBroadcastStream().listen(
-          (_) => notifyListeners(),
-        );
+    _subscription = stream.asBroadcastStream().listen((_) => notifyListeners());
   }
 
   late final StreamSubscription<dynamic> _subscription;
@@ -474,7 +511,13 @@ class _ScaffoldWithNavBar extends StatefulWidget {
 }
 
 class _ScaffoldWithNavBarState extends State<_ScaffoldWithNavBar> {
-  static const _paths = ['/', '/calendar', '/finanzas', '/profile', '/settings'];
+  static const _paths = [
+    '/',
+    '/calendar',
+    '/finanzas',
+    '/profile',
+    '/settings',
+  ];
 
   static int _indexFromLocation(String location) {
     if (location == '/') return 0;
