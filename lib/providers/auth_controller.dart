@@ -4,8 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../database/database_helper.dart';
-import '../repositories/settings_repository.dart';
 import '../services/google_auth_service.dart';
 import '../services/platform_auth_service.dart';
 import '../services/supabase_service.dart';
@@ -34,8 +32,9 @@ final authSessionProvider = StreamProvider<Session?>((ref) {
   return stream.map((event) => event.session);
 });
 
-final authControllerProvider =
-    NotifierProvider<AuthController, AuthUiState>(AuthController.new);
+final authControllerProvider = NotifierProvider<AuthController, AuthUiState>(
+  AuthController.new,
+);
 
 class AuthController extends Notifier<AuthUiState> {
   StreamSubscription<AuthState>? _authSub;
@@ -69,8 +68,19 @@ class AuthController extends Notifier<AuthUiState> {
   }) async {
     state = const AuthUiState(status: AuthStatus.loading);
     try {
+      final normalizedEmail = email.trim().toLowerCase();
+      final exists = await SupabaseService.instance.checkAccountExistsByEmail(
+        normalizedEmail,
+      );
+      if (exists == false) {
+        state = const AuthUiState(
+          status: AuthStatus.error,
+          message: 'No existe una cuenta con ese email.',
+        );
+        return false;
+      }
       final response = await SupabaseService.instance.signInWithEmailPassword(
-        email: email.trim(),
+        email: normalizedEmail,
         password: password,
       );
       if (response.user == null) {
@@ -143,7 +153,9 @@ class AuthController extends Notifier<AuthUiState> {
   Future<bool> sendPasswordReset(String email) async {
     state = const AuthUiState(status: AuthStatus.loading);
     try {
-      await SupabaseService.instance.sendPasswordResetEmail(email: email.trim());
+      await SupabaseService.instance.sendPasswordResetEmail(
+        email: email.trim(),
+      );
       state = const AuthUiState(
         status: AuthStatus.unauthenticated,
         message: 'Te hemos enviado un email para recuperar contraseña.',
@@ -164,9 +176,7 @@ class AuthController extends Notifier<AuthUiState> {
     }
   }
 
-  Future<bool> updatePassword({
-    required String newPassword,
-  }) async {
+  Future<bool> updatePassword({required String newPassword}) async {
     state = const AuthUiState(status: AuthStatus.loading);
     try {
       await SupabaseService.instance.updatePassword(newPassword);
@@ -196,10 +206,6 @@ class AuthController extends Notifier<AuthUiState> {
       await SupabaseService.instance.signOut();
       await PlatformAuthService.instance.signOut();
       await GoogleAuthService.instance.signOut();
-      await DatabaseHelper.instance.clearUserScopedData();
-      final settingsRepo = SettingsRepository();
-      final currentSettings = await settingsRepo.get();
-      await settingsRepo.save(currentSettings.copyWith(lastCloudSyncAt: null));
       state = const AuthUiState(status: AuthStatus.unauthenticated);
       return true;
     } catch (e) {
@@ -236,6 +242,18 @@ class AuthController extends Notifier<AuthUiState> {
 
   String _friendlyAuthMessage(String raw) {
     final msg = raw.toLowerCase();
+    if (msg.contains('user not found') ||
+        msg.contains('email not found') ||
+        msg.contains('no user found') ||
+        msg.contains('account not found')) {
+      return 'No existe una cuenta con ese email.';
+    }
+    if (msg.contains('wrong password') ||
+        msg.contains('invalid password') ||
+        msg.contains('password is incorrect') ||
+        msg.contains('incorrect password')) {
+      return 'La contraseña es incorrecta.';
+    }
     if (msg.contains('invalid login credentials')) {
       return 'Credenciales incorrectas.';
     }

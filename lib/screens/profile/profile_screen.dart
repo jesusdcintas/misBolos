@@ -3,28 +3,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/services/drive_document_sync_service.dart';
 import '../../core/services/google_drive_service.dart';
 import '../../models/app_settings.dart';
-import '../../models/gig.dart';
 import '../../providers/assets_provider.dart';
 import '../../providers/auth_controller.dart';
 import '../../providers/expenses_provider.dart';
-import '../../providers/gig_provider.dart';
 import '../../providers/invoice_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/sync_provider.dart';
-import '../settings/duplicate_clients_screen.dart';
-import '../settings/import_screen.dart';
 import '../../services/google_auth_service.dart';
 import '../../services/platform_auth_service.dart';
 import '../../services/supabase_service.dart';
-
-enum _StatusKind { ok, warn, error }
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -34,27 +28,21 @@ class ProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
-  final _nombreController = TextEditingController();
-  final _nifController = TextEditingController();
-  final _direccionController = TextEditingController();
-  final _ciudadController = TextEditingController();
-  final _provinciaController = TextEditingController();
-  final _codigoPostalController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _telefonoController = TextEditingController();
-  final _ibanController = TextEditingController();
   final _driveSearchController = TextEditingController(text: 'MisBolos Test');
-  String _logoPath = '';
-  bool _loaded = false;
   List<DriveFolderResult> _driveFolderResults = [];
   bool _driveBusy = false;
   String _driveProgressLabel = '';
   double? _driveProgressValue;
+  bool _driveConnectionError = false;
+  bool _calendarBusy = false;
+  bool _calendarError = false;
 
   @override
   void initState() {
     super.initState();
-    DriveDocumentSyncService.instance.progress.addListener(_handleDriveProgress);
+    DriveDocumentSyncService.instance.progress.addListener(
+      _handleDriveProgress,
+    );
   }
 
   @override
@@ -62,15 +50,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     DriveDocumentSyncService.instance.progress.removeListener(
       _handleDriveProgress,
     );
-    _nombreController.dispose();
-    _nifController.dispose();
-    _direccionController.dispose();
-    _ciudadController.dispose();
-    _provinciaController.dispose();
-    _codigoPostalController.dispose();
-    _emailController.dispose();
-    _telefonoController.dispose();
-    _ibanController.dispose();
     _driveSearchController.dispose();
     super.dispose();
   }
@@ -85,178 +64,63 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     });
   }
 
-  void _loadSettings(AppSettings s) {
-    if (_loaded) return;
-    _loaded = true;
-    _nombreController.text = s.emisorNombre;
-    _nifController.text = s.emisorNIF;
-    _direccionController.text = s.emisorDireccion;
-    _ciudadController.text = s.emisorCiudad;
-    _provinciaController.text = s.emisorProvincia;
-    _codigoPostalController.text = s.emisorCodigoPostal;
-    _emailController.text = s.emisorEmail;
-    _telefonoController.text = s.emisorTelefono;
-    _ibanController.text = s.iban;
-    _logoPath = s.logoPath;
-  }
-
   @override
   Widget build(BuildContext context) {
     final settingsAsync = ref.watch(settingsProvider);
     final googleAuth = ref.watch(googleAuthProvider);
-    final syncState = ref.watch(syncProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Mi Perfil'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings),
-            tooltip: AppStrings.ajustes,
-            onPressed: () => context.push('/settings'),
-          ),
-        ],
-      ),
+      appBar: AppBar(title: const Text('Perfil')),
       body: settingsAsync.when(
         data: (settings) {
-          _loadSettings(settings);
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              _buildStatusOverview(settings, googleAuth),
-              const SizedBox(height: 16),
-
-              _buildAccountSection(),
-              const SizedBox(height: 16),
-
-              // ── Archivo documental ──
-              _buildGoogleDriveSection(settings),
-              const SizedBox(height: 16),
-
-              _buildCalendarSection(googleAuth),
-              const SizedBox(height: 16),
-
-              // ── Sincronización Cloud ──
-              const _SyncSection(),
-              if (syncState.message != null) const SizedBox(height: 8),
-              const SizedBox(height: 24),
-
-              _buildToolsSection(),
-              const SizedBox(height: 24),
-
-              // ── Logo ──
-              Text(
-                AppStrings.logo,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 12),
-              _LogoSelector(
-                logoPath: _logoPath,
-                onPick: _pickLogo,
-                onRemove: () => setState(() => _logoPath = ''),
-              ),
-              const SizedBox(height: 24),
-
-              // ── Datos de facturación ──
-              Text(
-                'Datos de facturación',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _nombreController,
-                decoration: const InputDecoration(
-                  labelText: AppStrings.nombre,
-                  prefixIcon: Icon(Icons.person_outline),
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _nifController,
-                decoration: const InputDecoration(
-                  labelText: 'NIF / CIF',
-                  prefixIcon: Icon(Icons.badge_outlined),
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _direccionController,
-                decoration: const InputDecoration(
-                  labelText: AppStrings.direccion,
-                  prefixIcon: Icon(Icons.location_on_outlined),
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _ciudadController,
-                decoration: const InputDecoration(
-                  labelText: AppStrings.ciudad,
-                  prefixIcon: Icon(Icons.location_city_outlined),
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _provinciaController,
-                decoration: const InputDecoration(
-                  labelText: 'Provincia',
-                  prefixIcon: Icon(Icons.map_outlined),
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _codigoPostalController,
-                decoration: const InputDecoration(
-                  labelText: 'Código Postal',
-                  prefixIcon: Icon(Icons.markunread_mailbox_outlined),
-                ),
-                keyboardType: TextInputType.number,
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _emailController,
-                decoration: const InputDecoration(
-                  labelText: AppStrings.email,
-                  prefixIcon: Icon(Icons.email_outlined),
-                ),
-                keyboardType: TextInputType.emailAddress,
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _telefonoController,
-                decoration: const InputDecoration(
-                  labelText: AppStrings.telefono,
-                  prefixIcon: Icon(Icons.phone_outlined),
-                ),
-                keyboardType: TextInputType.phone,
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _ibanController,
-                decoration: const InputDecoration(
-                  labelText: 'IBAN',
-                  prefixIcon: Icon(Icons.account_balance_outlined),
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // Guardar
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: _save,
-                  icon: const Icon(Icons.save),
-                  label: const Text(AppStrings.guardar),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 40),
-            ],
+          return GestureDetector(
+            onTap: () => FocusScope.of(context).unfocus(),
+            behavior: HitTestBehavior.translucent,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final wide = constraints.maxWidth >= 980;
+                return ListView(
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 1080),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildProfileHeaderCard(settings),
+                            const SizedBox(height: 12),
+                            const _SyncSection(),
+                            const SizedBox(height: 12),
+                            Text(
+                              'Conexiones',
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w700),
+                            ),
+                            const SizedBox(height: 8),
+                            _buildServiceCards(settings, googleAuth, wide),
+                            if (!googleAuth.isSignedIn) ...[
+                              const SizedBox(height: 12),
+                              _buildCloudLimitedCard(),
+                            ],
+                            const SizedBox(height: 12),
+                            _buildAccountSecurityCard(),
+                            const SizedBox(height: 12),
+                            _BillingFormCard(
+                              settings: settings,
+                              onSaved: _saveBilling,
+                            ),
+                            const SizedBox(height: 32),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -265,42 +129,96 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  Widget _buildStatusOverview(AppSettings settings, GoogleAuthState googleAuth) {
-    final driveConnected = settings.driveConnected;
-    final hasDriveFolder =
-        (settings.driveRootFolderId?.trim().isNotEmpty ?? false) &&
-        (settings.driveRootFolderName?.trim().isNotEmpty ?? false);
-    final misBolosOk = SupabaseService.instance.isAuthenticated;
-    final googleOk = googleAuth.isSignedIn;
-    final driveOk = driveConnected && hasDriveFolder;
-    final driveWarn = driveConnected && !hasDriveFolder;
-    final calendarOk = googleAuth.calendarConnected;
-    final calendarWarn = googleAuth.isSignedIn && !googleAuth.calendarConnected;
+  Widget _buildProfileHeaderCard(AppSettings settings) {
+    final sync = ref.watch(syncProvider);
+    final name = settings.emisorNombre.trim().isEmpty
+        ? 'MisBolos'
+        : settings.emisorNombre.trim();
+    final mail =
+        SupabaseService.instance.userEmail ?? settings.emisorEmail.trim();
+    final hasCloud = SupabaseService.instance.isAuthenticated;
+    final syncText = switch (sync.status) {
+      SyncStatus.syncing => 'Sincronizando cambios…',
+      SyncStatus.error => 'No se pudieron sincronizar algunos datos',
+      SyncStatus.success => 'Todo actualizado',
+      SyncStatus.idle =>
+        hasCloud ? 'Sincronización activa' : 'Sin conexión en nube',
+    };
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Wrap(
-          spacing: 8,
-          runSpacing: 8,
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _statusChip('MisBolos', misBolosOk ? _StatusKind.ok : _StatusKind.error),
-            _statusChip('Google', googleOk ? _StatusKind.ok : _StatusKind.error),
-            _statusChip(
-              'Drive',
-              driveOk
-                  ? _StatusKind.ok
-                  : driveWarn
-                  ? _StatusKind.warn
-                  : _StatusKind.error,
+            CircleAvatar(
+              radius: 28,
+              backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+              backgroundImage: settings.logoPath.isNotEmpty
+                  ? FileImage(File(settings.logoPath))
+                  : null,
+              child: settings.logoPath.isEmpty
+                  ? const Icon(Icons.person_outline, size: 30)
+                  : null,
             ),
-            _statusChip(
-              'Calendar',
-              calendarOk
-                  ? _StatusKind.ok
-                  : calendarWarn
-                  ? _StatusKind.warn
-                  : _StatusKind.error,
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  if (mail.isNotEmpty)
+                    Text(
+                      mail,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(
+                        sync.status == SyncStatus.error
+                            ? Icons.error_outline
+                            : sync.status == SyncStatus.syncing
+                            ? Icons.sync
+                            : Icons.check_circle,
+                        size: 16,
+                        color: sync.status == SyncStatus.error
+                            ? AppColors.error
+                            : sync.status == SyncStatus.syncing
+                            ? AppColors.warning
+                            : AppColors.success,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        syncText,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: sync.status == SyncStatus.error
+                              ? AppColors.error
+                              : sync.status == SyncStatus.syncing
+                              ? AppColors.warning
+                              : AppColors.success,
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (sync.lastSync != null)
+                    Text(
+                      'Última sincronización ${_formatDate(sync.lastSync!)}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                ],
+              ),
             ),
           ],
         ),
@@ -308,41 +226,637 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  Widget _buildAccountSection() {
-    final email = SupabaseService.instance.userEmail ?? 'Sin sesión activa';
-    final connected = SupabaseService.instance.isAuthenticated;
+  Widget _buildServiceCards(
+    AppSettings settings,
+    GoogleAuthState googleAuth,
+    bool wide,
+  ) {
+    final driveState = _driveState(settings, googleAuth);
+    final calendarState = _calendarState(googleAuth);
+    final cards = [
+      _serviceStatusCard(
+        title: 'Cuenta Google',
+        icon: Icons.account_circle_outlined,
+        status: googleAuth.isSignedIn ? 'Conectada' : 'No conectada',
+        subtitle:
+            googleAuth.email ?? 'Inicia sesión para activar servicios cloud.',
+        tone: googleAuth.isSignedIn ? _ServiceTone.ready : _ServiceTone.neutral,
+        onTap: () => googleAuth.isSignedIn
+            ? _showGoogleAccountSheet(googleAuth)
+            : ref.read(googleAuthProvider.notifier).signIn(),
+      ),
+      _serviceStatusCard(
+        title: 'Google Drive',
+        icon: Icons.add_to_drive_outlined,
+        status: _driveStatusText(driveState),
+        subtitle: _driveSubtitleText(driveState, settings),
+        tone: _driveTone(driveState),
+        onTap: () => _handleDriveCardTap(driveState, settings),
+      ),
+      _serviceStatusCard(
+        title: 'Google Calendar',
+        icon: Icons.calendar_month_outlined,
+        status: _calendarStatusText(calendarState),
+        subtitle: _calendarSubtitleText(calendarState),
+        tone: _calendarTone(calendarState),
+        onTap: () => _handleCalendarCardTap(calendarState, googleAuth),
+      ),
+    ];
+
+    if (wide) {
+      return Row(
+        children: [
+          Expanded(child: cards[0]),
+          const SizedBox(width: 8),
+          Expanded(child: cards[1]),
+          const SizedBox(width: 8),
+          Expanded(child: cards[2]),
+        ],
+      );
+    }
+    return Column(
+      children: [
+        cards[0],
+        const SizedBox(height: 8),
+        cards[1],
+        const SizedBox(height: 8),
+        cards[2],
+      ],
+    );
+  }
+
+  Widget _serviceStatusCard({
+    required String title,
+    required IconData icon,
+    required String status,
+    required String subtitle,
+    required _ServiceTone tone,
+    required VoidCallback onTap,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+    final toneColor = switch (tone) {
+      _ServiceTone.ready => AppColors.success,
+      _ServiceTone.warning => AppColors.warning,
+      _ServiceTone.error => AppColors.error,
+      _ServiceTone.syncing => cs.primary,
+      _ServiceTone.neutral => AppColors.textMuted,
+    };
+    return TweenAnimationBuilder<double>(
+      duration: const Duration(milliseconds: 260),
+      tween: Tween(begin: 0, end: 1),
+      curve: Curves.easeOutCubic,
+      builder: (context, v, child) => Opacity(
+        opacity: v,
+        child: Transform.translate(
+          offset: Offset(0, 6 * (1 - v)),
+          child: child,
+        ),
+      ),
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
+              children: [
+                Icon(icon, size: 20, color: toneColor),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        status,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: toneColor,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.textMuted,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _saveBilling(_BillingFormData data) async {
+    final current = await ref.read(settingsProvider.future);
+    final settings = current.copyWith(
+      logoPath: data.logoPath,
+      emisorNombre: data.nombre,
+      emisorNIF: data.nif,
+      emisorDireccion: data.direccion,
+      emisorCiudad: data.ciudad,
+      emisorEmail: data.email,
+      emisorTelefono: data.telefono,
+      iban: data.iban,
+    );
+
+    await ref.read(settingsProvider.notifier).save(settings);
+    if (SupabaseService.instance.isAuthenticated) {
+      try {
+        await SupabaseService.instance.uploadSettings(settings);
+        await ref
+            .read(settingsProvider.notifier)
+            .save(
+              settings.copyWith(
+                cloudSettingsSignature: SupabaseService.instance
+                    .settingsSyncSignature(settings),
+              ),
+            );
+      } catch (_) {}
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Perfil guardado')));
+    }
+  }
+
+  Widget _buildCloudLimitedCard() {
+    return TweenAnimationBuilder<double>(
+      duration: const Duration(milliseconds: 320),
+      tween: Tween(begin: 0, end: 1),
+      curve: Curves.easeOutCubic,
+      builder: (context, value, child) => Opacity(
+        opacity: value,
+        child: Transform.translate(
+          offset: Offset(0, 10 * (1 - value)),
+          child: child,
+        ),
+      ),
+      child: Card(
+        color: Theme.of(
+          context,
+        ).colorScheme.secondaryContainer.withValues(alpha: 0.38),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.cloud_outlined,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Funciones cloud limitadas',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Conecta Google para activar sincronización automática, Google Drive y calendario.',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 10),
+                    OutlinedButton(
+                      onPressed: () =>
+                          ref.read(googleAuthProvider.notifier).signIn(),
+                      child: const Text('Conectar Google'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  _DriveServiceState _driveState(AppSettings settings, GoogleAuthState auth) {
+    final hasFolderId = settings.driveRootFolderId?.trim().isNotEmpty ?? false;
+    final hasFolderName =
+        settings.driveRootFolderName?.trim().isNotEmpty ?? false;
+    final folderConfigured = hasFolderId && hasFolderName;
+    final googleSignedIn = auth.isSignedIn;
+    final driveAuthorized = settings.driveConnected;
+    if (_driveBusy) return _DriveServiceState.syncing;
+    if (_driveConnectionError) return _DriveServiceState.error;
+    if (!googleSignedIn || !driveAuthorized) {
+      return _DriveServiceState.disconnected;
+    }
+    if (!folderConfigured) return _DriveServiceState.connectedUnconfigured;
+    return _DriveServiceState.ready;
+  }
+
+  _CalendarServiceState _calendarState(GoogleAuthState auth) {
+    if (_calendarBusy) return _CalendarServiceState.syncing;
+    if (_calendarError) return _CalendarServiceState.error;
+    if (!auth.isSignedIn) return _CalendarServiceState.disconnected;
+    if (!auth.calendarConnected) {
+      return _CalendarServiceState.connectedUnconfigured;
+    }
+    return _CalendarServiceState.ready;
+  }
+
+  String _driveStatusText(_DriveServiceState state) => switch (state) {
+    _DriveServiceState.disconnected => 'No conectado',
+    _DriveServiceState.connectedUnconfigured => 'Configuración pendiente',
+    _DriveServiceState.ready => 'Listo',
+    _DriveServiceState.syncing => 'Sincronizando…',
+    _DriveServiceState.error => 'Error de conexión',
+  };
+
+  String _driveSubtitleText(_DriveServiceState state, AppSettings settings) {
+    switch (state) {
+      case _DriveServiceState.disconnected:
+        return 'Conecta Drive para sincronizar documentos.';
+      case _DriveServiceState.connectedUnconfigured:
+        return 'Selecciona una carpeta para guardar documentos y sincronizar archivos.';
+      case _DriveServiceState.ready:
+        return 'Sincronización de documentos activa.';
+      case _DriveServiceState.syncing:
+        return _driveProgressLabel.isNotEmpty
+            ? _driveProgressLabel
+            : 'Aplicando cambios en Google Drive.';
+      case _DriveServiceState.error:
+        return 'Se requiere volver a conectar Google Drive.';
+    }
+  }
+
+  _ServiceTone _driveTone(_DriveServiceState state) => switch (state) {
+    _DriveServiceState.disconnected => _ServiceTone.neutral,
+    _DriveServiceState.connectedUnconfigured => _ServiceTone.warning,
+    _DriveServiceState.ready => _ServiceTone.ready,
+    _DriveServiceState.syncing => _ServiceTone.syncing,
+    _DriveServiceState.error => _ServiceTone.error,
+  };
+
+  String _calendarStatusText(_CalendarServiceState state) => switch (state) {
+    _CalendarServiceState.disconnected => 'No conectado',
+    _CalendarServiceState.connectedUnconfigured => 'Configuración pendiente',
+    _CalendarServiceState.ready => 'Listo',
+    _CalendarServiceState.syncing => 'Sincronizando…',
+    _CalendarServiceState.error => 'Error de conexión',
+  };
+
+  String _calendarSubtitleText(_CalendarServiceState state) {
+    switch (state) {
+      case _CalendarServiceState.disconnected:
+        return 'Conecta Calendar para sincronizar tu agenda de bolos.';
+      case _CalendarServiceState.connectedUnconfigured:
+        return 'Completa la conexión para activar la sincronización.';
+      case _CalendarServiceState.ready:
+        return 'Sincronización de agenda activa.';
+      case _CalendarServiceState.syncing:
+        return 'Aplicando cambios en Google Calendar.';
+      case _CalendarServiceState.error:
+        return 'Se requiere volver a conectar Google Calendar.';
+    }
+  }
+
+  _ServiceTone _calendarTone(_CalendarServiceState state) => switch (state) {
+    _CalendarServiceState.disconnected => _ServiceTone.neutral,
+    _CalendarServiceState.connectedUnconfigured => _ServiceTone.warning,
+    _CalendarServiceState.ready => _ServiceTone.ready,
+    _CalendarServiceState.syncing => _ServiceTone.syncing,
+    _CalendarServiceState.error => _ServiceTone.error,
+  };
+
+  Future<void> _handleDriveCardTap(
+    _DriveServiceState state,
+    AppSettings settings,
+  ) async {
+    switch (state) {
+      case _DriveServiceState.disconnected:
+        await _connectDrive();
+        break;
+      case _DriveServiceState.connectedUnconfigured:
+        _showDrivePanel();
+        break;
+      case _DriveServiceState.error:
+        await _connectDrive();
+        break;
+      case _DriveServiceState.ready:
+      case _DriveServiceState.syncing:
+        _showDrivePanel();
+        break;
+    }
+  }
+
+  Future<void> _handleCalendarCardTap(
+    _CalendarServiceState state,
+    GoogleAuthState auth,
+  ) async {
+    switch (state) {
+      case _CalendarServiceState.disconnected:
+        await _runCalendarAction(() async {
+          final ok = await ref.read(googleAuthProvider.notifier).signIn();
+          if (!ok) {
+            throw Exception('No se pudo iniciar sesión con Google.');
+          }
+        }, successMessage: 'Cuenta Google conectada');
+        break;
+      case _CalendarServiceState.connectedUnconfigured:
+      case _CalendarServiceState.error:
+        await _runCalendarAction(() async {
+          final ok = await ref
+              .read(googleAuthProvider.notifier)
+              .connectCalendarOnly();
+          if (!ok) {
+            throw Exception('No se pudo completar la conexión de Calendar.');
+          }
+        }, successMessage: 'Google Calendar conectado');
+        break;
+      case _CalendarServiceState.ready:
+      case _CalendarServiceState.syncing:
+        _showCalendarPanel(auth);
+        break;
+    }
+  }
+
+  void _showGoogleAccountSheet(GoogleAuthState auth) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 8, 18, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Cuenta Google',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 6),
+              Text(auth.email ?? 'Cuenta conectada'),
+              const SizedBox(height: 14),
+              OutlinedButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  ref.read(googleAuthProvider.notifier).signOut();
+                },
+                child: const Text('Desconectar Google'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showDrivePanel() {
+    final settings = ref.read(settingsProvider).valueOrNull;
+    if (settings == null) return;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.of(context).size.height * 0.88,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+            child: Column(
+              children: [
+                _buildGoogleDriveSection(settings),
+                const SizedBox(height: 10),
+                _buildDriveHelpSection(),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showCalendarPanel(GoogleAuthState auth) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+          child: _buildCalendarSection(auth),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAccountSecurityCard() {
+    final user = SupabaseService.instance.currentUser;
+    final identities = user?.identities ?? const <UserIdentity>[];
+    final hasGoogle = identities.any((i) => i.provider == 'google');
+    final hasEmailPassword = identities.any((i) => i.provider == 'email');
+    final method = hasGoogle && hasEmailPassword
+        ? 'Google + contraseña'
+        : hasGoogle
+        ? 'Google'
+        : 'Email y contraseña';
+    final passwordConfigured = hasEmailPassword;
+    final email = user?.email ?? 'Sin email';
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Cuenta',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 8),
             Text(
-              email,
-              style: const TextStyle(color: AppColors.textSecondary),
+              'Cuenta',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 10),
-            Row(
+            Text('Email: $email'),
+            const SizedBox(height: 4),
+            Text('Método de acceso: $method'),
+            const SizedBox(height: 4),
+            Text(
+              'Contraseña: ${passwordConfigured ? 'Configurada' : 'No configurada'}',
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
               children: [
-                Icon(
-                  connected ? Icons.check_circle : Icons.error_outline,
-                  size: 18,
-                  color: connected ? AppColors.success : AppColors.error,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  connected ? 'Sesión de MisBolos activa' : 'Sesión cerrada',
-                  style: TextStyle(
-                    color: connected ? AppColors.success : AppColors.error,
-                    fontWeight: FontWeight.w600,
+                OutlinedButton(
+                  onPressed: _sendPasswordSetupOrReset,
+                  child: Text(
+                    passwordConfigured
+                        ? 'Cambiar contraseña'
+                        : 'Crear contraseña',
                   ),
                 ),
+                FilledButton.tonal(
+                  style: FilledButton.styleFrom(
+                    foregroundColor: AppColors.error,
+                  ),
+                  onPressed: _confirmDeleteAccount,
+                  child: const Text('Eliminar cuenta'),
+                ),
               ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _sendPasswordSetupOrReset() async {
+    try {
+      await SupabaseService.instance.requestCreateOrResetPassword();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Te hemos enviado un enlace para crear o cambiar tu contraseña.',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error enviando email: $e')));
+    }
+  }
+
+  Future<void> _confirmDeleteAccount() async {
+    final controller = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Eliminar cuenta'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Se eliminarán tus datos sincronizados, facturas, clientes, gastos, inversiones y configuración de esta cuenta. Esta acción no se puede deshacer.',
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(labelText: 'Escribe ELIMINAR'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.of(ctx).pop(controller.text.trim() == 'ELIMINAR'),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (confirmed != true) return;
+
+    try {
+      await SupabaseService.instance.deleteCurrentAccount();
+      await ref.read(authControllerProvider.notifier).signOut();
+      if (!mounted) return;
+      context.go('/login');
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'No se pudo eliminar la cuenta. Verifica la Edge Function delete-user-account. Error: $e',
+          ),
+        ),
+      );
+    }
+  }
+
+  Widget _buildDriveHelpSection() {
+    Widget item(String title, String desc) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: RichText(
+          text: TextSpan(
+            style: const TextStyle(
+              fontSize: 13,
+              color: AppColors.textSecondary,
+            ),
+            children: [
+              TextSpan(
+                text: '$title: ',
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              TextSpan(text: desc),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Card(
+      color: AppColors.primaryLight.withValues(alpha: 0.35),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.info_outline, size: 16),
+                SizedBox(width: 6),
+                Text(
+                  'Ayuda rápida (Drive)',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            item(
+              'Reintentar válidos',
+              'vuelve a intentar subir archivos que fallaron por red o permisos.',
+            ),
+            item(
+              'Limpiar inválidos',
+              'elimina pendientes imposibles de subir (archivo ya no existe o ruta rota).',
+            ),
+            item(
+              'Reparar facturas Drive',
+              'regenera PDFs de facturas para poder subirlos de nuevo.',
+            ),
+            item(
+              'Adjuntos rotos',
+              'lista de documentos que faltan o ya no están disponibles en este dispositivo.',
             ),
           ],
         ),
@@ -376,8 +890,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               children: [
                 if (!connected)
                   ElevatedButton.icon(
-                    onPressed: () =>
-                        ref.read(googleAuthProvider.notifier).connectCalendarOnly(),
+                    onPressed: () => ref
+                        .read(googleAuthProvider.notifier)
+                        .connectCalendarOnly(),
                     icon: const Icon(Icons.calendar_month),
                     label: const Text('Conectar Calendar'),
                   )
@@ -392,146 +907,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildToolsSection() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Herramientas',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const ImportScreen()),
-                ),
-                icon: const Icon(Icons.upload_file),
-                label: const Text('Importar Excel o CSV'),
-              ),
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: _showExportWarning,
-                icon: const Icon(Icons.download),
-                label: const Text('Exportar CSV'),
-              ),
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const DuplicateClientsScreen(),
-                  ),
-                ),
-                icon: const Icon(Icons.people_outline),
-                label: const Text('Buscar clientes duplicados'),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _statusChip(String label, _StatusKind kind) {
-    final (bg, fg, icon) = switch (kind) {
-      _StatusKind.ok => (AppColors.successBg, AppColors.success, Icons.check_circle),
-      _StatusKind.warn => (AppColors.warningBg, AppColors.warning, Icons.warning_amber_rounded),
-      _StatusKind.error => (AppColors.errorBg, AppColors.error, Icons.error_outline),
-    };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(999)),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: fg),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(color: fg, fontWeight: FontWeight.w700, fontSize: 12),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _exportCsv({required bool oficialOnly}) async {
-    final box = context.findRenderObject() as RenderBox?;
-    final shareOrigin = box != null
-        ? box.localToGlobal(Offset.zero) & box.size
-        : const Rect.fromLTWH(0, 0, 100, 100);
-    try {
-      final gigs = await ref.read(gigsProvider.future);
-      final invoices = await ref.read(invoicesProvider.future);
-      final rows = <List<dynamic>>[
-        ['Fecha', 'ClienteId', 'Caché', 'Facturable', 'Estado', 'Nº Factura'],
-      ];
-      for (final gig in gigs) {
-        if (oficialOnly && !gig.facturable) continue;
-        final inv = invoices.where((i) => i.gigId == gig.id).firstOrNull;
-        rows.add([
-          gig.fecha.toIso8601String().substring(0, 10),
-          gig.facturable ? gig.clientId : 'PRIVADO',
-          gig.cachet ?? 0,
-          gig.facturable ? 'Sí' : 'No',
-          gig.status.dbValue,
-          inv?.numero ?? '',
-        ]);
-      }
-      final csv = rows.map((r) => r.map((e) => '"$e"').join(',')).join('\n');
-      final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/misbolos_export.csv');
-      await file.writeAsString(csv);
-      await Share.shareXFiles(
-        [XFile(file.path)],
-        sharePositionOrigin: shareOrigin,
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error exportando CSV: $e')));
-    }
-  }
-
-  void _showExportWarning() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Exportar CSV'),
-        content: const Text(
-          '¿Quieres exportar solo bolos oficiales facturables o todos los datos?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _exportCsv(oficialOnly: true);
-            },
-            child: const Text('Solo oficiales'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _exportCsv(oficialOnly: false);
-            },
-            child: const Text('Todos'),
-          ),
-        ],
       ),
     );
   }
@@ -618,8 +993,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               const SizedBox(height: 6),
               Text(
                 (_driveProgressLabel.isEmpty
-                    ? 'Procesando en Google Drive...'
-                    : _driveProgressLabel) +
+                        ? 'Procesando en Google Drive...'
+                        : _driveProgressLabel) +
                     (_driveProgressValue != null
                         ? ' · ${(_driveProgressValue! * 100).toStringAsFixed(0)}%'
                         : ''),
@@ -793,13 +1168,42 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      ElevatedButton.icon(
-                        onPressed: _driveBusy ? null : _searchDriveFolders,
-                        icon: const Icon(Icons.folder_open),
-                        label: Text(
-                          hasFolder ? 'Cambiar carpeta' : 'Seleccionar carpeta',
+                      if (!hasFolder) ...[
+                        ElevatedButton.icon(
+                          onPressed: _driveBusy
+                              ? null
+                              : () => _runDriveAction(
+                                  () async {
+                                    final setup = await GoogleDriveService
+                                        .instance
+                                        .setupWorkspace();
+                                    if (!setup.ready) {
+                                      throw Exception(
+                                        setup.message ??
+                                            'No se pudo crear carpeta automática.',
+                                      );
+                                    }
+                                    ref.invalidate(settingsProvider);
+                                  },
+                                  progressLabel: 'Creando carpeta MisBolos...',
+                                  successMessage: 'Carpeta MisBolos creada',
+                                  errorPrefix:
+                                      'No se pudo crear carpeta MisBolos',
+                                ),
+                          icon: const Icon(Icons.create_new_folder_outlined),
+                          label: const Text('Crear carpeta MisBolos'),
                         ),
-                      ),
+                        OutlinedButton.icon(
+                          onPressed: _driveBusy ? null : _searchDriveFolders,
+                          icon: const Icon(Icons.folder_open),
+                          label: const Text('Elegir carpeta existente'),
+                        ),
+                      ] else
+                        ElevatedButton.icon(
+                          onPressed: _driveBusy ? null : _searchDriveFolders,
+                          icon: const Icon(Icons.folder_open),
+                          label: const Text('Cambiar carpeta'),
+                        ),
                       OutlinedButton.icon(
                         onPressed: (!_driveBusy && hasFolder)
                             ? () => _openDriveFolder(rootId!)
@@ -874,119 +1278,90 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   icon: const Icon(Icons.cloud_sync_outlined),
                   label: const Text('Sincronizar documentos'),
                 ),
-                OutlinedButton.icon(
-                  onPressed: (!_driveBusy && driveReady)
-                      ? _retryPendingDriveSync
-                      : null,
-                  icon: const Icon(Icons.refresh_outlined),
-                  label: const Text('Reintentar válidos'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: (!_driveBusy && driveReady)
-                      ? _clearInvalidDrivePending
-                      : null,
-                  icon: const Icon(Icons.cleaning_services_outlined),
-                  label: const Text('Limpiar inválidos'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: (!_driveBusy && driveReady)
-                      ? _repairLegacyAttachments
-                      : null,
-                  icon: const Icon(Icons.build_circle_outlined),
-                  label: const Text('Reparar adjuntos'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: (!_driveBusy && driveReady)
-                      ? _repairPendingInvoiceDrivePdfs
-                      : null,
-                  icon: const Icon(Icons.picture_as_pdf_outlined),
-                  label: const Text('Reparar facturas Drive'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () => context.push('/attachments/broken'),
-                  icon: const Icon(Icons.broken_image_outlined),
-                  label: const Text('Adjuntos rotos'),
-                ),
               ],
             ),
             const SizedBox(height: 8),
-            FutureBuilder<DriveQueueSummary>(
-              future: DriveDocumentSyncService.instance.getQueueSummary(),
-              builder: (context, snapshot) {
-                final s = snapshot.data ?? const DriveQueueSummary();
-                return Text(
-                  s.totalPending > 0
-                      ? 'Pendientes Drive válidos: ${s.totalPending} · facturas ${s.invoicePending} · gastos ${s.expensePending} · inversiones ${s.assetPending} · retryables ${s.retryable}'
-                      : 'Sin pendientes en cola de Drive',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: s.totalPending > 0
-                        ? AppColors.warning
-                        : AppColors.textSecondary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                );
-              },
-            ),
-            FutureBuilder<DriveQueueSummary>(
-              future: DriveDocumentSyncService.instance.getQueueSummary(),
-              builder: (context, snapshot) {
-                final s = snapshot.data ?? const DriveQueueSummary();
-                if (s.invalidMissingFile == 0 && s.invalidDevicePath == 0) {
-                  return const SizedBox.shrink();
-                }
-                return Text(
-                  'Adjuntos rotos: ${s.invalidMissingFile + s.invalidDevicePath} · no encontrado ${s.invalidMissingFile} · otro dispositivo ${s.invalidDevicePath}',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppColors.textSecondary,
-                  ),
-                );
-              },
-            ),
-            const SizedBox(height: 6),
-            FutureBuilder<List<Map<String, Object?>>>(
-              future: DriveDocumentSyncService.instance.getRecentQueueErrors(),
-              builder: (context, snapshot) {
-                final rows = snapshot.data ?? const <Map<String, Object?>>[];
-                if (rows.isEmpty) return const SizedBox.shrink();
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: rows.take(3).map((row) {
-                    final type = row['entity_type'] ?? '-';
-                    final id = row['entity_id'] ?? '-';
-                    final attempts = row['attempts'] ?? 0;
-                    final err = row['last_error'] ?? 'Error desconocido';
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              title: const Text('Configuración avanzada'),
+              subtitle: const Text('Reparación, reintentos y diagnóstico'),
+              childrenPadding: const EdgeInsets.only(bottom: 8),
+              children: [
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: (!_driveBusy && driveReady)
+                          ? _retryPendingDriveSync
+                          : null,
+                      icon: const Icon(Icons.refresh_outlined),
+                      label: const Text('Reintentar válidos'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: (!_driveBusy && driveReady)
+                          ? _clearInvalidDrivePending
+                          : null,
+                      icon: const Icon(Icons.cleaning_services_outlined),
+                      label: const Text('Limpiar inválidos'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: (!_driveBusy && driveReady)
+                          ? _repairLegacyAttachments
+                          : null,
+                      icon: const Icon(Icons.build_circle_outlined),
+                      label: const Text('Reparar adjuntos'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: (!_driveBusy && driveReady)
+                          ? _repairPendingInvoiceDrivePdfs
+                          : null,
+                      icon: const Icon(Icons.picture_as_pdf_outlined),
+                      label: const Text('Reparar facturas Drive'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () => context.push('/attachments/broken'),
+                      icon: const Icon(Icons.broken_image_outlined),
+                      label: const Text('Adjuntos rotos'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                FutureBuilder<DriveQueueSummary>(
+                  future: DriveDocumentSyncService.instance.getQueueSummary(),
+                  builder: (context, snapshot) {
+                    final s = snapshot.data ?? const DriveQueueSummary();
                     return Text(
-                      '• $type/$id (intentos: $attempts): $err',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                      s.totalPending > 0
+                          ? 'Pendientes Drive válidos: ${s.totalPending} · facturas ${s.invoicePending} · gastos ${s.expensePending} · inversiones ${s.assetPending} · retryables ${s.retryable}'
+                          : 'Sin pendientes en cola de Drive',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: s.totalPending > 0
+                            ? AppColors.warning
+                            : AppColors.textSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    );
+                  },
+                ),
+                FutureBuilder<DriveQueueSummary>(
+                  future: DriveDocumentSyncService.instance.getQueueSummary(),
+                  builder: (context, snapshot) {
+                    final s = snapshot.data ?? const DriveQueueSummary();
+                    if (s.invalidMissingFile == 0 && s.invalidDevicePath == 0) {
+                      return const SizedBox.shrink();
+                    }
+                    return Text(
+                      'Adjuntos rotos: ${s.invalidMissingFile + s.invalidDevicePath} · no encontrado ${s.invalidMissingFile} · otro dispositivo ${s.invalidDevicePath}',
                       style: const TextStyle(
                         fontSize: 11,
                         color: AppColors.textSecondary,
                       ),
                     );
-                  }).toList(),
-                );
-              },
-            ),
-            FutureBuilder<DriveQueueSummary>(
-              future: DriveDocumentSyncService.instance.getQueueSummary(),
-              builder: (context, snapshot) {
-                final s = snapshot.data ?? const DriveQueueSummary();
-                if (s.lastError == null || s.lastError!.trim().isEmpty) {
-                  return const SizedBox.shrink();
-                }
-                return Text(
-                  'Último error Drive: ${s.lastError}',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppColors.textSecondary,
-                  ),
-                );
-              },
+                  },
+                ),
+              ],
             ),
             const SizedBox(height: 8),
             const Text(
@@ -1014,10 +1389,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     await _runDriveAction(
       () async {
         await GoogleDriveService.instance.signIn();
+        final setup = await GoogleDriveService.instance.setupWorkspace();
+        if (!setup.ready && mounted) {
+          _showDriveMessage(
+            'Selecciona una carpeta manualmente para completar la configuración de Drive.',
+          );
+        }
         ref.invalidate(settingsProvider);
       },
-      progressLabel: 'Conectando cuenta de Google Drive...',
-      successMessage: 'Google Drive conectado',
+      progressLabel: 'Conectando Google Drive y preparando espacio...',
+      successMessage: 'Drive listo',
       errorPrefix: 'No se pudo conectar con Google Drive',
     );
   }
@@ -1224,10 +1605,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     });
     try {
       await action();
+      _driveConnectionError = false;
       if (mounted && successMessage != null) {
         _showDriveMessage(successMessage);
       }
     } catch (e) {
+      _driveConnectionError = true;
       if (mounted) {
         _showDriveMessage('$errorPrefix: $e');
       }
@@ -1241,64 +1624,64 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
   }
 
+  Future<void> _runCalendarAction(
+    Future<void> Function() action, {
+    String? successMessage,
+  }) async {
+    if (_calendarBusy) return;
+    setState(() => _calendarBusy = true);
+    try {
+      await action();
+      _calendarError = false;
+      if (mounted && successMessage != null) {
+        _showDriveMessage(successMessage);
+      }
+    } catch (e) {
+      _calendarError = true;
+      if (mounted) {
+        _showDriveMessage('No se pudo conectar Google Calendar: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _calendarBusy = false);
+      }
+    }
+  }
+
   void _showDriveMessage(String message) {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  Future<void> _pickLogo() async {
-    final picker = ImagePicker();
-    final image = await picker.pickImage(source: ImageSource.gallery);
-    if (image == null) return;
-
-    final dir = await getApplicationDocumentsDirectory();
-    final destPath = '${dir.path}/logo.png';
-    await File(image.path).copy(destPath);
-
-    setState(() => _logoPath = destPath);
-  }
-
-  Future<void> _save() async {
-    // Preserve settings that aren't edited here
-    final current = await ref.read(settingsProvider.future);
-    final settings = current.copyWith(
-      logoPath: _logoPath,
-      emisorNombre: _nombreController.text.trim(),
-      emisorNIF: _nifController.text.trim(),
-      emisorDireccion: _direccionController.text.trim(),
-      emisorCiudad: _ciudadController.text.trim(),
-      emisorProvincia: _provinciaController.text.trim(),
-      emisorCodigoPostal: _codigoPostalController.text.trim(),
-      emisorEmail: _emailController.text.trim(),
-      emisorTelefono: _telefonoController.text.trim(),
-      iban: _ibanController.text.trim(),
-    );
-
-    await ref.read(settingsProvider.notifier).save(settings);
-    if (SupabaseService.instance.isAuthenticated) {
-      try {
-        await SupabaseService.instance.uploadSettings(settings);
-        await ref
-            .read(settingsProvider.notifier)
-            .save(
-              settings.copyWith(
-                cloudSettingsSignature: SupabaseService.instance
-                    .settingsSyncSignature(settings),
-              ),
-            );
-      } catch (_) {
-        // Local settings are the source of truth; cloud sync can be retried later.
-      }
-    }
-
-    if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Perfil guardado')));
-    }
+  String _formatDate(DateTime dt) {
+    final local = dt.toLocal();
+    final y = local.year.toString().padLeft(4, '0');
+    final m = local.month.toString().padLeft(2, '0');
+    final d = local.day.toString().padLeft(2, '0');
+    final hh = local.hour.toString().padLeft(2, '0');
+    final mm = local.minute.toString().padLeft(2, '0');
+    return '$d/$m/$y $hh:$mm';
   }
 }
+
+enum _DriveServiceState {
+  disconnected,
+  connectedUnconfigured,
+  ready,
+  syncing,
+  error,
+}
+
+enum _CalendarServiceState {
+  disconnected,
+  connectedUnconfigured,
+  ready,
+  syncing,
+  error,
+}
+
+enum _ServiceTone { neutral, warning, ready, syncing, error }
 
 // ── Google Account Section ──
 
@@ -1434,6 +1817,407 @@ class _GoogleSection extends ConsumerWidget {
 
 // ── Logo Selector ──
 
+class _BillingFormData {
+  final String logoPath;
+  final String nombre;
+  final String nif;
+  final String email;
+  final String telefono;
+  final String direccion;
+  final String ciudad;
+  final String iban;
+
+  const _BillingFormData({
+    required this.logoPath,
+    required this.nombre,
+    required this.nif,
+    required this.email,
+    required this.telefono,
+    required this.direccion,
+    required this.ciudad,
+    required this.iban,
+  });
+}
+
+class _BillingFormCard extends StatefulWidget {
+  final AppSettings settings;
+  final Future<void> Function(_BillingFormData data) onSaved;
+
+  const _BillingFormCard({required this.settings, required this.onSaved});
+
+  @override
+  State<_BillingFormCard> createState() => _BillingFormCardState();
+}
+
+class _BillingFormCardState extends State<_BillingFormCard> {
+  late final TextEditingController _nombreController;
+  late final TextEditingController _nifController;
+  late final TextEditingController _emailController;
+  late final TextEditingController _telefonoController;
+  late final TextEditingController _direccionController;
+  late final TextEditingController _ciudadController;
+  late final TextEditingController _ibanController;
+
+  late final FocusNode _nombreFocus;
+  late final FocusNode _nifFocus;
+  late final FocusNode _emailFocus;
+  late final FocusNode _telefonoFocus;
+  late final FocusNode _direccionFocus;
+  late final FocusNode _ciudadFocus;
+  late final FocusNode _ibanFocus;
+
+  late String _logoPath;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _nombreController = TextEditingController(
+      text: widget.settings.emisorNombre,
+    );
+    _nifController = TextEditingController(text: widget.settings.emisorNIF);
+    _emailController = TextEditingController(text: widget.settings.emisorEmail);
+    _telefonoController = TextEditingController(
+      text: widget.settings.emisorTelefono,
+    );
+    _direccionController = TextEditingController(
+      text: widget.settings.emisorDireccion,
+    );
+    _ciudadController = TextEditingController(
+      text: widget.settings.emisorCiudad,
+    );
+    _ibanController = TextEditingController(text: widget.settings.iban);
+
+    _nombreFocus = FocusNode();
+    _nifFocus = FocusNode();
+    _emailFocus = FocusNode();
+    _telefonoFocus = FocusNode();
+    _direccionFocus = FocusNode();
+    _ciudadFocus = FocusNode();
+    _ibanFocus = FocusNode();
+
+    _logoPath = widget.settings.logoPath;
+  }
+
+  @override
+  void didUpdateWidget(covariant _BillingFormCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncIfExternalChanged(widget.settings);
+  }
+
+  @override
+  void dispose() {
+    _nombreController.dispose();
+    _nifController.dispose();
+    _emailController.dispose();
+    _telefonoController.dispose();
+    _direccionController.dispose();
+    _ciudadController.dispose();
+    _ibanController.dispose();
+
+    _nombreFocus.dispose();
+    _nifFocus.dispose();
+    _emailFocus.dispose();
+    _telefonoFocus.dispose();
+    _direccionFocus.dispose();
+    _ciudadFocus.dispose();
+    _ibanFocus.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Datos de facturación',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 12),
+            _LogoSelector(
+              logoPath: _logoPath,
+              onPick: _pickLogo,
+              onRemove: () => setState(() => _logoPath = ''),
+            ),
+            const SizedBox(height: 12),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final mobile = constraints.maxWidth < 760;
+                if (mobile) {
+                  return Column(
+                    children: [
+                      _fieldBox(
+                        width: double.infinity,
+                        child: FiscalTextField(
+                          key: const ValueKey('fiscal_name'),
+                          controller: _nombreController,
+                          focusNode: _nombreFocus,
+                          labelText: AppStrings.nombre,
+                          textInputAction: TextInputAction.next,
+                        ),
+                      ),
+                      _fieldBox(
+                        width: double.infinity,
+                        child: FiscalTextField(
+                          key: const ValueKey('fiscal_nif'),
+                          controller: _nifController,
+                          focusNode: _nifFocus,
+                          labelText: 'NIF/CIF',
+                          textInputAction: TextInputAction.next,
+                        ),
+                      ),
+                      _fieldBox(
+                        width: double.infinity,
+                        child: FiscalTextField(
+                          key: const ValueKey('fiscal_email'),
+                          controller: _emailController,
+                          focusNode: _emailFocus,
+                          labelText: AppStrings.email,
+                          keyboardType: TextInputType.emailAddress,
+                          textInputAction: TextInputAction.next,
+                        ),
+                      ),
+                      _fieldBox(
+                        width: double.infinity,
+                        child: FiscalTextField(
+                          key: const ValueKey('fiscal_phone'),
+                          controller: _telefonoController,
+                          focusNode: _telefonoFocus,
+                          labelText: AppStrings.telefono,
+                          keyboardType: TextInputType.phone,
+                          textInputAction: TextInputAction.next,
+                        ),
+                      ),
+                      _fieldBox(
+                        width: double.infinity,
+                        child: FiscalTextField(
+                          key: const ValueKey('fiscal_address'),
+                          controller: _direccionController,
+                          focusNode: _direccionFocus,
+                          labelText: AppStrings.direccion,
+                          textInputAction: TextInputAction.next,
+                        ),
+                      ),
+                      _fieldBox(
+                        width: double.infinity,
+                        child: FiscalTextField(
+                          key: const ValueKey('fiscal_city'),
+                          controller: _ciudadController,
+                          focusNode: _ciudadFocus,
+                          labelText: AppStrings.ciudad,
+                          textInputAction: TextInputAction.next,
+                        ),
+                      ),
+                      _fieldBox(
+                        width: double.infinity,
+                        child: FiscalTextField(
+                          key: const ValueKey('fiscal_iban'),
+                          controller: _ibanController,
+                          focusNode: _ibanFocus,
+                          labelText: 'IBAN',
+                          textInputAction: TextInputAction.done,
+                        ),
+                      ),
+                    ],
+                  );
+                }
+                return Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 3,
+                          child: FiscalTextField(
+                            key: const ValueKey('fiscal_name'),
+                            controller: _nombreController,
+                            focusNode: _nombreFocus,
+                            labelText: AppStrings.nombre,
+                            textInputAction: TextInputAction.next,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          flex: 2,
+                          child: FiscalTextField(
+                            key: const ValueKey('fiscal_nif'),
+                            controller: _nifController,
+                            focusNode: _nifFocus,
+                            labelText: 'NIF/CIF',
+                            textInputAction: TextInputAction.next,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 3,
+                          child: FiscalTextField(
+                            key: const ValueKey('fiscal_email'),
+                            controller: _emailController,
+                            focusNode: _emailFocus,
+                            labelText: AppStrings.email,
+                            keyboardType: TextInputType.emailAddress,
+                            textInputAction: TextInputAction.next,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          flex: 2,
+                          child: FiscalTextField(
+                            key: const ValueKey('fiscal_phone'),
+                            controller: _telefonoController,
+                            focusNode: _telefonoFocus,
+                            labelText: AppStrings.telefono,
+                            keyboardType: TextInputType.phone,
+                            textInputAction: TextInputAction.next,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 3,
+                          child: FiscalTextField(
+                            key: const ValueKey('fiscal_address'),
+                            controller: _direccionController,
+                            focusNode: _direccionFocus,
+                            labelText: AppStrings.direccion,
+                            textInputAction: TextInputAction.next,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          flex: 2,
+                          child: FiscalTextField(
+                            key: const ValueKey('fiscal_city'),
+                            controller: _ciudadController,
+                            focusNode: _ciudadFocus,
+                            labelText: AppStrings.ciudad,
+                            textInputAction: TextInputAction.next,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: FiscalTextField(
+                            key: const ValueKey('fiscal_iban'),
+                            controller: _ibanController,
+                            focusNode: _ibanFocus,
+                            labelText: 'IBAN',
+                            textInputAction: TextInputAction.done,
+                          ),
+                        ),
+                        const Spacer(flex: 3),
+                      ],
+                    ),
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _saving ? null : _save,
+                icon: _saving
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.save_outlined),
+                label: const Text('Guardar datos fiscales'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _fieldBox({required double width, required Widget child}) {
+    return SizedBox(width: width, child: child);
+  }
+
+  void _syncIfExternalChanged(AppSettings nextS) {
+    if (_logoPath != nextS.logoPath) {
+      _logoPath = nextS.logoPath;
+    }
+    _syncController(_nombreController, _nombreFocus, nextS.emisorNombre);
+    _syncController(_nifController, _nifFocus, nextS.emisorNIF);
+    _syncController(_emailController, _emailFocus, nextS.emisorEmail);
+    _syncController(_telefonoController, _telefonoFocus, nextS.emisorTelefono);
+    _syncController(
+      _direccionController,
+      _direccionFocus,
+      nextS.emisorDireccion,
+    );
+    _syncController(_ciudadController, _ciudadFocus, nextS.emisorCiudad);
+    _syncController(_ibanController, _ibanFocus, nextS.iban);
+  }
+
+  void _syncController(
+    TextEditingController controller,
+    FocusNode focusNode,
+    String nextValue,
+  ) {
+    if (focusNode.hasFocus) return;
+    if (controller.text == nextValue) return;
+    final base = controller.selection.baseOffset.clamp(0, nextValue.length);
+    final extent = controller.selection.extentOffset.clamp(0, nextValue.length);
+    controller.value = TextEditingValue(
+      text: nextValue,
+      selection: TextSelection(baseOffset: base, extentOffset: extent),
+      composing: TextRange.empty,
+    );
+  }
+
+  Future<void> _pickLogo() async {
+    final picker = ImagePicker();
+    final image = await picker.pickImage(source: ImageSource.gallery);
+    if (image == null) return;
+    final dir = await getApplicationDocumentsDirectory();
+    final destPath = '${dir.path}/logo.png';
+    await File(image.path).copy(destPath);
+    if (!mounted) return;
+    setState(() => _logoPath = destPath);
+  }
+
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    try {
+      await widget.onSaved(
+        _BillingFormData(
+          logoPath: _logoPath,
+          nombre: _nombreController.text.trim(),
+          nif: _nifController.text.trim(),
+          email: _emailController.text.trim(),
+          telefono: _telefonoController.text.trim(),
+          direccion: _direccionController.text.trim(),
+          ciudad: _ciudadController.text.trim(),
+          iban: _ibanController.text.trim(),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+}
+
 class _LogoSelector extends StatelessWidget {
   final String logoPath;
   final VoidCallback onPick;
@@ -1447,70 +2231,129 @@ class _LogoSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Widget logoPreview = logoPath.isNotEmpty
+        ? ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image.file(
+              File(logoPath),
+              width: 100,
+              height: 50,
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) =>
+                  const Icon(Icons.broken_image, size: 50),
+            ),
+          )
+        : Container(
+            width: 100,
+            height: 50,
+            decoration: BoxDecoration(
+              border: Border.all(color: AppColors.divider),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.image, color: AppColors.textSecondary, size: 24),
+                Text(
+                  'Sin logo',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          );
+
+    Widget actions = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ElevatedButton.icon(
+          onPressed: onPick,
+          icon: const Icon(Icons.photo_library, size: 18),
+          label: const Text(
+            'Seleccionar logo',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            softWrap: false,
+          ),
+          style: ElevatedButton.styleFrom(
+            minimumSize: const Size.fromHeight(44),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          ),
+        ),
+        if (logoPath.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          TextButton(
+            onPressed: onRemove,
+            child: const Text(
+              'Eliminar',
+              style: TextStyle(color: AppColors.accentRed),
+            ),
+          ),
+        ],
+      ],
+    );
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            if (logoPath.isNotEmpty)
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Image.file(
-                  File(logoPath),
-                  width: 100,
-                  height: 50,
-                  fit: BoxFit.contain,
-                  errorBuilder: (_, __, ___) =>
-                      const Icon(Icons.broken_image, size: 50),
-                ),
-              )
-            else
-              Container(
-                width: 100,
-                height: 50,
-                decoration: BoxDecoration(
-                  border: Border.all(color: AppColors.divider),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.image, color: AppColors.textSecondary, size: 24),
-                    Text(
-                      'Sin logo',
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final compact = constraints.maxWidth < 430;
+            if (compact) {
+              return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  ElevatedButton.icon(
-                    onPressed: onPick,
-                    icon: const Icon(Icons.photo_library, size: 18),
-                    label: const Text('Seleccionar logo'),
-                  ),
-                  if (logoPath.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    TextButton(
-                      onPressed: onRemove,
-                      child: const Text(
-                        'Eliminar',
-                        style: TextStyle(color: AppColors.accentRed),
-                      ),
-                    ),
-                  ],
+                  Center(child: logoPreview),
+                  const SizedBox(height: 12),
+                  actions,
                 ],
-              ),
-            ),
-          ],
+              );
+            }
+            return Row(
+              children: [
+                logoPreview,
+                const SizedBox(width: 16),
+                Expanded(child: actions),
+              ],
+            );
+          },
         ),
+      ),
+    );
+  }
+}
+
+class FiscalTextField extends StatelessWidget {
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final String labelText;
+  final TextInputType? keyboardType;
+  final TextInputAction textInputAction;
+
+  const FiscalTextField({
+    super.key,
+    required this.controller,
+    required this.focusNode,
+    required this.labelText,
+    this.keyboardType,
+    required this.textInputAction,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 56),
+      child: TextFormField(
+        controller: controller,
+        focusNode: focusNode,
+        keyboardType: keyboardType,
+        textInputAction: textInputAction,
+        maxLines: 1,
+        enableInteractiveSelection: true,
+        scrollPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        decoration: InputDecoration(labelText: labelText),
       ),
     );
   }
@@ -1532,6 +2375,13 @@ class _SyncSection extends ConsumerWidget {
         authState.valueOrNull ?? SupabaseService.instance.isAuthenticated;
     final isSupported = PlatformAuthService.isSupported;
 
+    final statusLabel = switch (syncState.status) {
+      SyncStatus.syncing => 'Sincronizando cambios…',
+      SyncStatus.error => 'No se pudieron sincronizar algunos datos',
+      SyncStatus.success => 'Todo actualizado',
+      SyncStatus.idle =>
+        pendingCount > 0 ? 'Hay cambios pendientes' : 'Todo actualizado',
+    };
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -1574,10 +2424,13 @@ class _SyncSection extends ConsumerWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            const Text(
-              'Sincroniza todos tus datos entre dispositivos.',
-              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+            const SizedBox(height: 8),
+            Text(
+              statusLabel,
+              style: const TextStyle(
+                fontSize: 13,
+                color: AppColors.textSecondary,
+              ),
             ),
             if (isCloudAuth) ...[
               const SizedBox(height: 8),
@@ -1593,7 +2446,7 @@ class _SyncSection extends ConsumerWidget {
                   const SizedBox(width: 6),
                   Text(
                     pendingCount > 0
-                        ? '$pendingCount cambio${pendingCount == 1 ? '' : 's'} pendiente${pendingCount == 1 ? '' : 's'} de sincronizar'
+                        ? '$pendingCount cambio${pendingCount == 1 ? '' : 's'} pendiente${pendingCount == 1 ? '' : 's'}'
                         : 'Sin cambios pendientes',
                     style: TextStyle(
                       fontSize: 12,
@@ -1652,42 +2505,76 @@ class _SyncSection extends ConsumerWidget {
                 ),
               ),
             ] else ...[
-              // Botones de sincronización
               if (syncState.status == SyncStatus.syncing)
                 const Center(child: CircularProgressIndicator())
               else ...[
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        icon: const Icon(Icons.cloud_upload, size: 18),
-                        label: const Text('Subir'),
-                        onPressed: () => ref
-                            .read(syncProvider.notifier)
-                            .uploadToCloud(reason: 'manual_button'),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        icon: const Icon(Icons.cloud_download, size: 18),
-                        label: const Text('Descargar'),
-                        onPressed: () => ref
-                            .read(syncProvider.notifier)
-                            .downloadFromCloud(reason: 'manual_button'),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
                     icon: const Icon(Icons.sync),
-                    label: const Text('Sincronizar todo'),
+                    label: const Text('Sincronizar ahora'),
                     onPressed: () => ref
                         .read(syncProvider.notifier)
                         .syncAll(reason: 'manual_button'),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: PopupMenuButton<String>(
+                    tooltip: 'Más opciones',
+                    onSelected: (value) async {
+                      final notifier = ref.read(syncProvider.notifier);
+                      if (value == 'upload') {
+                        await notifier.uploadToCloud(reason: 'manual_button');
+                      } else if (value == 'download') {
+                        await notifier.downloadFromCloud(
+                          reason: 'manual_button',
+                        );
+                      } else if (value == 'conflicts') {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Si detectas datos inconsistentes, usa “Descargar” para refrescar desde nube.',
+                              ),
+                            ),
+                          );
+                        }
+                      }
+                    },
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(
+                        value: 'upload',
+                        child: Text('Enviar cambios pendientes'),
+                      ),
+                      PopupMenuItem(
+                        value: 'download',
+                        child: Text('Actualizar desde la nube'),
+                      ),
+                      PopupMenuItem(
+                        value: 'conflicts',
+                        child: Text('Resolver conflictos'),
+                      ),
+                    ],
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: AppColors.divider),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.tune, size: 18),
+                          SizedBox(width: 8),
+                          Text('Más opciones'),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -1783,15 +2670,13 @@ class _SyncSection extends ConsumerWidget {
       ref.invalidate(invoicesProvider);
       ref.invalidate(expensesProvider);
       ref.invalidate(assetsProvider);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Sesión de MisBolos cerrada')),
       );
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No se pudo cerrar sesión')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('No se pudo cerrar sesión')));
     }
   }
 }

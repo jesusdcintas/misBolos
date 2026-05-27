@@ -75,6 +75,20 @@ class DriveExistingFileResult {
   const DriveExistingFileResult({required this.fileId, this.fileUrl});
 }
 
+class DriveWorkspaceSetupResult {
+  final bool ready;
+  final bool autoConfigured;
+  final String? message;
+  final DriveFolderResult? folder;
+
+  const DriveWorkspaceSetupResult({
+    required this.ready,
+    required this.autoConfigured,
+    this.message,
+    this.folder,
+  });
+}
+
 class GoogleDriveService {
   static final GoogleDriveService instance = GoogleDriveService._();
   GoogleDriveService._();
@@ -83,10 +97,11 @@ class GoogleDriveService {
   final Map<String, String> _folderIdCache = {};
   final Map<String, DriveMonthFolders> _monthStructureCache = {};
 
-  bool get _isMobile => !kIsWeb && (Platform.isIOS || Platform.isAndroid);
+  bool get _usesPlatformAuth =>
+      !kIsWeb && (Platform.isIOS || Platform.isAndroid || Platform.isMacOS);
 
   Future<void> signIn() async {
-    final success = _isMobile
+    final success = _usesPlatformAuth
         ? await PlatformAuthService.instance.signIn()
         : await GoogleAuthService.instance.signIn();
 
@@ -103,6 +118,37 @@ class GoogleDriveService {
         driveAccountName: account?.displayName,
       ),
     );
+  }
+
+  Future<DriveWorkspaceSetupResult> setupWorkspace({
+    String defaultFolderName = 'MisBolos',
+  }) async {
+    try {
+      DriveFolderResult? selected;
+      final candidates = await searchFoldersByName(defaultFolderName);
+      for (final folder in candidates) {
+        if (folder.name.trim().toLowerCase() ==
+            defaultFolderName.trim().toLowerCase()) {
+          selected = folder;
+          break;
+        }
+      }
+
+      selected ??= await _createRootFolder(defaultFolderName);
+      await selectRootFolder(selected);
+      await createFullYearStructure(DateTime.now().year);
+      return DriveWorkspaceSetupResult(
+        ready: true,
+        autoConfigured: true,
+        folder: selected,
+      );
+    } catch (e) {
+      return DriveWorkspaceSetupResult(
+        ready: false,
+        autoConfigured: false,
+        message: e.toString(),
+      );
+    }
   }
 
   Future<void> signOut() async {
@@ -123,7 +169,7 @@ class GoogleDriveService {
   }
 
   Future<GoogleAccount?> getCurrentAccount() async {
-    if (_isMobile) {
+    if (_usesPlatformAuth) {
       return GoogleAccount(
         email: PlatformAuthService.instance.userEmail,
         displayName: PlatformAuthService.instance.displayName,
@@ -182,7 +228,7 @@ class GoogleDriveService {
     final settings = await _settingsRepository.get();
     if ((settings.driveRootFolderId ?? '').isEmpty) return false;
 
-    final success = _isMobile
+    final success = _usesPlatformAuth
         ? await PlatformAuthService.instance.signInSilently()
         : await GoogleAuthService.instance.signInSilently();
     if (!success) {
@@ -332,6 +378,27 @@ class GoogleDriveService {
     }
   }
 
+  Future<DriveFolderResult> _createRootFolder(String name) async {
+    final api = await _driveApi();
+    final folder = drive.File()
+      ..name = sanitizeDriveFileName(name)
+      ..mimeType = 'application/vnd.google-apps.folder';
+    final created = await api.files.create(
+      folder,
+      $fields: 'id,name,webViewLink',
+    );
+    final id = created.id;
+    final folderName = created.name;
+    if (id == null || folderName == null) {
+      throw Exception('No se pudo crear la carpeta inicial en Google Drive.');
+    }
+    return DriveFolderResult(
+      id: id,
+      name: folderName,
+      webViewLink: created.webViewLink,
+    );
+  }
+
   Future<void> _deleteLegacyBackupFolder(String yearFolderId) async {
     final api = await _driveApi();
     final result = await api.files.list(
@@ -352,7 +419,9 @@ class GoogleDriveService {
       try {
         await api.files.delete(id, supportsAllDrives: true);
       } catch (e) {
-        debugPrint('[Drive] No se pudo eliminar carpeta legacy BACKUPS APP: $e');
+        debugPrint(
+          '[Drive] No se pudo eliminar carpeta legacy BACKUPS APP: $e',
+        );
       }
     }
   }
@@ -625,7 +694,7 @@ class GoogleDriveService {
   }
 
   Future<drive.DriveApi> _driveApi() async {
-    if (_isMobile) {
+    if (_usesPlatformAuth) {
       var token = await PlatformAuthService.instance.getAccessToken();
       if (token == null) {
         final signedIn = await PlatformAuthService.instance.signInSilently();

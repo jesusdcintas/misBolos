@@ -17,11 +17,12 @@ class GoogleCalendarService {
   ];
 
   Future<gcal.CalendarApi> _getApi() async {
-    // En iOS/Android usamos token de google_sign_in.
-    if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
+    // En iOS/Android/macOS usamos el token del proveedor Google
+    // asociado a la sesión (PlatformAuthService).
+    if (!kIsWeb && (Platform.isIOS || Platform.isAndroid || Platform.isMacOS)) {
       final token = await PlatformAuthService.instance.getAccessToken();
       if (token == null || token.isEmpty) {
-        throw StateError('No hay access token de Google en móvil');
+        throw StateError('No hay access token de Google');
       }
       final creds = gauth.AccessCredentials(
         gauth.AccessToken(
@@ -80,12 +81,8 @@ class GoogleCalendarService {
     final event = gcal.Event()
       ..summary = '🎧 Bolo: $clientName'
       ..description = _buildDescription(gig, cachet)
-      ..start = gcal.EventDateTime(
-        date: startDate,
-      )
-      ..end = gcal.EventDateTime(
-        date: endDate,
-      )
+      ..start = gcal.EventDateTime(date: startDate)
+      ..end = gcal.EventDateTime(date: endDate)
       ..extendedProperties = gcal.EventExtendedProperties(
         private: {'misbolos_gig_id': gig.id},
       );

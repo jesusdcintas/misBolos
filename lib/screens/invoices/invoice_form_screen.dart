@@ -53,6 +53,8 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
       final settings = await ref.read(settingsProvider.future);
       _settings = settings;
       _ivaRate = settings.ivaDefault;
+      _irpfRate = settings.irpfDefault;
+      _applyIrpf = settings.irpfDefault > 0;
 
       if (widget.invoiceId != null) {
         // Editando factura existente
@@ -579,7 +581,9 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                     setState(() {
                       _applyIrpf = value;
                       if (!value) _irpfRate = 0.0;
-                      if (value && _irpfRate == 0) _irpfRate = 0.15;
+                      if (value && _irpfRate == 0) {
+                        _irpfRate = _settings?.irpfDefault ?? 0.15;
+                      }
                     });
                   },
                 ),

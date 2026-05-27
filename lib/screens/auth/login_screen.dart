@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../providers/auth_controller.dart';
+import 'onboarding_screen.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -16,6 +18,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscure = true;
+  bool _checkedOnboarding = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkOnboarding());
+  }
 
   @override
   void dispose() {
@@ -54,7 +63,65 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       'Inicia sesión para continuar',
                       textAlign: TextAlign.center,
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 20),
+                    FilledButton.icon(
+                      onPressed: loading ? null : _onGoogleLogin,
+                      icon: const Icon(Icons.g_mobiledata, size: 28),
+                      label: const Text('Continuar con Google'),
+                    ),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(999),
+                          color: Theme.of(context)
+                              .colorScheme
+                              .secondaryContainer
+                              .withValues(alpha: 0.7),
+                        ),
+                        child: Text(
+                          'Recomendado',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSecondaryContainer,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Activa sincronización, Google Drive y calendario automáticamente.',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        const Expanded(child: Divider()),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: Text(
+                            'o continuar con email',
+                            style: TextStyle(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                        const Expanded(child: Divider()),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
                     TextFormField(
                       controller: _emailController,
                       decoration: const InputDecoration(labelText: 'Email'),
@@ -104,12 +171,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             )
                           : const Text('Iniciar sesión'),
                     ),
-                    const SizedBox(height: 8),
-                    OutlinedButton.icon(
-                      onPressed: loading ? null : _onGoogleLogin,
-                      icon: const Icon(Icons.g_mobiledata, size: 28),
-                      label: const Text('Entrar con Google'),
-                    ),
                     TextButton(
                       onPressed: loading
                           ? null
@@ -117,7 +178,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       child: const Text('¿Olvidaste tu contraseña?'),
                     ),
                     TextButton(
-                      onPressed: loading ? null : () => context.push('/register'),
+                      onPressed: loading
+                          ? null
+                          : () => context.push('/register'),
                       child: const Text('Crear cuenta'),
                     ),
                   ],
@@ -132,17 +195,31 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Future<void> _onLogin() async {
     if (!_formKey.currentState!.validate()) return;
-    final ok = await ref.read(authControllerProvider.notifier).signInWithEmail(
-      email: _emailController.text,
-      password: _passwordController.text,
-    );
+    final ok = await ref
+        .read(authControllerProvider.notifier)
+        .signInWithEmail(
+          email: _emailController.text,
+          password: _passwordController.text,
+        );
     if (!mounted || !ok) return;
     context.go('/');
   }
 
   Future<void> _onGoogleLogin() async {
-    final ok = await ref.read(authControllerProvider.notifier).signInWithGoogle();
+    final ok = await ref
+        .read(authControllerProvider.notifier)
+        .signInWithGoogle();
     if (!mounted || !ok) return;
     context.go('/');
+  }
+
+  Future<void> _checkOnboarding() async {
+    if (_checkedOnboarding || !mounted) return;
+    _checkedOnboarding = true;
+    final prefs = await SharedPreferences.getInstance();
+    final seen = prefs.getBool(onboardingSeenKey) ?? false;
+    if (!seen && mounted) {
+      context.go('/onboarding');
+    }
   }
 }

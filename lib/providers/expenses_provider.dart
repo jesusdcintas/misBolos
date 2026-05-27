@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
@@ -345,7 +346,18 @@ class ExpensesNotifier extends AsyncNotifier<List<Expense>> {
         debugPrint('[ExpensesSync] deleteExpense directo falló: $e');
       }
     }
+    final localDocPath = existing?.documentoPath;
     await repo.delete(id);
+    if (localDocPath != null && localDocPath.trim().isNotEmpty) {
+      try {
+        final file = File(localDocPath);
+        if (await file.exists()) {
+          await file.delete();
+        }
+      } catch (e) {
+        debugPrint('[ExpensesSync] No se pudo borrar adjunto local: $e');
+      }
+    }
     await DriveDocumentSyncService.instance.removeQueueForEntity(
       entityType: 'expense',
       entityId: id.toString(),

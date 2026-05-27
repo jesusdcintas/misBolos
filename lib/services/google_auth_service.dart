@@ -247,11 +247,12 @@ class GoogleAuthNotifier extends StateNotifier<GoogleAuthState> {
     _tryAutoSignIn();
   }
 
-  // En iOS/Android usamos PlatformAuthService; en macOS, GoogleAuthService.
-  bool get _isMobile => !kIsWeb && (Platform.isIOS || Platform.isAndroid);
+  // En iOS/Android/macOS usamos PlatformAuthService (sesión Google unificada).
+  bool get _usesPlatformAuth =>
+      !kIsWeb && (Platform.isIOS || Platform.isAndroid || Platform.isMacOS);
 
   Future<void> _tryAutoSignIn() async {
-    if (_isMobile) {
+    if (_usesPlatformAuth) {
       final prefs = await SharedPreferences.getInstance();
       final wasConnected =
           prefs.getBool(_prefsKeyMobileCalendarConnected) ?? false;
@@ -278,7 +279,7 @@ class GoogleAuthNotifier extends StateNotifier<GoogleAuthState> {
   }
 
   Future<bool> signIn() async {
-    if (_isMobile) {
+    if (_usesPlatformAuth) {
       final success = await PlatformAuthService.instance.signIn();
       if (success) {
         _updateStateFromPlatform();
@@ -293,7 +294,7 @@ class GoogleAuthNotifier extends StateNotifier<GoogleAuthState> {
   }
 
   Future<void> signOut() async {
-    if (_isMobile) {
+    if (_usesPlatformAuth) {
       await PlatformAuthService.instance.signOut();
       await _clearMobileCalendarState();
     } else {
@@ -304,8 +305,8 @@ class GoogleAuthNotifier extends StateNotifier<GoogleAuthState> {
 
   /// Solicita acceso a Calendar sin requerir login completo si ya hay sesión.
   Future<bool> connectCalendarOnly() async {
-    if (_isMobile) {
-      // En móvil, google_sign_in gestiona scopes en el login inicial.
+    if (_usesPlatformAuth) {
+      // En plataformas nativas, los scopes se solicitan en login Google.
       // Si ya hay sesión activa, se considera Calendar conectado.
       if (PlatformAuthService.instance.isSignedIn) {
         state = state.copyWith(calendarConnected: true);

@@ -9,7 +9,15 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/security/app_lock_manager.dart';
 import 'core/theme/app_theme.dart';
+import 'database/database_helper.dart';
 import 'models/app_settings.dart';
+import 'providers/assets_provider.dart';
+import 'providers/client_provider.dart';
+import 'providers/expenses_provider.dart';
+import 'providers/financial_summary_provider.dart';
+import 'providers/gig_provider.dart';
+import 'providers/invoice_provider.dart';
+import 'providers/stats_provider.dart';
 import 'providers/settings_provider.dart';
 import 'providers/sync_provider.dart';
 import 'core/services/google_drive_service.dart';
@@ -31,6 +39,7 @@ import 'screens/profile/profile_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
 import 'screens/auth/forgot_password_screen.dart';
+import 'screens/auth/onboarding_screen.dart';
 import 'screens/auth/reset_password_screen.dart';
 import 'screens/auth/lock_screen.dart';
 import 'screens/expenses/expense_form_screen.dart';
@@ -75,6 +84,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       final isResetPassword = state.matchedLocation == '/reset-password';
       final loggingIn =
           state.matchedLocation == '/login' ||
+          state.matchedLocation == '/onboarding' ||
           state.matchedLocation == '/register' ||
           state.matchedLocation == '/forgot-password';
 
@@ -95,6 +105,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/register',
         pageBuilder: (context, state) =>
             _slideUpPage(const RegisterScreen(), state),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/onboarding',
+        pageBuilder: (context, state) =>
+            _slideUpPage(const OnboardingScreen(), state),
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
@@ -328,18 +344,16 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp>
   final AppLockManager _lockManager = AppLockManager(
     lockAfterBackground: const Duration(seconds: 4),
   );
+  bool _sessionReady = false;
+  bool _sessionSwitching = false;
+  String _sessionMessage = 'Preparando tu espacio seguro…';
+  String? _activeUserId;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _autoSyncTimer = Timer(const Duration(seconds: 1), _autoSync);
-    Timer(const Duration(milliseconds: 500), _restoreDriveSilently);
-    _queueRetryTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      unawaited(
-        SyncQueueProcessor.instance.processPending(reason: 'periodic_retry'),
-      );
-    });
+    _startBackgroundWorkers();
     _settingsSub = ref.listenManual<AsyncValue<AppSettings>>(settingsProvider, (
       _,
       next,
@@ -353,9 +367,59 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp>
         ref.read(routerProvider).go('/reset-password');
       }
       _lockManager.onAuthStateChanged(authState);
+      unawaited(_ensureSessionScope(authState.session));
       if (authState.session == null) return;
       unawaited(_syncAfterLogin());
     });
+    unawaited(
+      _ensureSessionScope(Supabase.instance.client.auth.currentSession),
+    );
+  }
+
+  void _startBackgroundWorkers() {
+    _autoSyncTimer?.cancel();
+    _queueRetryTimer?.cancel();
+    _autoSyncTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      unawaited(_autoSync());
+    });
+    _queueRetryTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      unawaited(
+        SyncQueueProcessor.instance.processPending(reason: 'periodic_retry'),
+      );
+    });
+    Timer(const Duration(milliseconds: 500), _restoreDriveSilently);
+  }
+
+  Future<void> _ensureSessionScope(Session? session) async {
+    final nextUserId = session?.user.id;
+    if (_activeUserId == nextUserId && _sessionReady) return;
+    setState(() {
+      _sessionSwitching = true;
+      _sessionReady = false;
+      _sessionMessage = 'Preparando tu espacio seguro…';
+    });
+    _autoCloudSyncTimer?.cancel();
+    _synced = false;
+    await DatabaseHelper.instance.switchToUserDatabase(nextUserId);
+    _invalidateSessionDataProviders();
+    _activeUserId = nextUserId;
+    if (!mounted) return;
+    setState(() {
+      _sessionSwitching = false;
+      _sessionReady = true;
+    });
+  }
+
+  void _invalidateSessionDataProviders() {
+    ref.invalidate(settingsProvider);
+    ref.invalidate(syncProvider);
+    ref.invalidate(clientsProvider);
+    ref.invalidate(gigsProvider);
+    ref.invalidate(invoicesProvider);
+    ref.invalidate(expensesProvider);
+    ref.invalidate(assetsProvider);
+    ref.invalidate(declaredQuartersProvider);
+    ref.invalidate(financialSummaryProvider);
   }
 
   Future<void> _autoSync() async {
@@ -364,11 +428,14 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp>
     final notifier = ref.read(syncProvider.notifier);
     if (!notifier.isAuthenticated) return;
     _synced = true;
+    _autoSyncTimer?.cancel();
+    _autoSyncTimer = null;
     await notifier.syncAll(reason: 'app_start');
   }
 
   Future<void> _syncAfterLogin() async {
     if (!mounted) return;
+    if (!_sessionReady) return;
     final notifier = ref.read(syncProvider.notifier);
     if (!notifier.isAuthenticated) return;
     await notifier.syncAll(reason: 'auth_signed_in');
@@ -435,7 +502,9 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp>
   @override
   Widget build(BuildContext context) {
     final router = ref.watch(routerProvider);
-    final settings = ref.watch(settingsProvider).valueOrNull;
+    final settings = _sessionReady
+        ? ref.watch(settingsProvider).valueOrNull
+        : null;
 
     final themeMode = switch (settings?.appThemeMode) {
       'dark' => ThemeMode.dark,
@@ -463,26 +532,83 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp>
         return AnimatedBuilder(
           animation: _lockManager,
           builder: (context, _) {
-            return Stack(
-              fit: StackFit.expand,
-              children: [
-                content,
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 260),
-                  switchInCurve: Curves.easeOutCubic,
-                  switchOutCurve: Curves.easeInCubic,
-                  child: _lockManager.isLocked
-                      ? LockScreen(
-                          key: const ValueKey('app-lock-screen'),
-                          manager: _lockManager,
-                        )
-                      : const SizedBox.shrink(),
+            return GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+              child: NotificationListener<ScrollStartNotification>(
+                onNotification: (notification) {
+                  final focused = FocusManager.instance.primaryFocus;
+                  final focusContext = focused?.context;
+                  final editingInsideFocus =
+                      focusContext?.widget is EditableText;
+                  final horizontalInputScroll =
+                      editingInsideFocus &&
+                      notification.metrics.axis == Axis.horizontal;
+                  if (horizontalInputScroll) {
+                    return false;
+                  }
+                  FocusManager.instance.primaryFocus?.unfocus();
+                  return false;
+                },
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (_sessionReady)
+                      content
+                    else
+                      _SecureSessionLoading(message: _sessionMessage),
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 260),
+                      switchInCurve: Curves.easeOutCubic,
+                      switchOutCurve: Curves.easeInCubic,
+                      child: _lockManager.isLocked
+                          ? LockScreen(
+                              key: const ValueKey('app-lock-screen'),
+                              manager: _lockManager,
+                            )
+                          : const SizedBox.shrink(),
+                    ),
+                    if (_sessionSwitching)
+                      const ColoredBox(
+                        color: Color(0xEE0B1220),
+                        child: Center(
+                          child: _SecureSessionLoading(
+                            message: 'Preparando tu espacio seguro…',
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
-              ],
+              ),
             );
           },
         );
       },
+    );
+  }
+}
+
+class _SecureSessionLoading extends StatelessWidget {
+  final String message;
+  const _SecureSessionLoading({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: Theme.of(context).scaffoldBackgroundColor,
+      alignment: Alignment.center,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(
+            width: 28,
+            height: 28,
+            child: CircularProgressIndicator(strokeWidth: 2.4),
+          ),
+          const SizedBox(height: 14),
+          Text(message, style: Theme.of(context).textTheme.titleMedium),
+        ],
+      ),
     );
   }
 }

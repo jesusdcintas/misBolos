@@ -7,6 +7,8 @@ import '../repositories/gig_repository.dart';
 import '../repositories/sync_queue_repository.dart';
 import 'invoice_provider.dart';
 import '../database/database_helper.dart';
+import '../core/services/drive_document_sync_service.dart';
+import '../core/services/google_drive_service.dart';
 import '../services/google_calendar_service.dart';
 import '../services/sync_queue_processor.dart';
 import '../models/sync_queue_item.dart';
@@ -159,8 +161,11 @@ class GigsNotifier extends AsyncNotifier<List<Gig>> {
     await _reloadInvoicesLocal();
   }
 
-  Future<void> remove(String id) async {
+  Future<void> remove(String id, {bool deleteFromDrive = false}) async {
     final gig = await ref.read(gigRepositoryProvider).getById(id);
+    final linkedInvoice = await ref
+        .read(invoiceRepositoryProvider)
+        .getByGigId(id);
     // 1. Borrar de SQLite local (fuente de verdad)
     final result = await ref.read(gigRepositoryProvider).deleteBatch({id});
     await AppEventRepository.instance.insert(
@@ -201,6 +206,47 @@ class GigsNotifier extends AsyncNotifier<List<Gig>> {
       }
     }
     await SyncQueueProcessor.instance.processPending(reason: 'gig_delete');
+    if (deleteFromDrive) {
+      for (final invoiceId in result.deletedInvoiceIds) {
+        final deleted = await ref
+            .read(invoiceRepositoryProvider)
+            .getById(invoiceId);
+        if (deleted?.driveFileId?.trim().isNotEmpty == true) {
+          try {
+            await GoogleDriveService.instance.trashFile(deleted!.driveFileId!);
+          } catch (e) {
+            debugPrint(
+              '[GigProvider] No se pudo enviar factura a papelera Drive: $e',
+            );
+          }
+        }
+        await DriveDocumentSyncService.instance.removeQueueForEntity(
+          entityType: 'invoice',
+          entityId: invoiceId,
+        );
+      }
+
+      // Fallback si no llegó id en resultado por edge case de datos legacy.
+      if (result.deletedInvoiceIds.isEmpty &&
+          linkedInvoice?.driveFileId?.trim().isNotEmpty == true) {
+        final legacyInvoice = linkedInvoice;
+        if (legacyInvoice != null) {
+          try {
+            await GoogleDriveService.instance.trashFile(
+              legacyInvoice.driveFileId!,
+            );
+          } catch (e) {
+            debugPrint(
+              '[GigProvider] No se pudo enviar factura legacy a papelera Drive: $e',
+            );
+          }
+          await DriveDocumentSyncService.instance.removeQueueForEntity(
+            entityType: 'invoice',
+            entityId: legacyInvoice.id,
+          );
+        }
+      }
+    }
 
     // Compatibilidad con la cola antigua de borrados si la cola nueva fallase
     for (final invoiceId in result.deletedInvoiceIds) {
@@ -274,7 +320,10 @@ class GigsNotifier extends AsyncNotifier<List<Gig>> {
     await _reloadInvoicesLocal();
   }
 
-  Future<void> bulkDelete(Set<String> ids) async {
+  Future<void> bulkDelete(
+    Set<String> ids, {
+    bool deleteFromDrive = false,
+  }) async {
     if (ids.isEmpty) return;
     final result = await ref.read(gigRepositoryProvider).deleteBatch(ids);
 
@@ -303,6 +352,26 @@ class GigsNotifier extends AsyncNotifier<List<Gig>> {
       }
     }
     await SyncQueueProcessor.instance.processPending(reason: 'gig_bulk_delete');
+    if (deleteFromDrive) {
+      for (final invoiceId in result.deletedInvoiceIds) {
+        final deleted = await ref
+            .read(invoiceRepositoryProvider)
+            .getById(invoiceId);
+        if (deleted?.driveFileId?.trim().isNotEmpty == true) {
+          try {
+            await GoogleDriveService.instance.trashFile(deleted!.driveFileId!);
+          } catch (e) {
+            debugPrint(
+              '[GigProvider] No se pudo enviar factura a papelera Drive (bulk): $e',
+            );
+          }
+        }
+        await DriveDocumentSyncService.instance.removeQueueForEntity(
+          entityType: 'invoice',
+          entityId: invoiceId,
+        );
+      }
+    }
 
     try {
       final calendar = GoogleCalendarService();

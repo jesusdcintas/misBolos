@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
@@ -332,7 +333,18 @@ class AssetsNotifier extends AsyncNotifier<List<Asset>> {
         debugPrint('[AssetsSync] deleteAsset directo falló: $e');
       }
     }
+    final localDocPath = existing?.documentoPath;
     await repo.delete(id);
+    if (localDocPath != null && localDocPath.trim().isNotEmpty) {
+      try {
+        final file = File(localDocPath);
+        if (await file.exists()) {
+          await file.delete();
+        }
+      } catch (e) {
+        debugPrint('[AssetsSync] No se pudo borrar adjunto local: $e');
+      }
+    }
     await DriveDocumentSyncService.instance.removeQueueForEntity(
       entityType: 'asset',
       entityId: id.toString(),

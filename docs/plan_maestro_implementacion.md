@@ -71,7 +71,7 @@ Checklist consolidada:
 - [x] Retirada del cambio de concepto masivo.
 
 Pendiente inmediato:
-- [ ] Reestructuración final UI de Perfil para unificar sesión MisBolos + Google + Drive + Calendar sin redundancias.
+- [x] Reestructuración final UI de Perfil para unificar sesión MisBolos + Google + Drive + Calendar sin redundancias.
 - [ ] Exponer redacción IA diaria para WhatsApp/email/resúmenes en flujos de uso.
 
 Pendiente opcional:
@@ -84,9 +84,9 @@ Pendiente opcional:
 ## 2) Backlog único priorizado
 
 ### Prioridad alta
-- [ ] Cerrar unificación UX de Perfil (cuentas y conexiones, sin estados duplicados).
-- [ ] Terminar homogeneidad visual dark/light donde aún hay inconsistencias de contraste.
-- [ ] Validar migraciones SQLite locales pendientes en instalaciones antiguas (caso `deleted_at`).
+- [x] Cerrar unificación UX de Perfil (cuentas y conexiones, sin estados duplicados).
+- [x] Terminar homogeneidad visual dark/light donde aún hay inconsistencias de contraste.
+- [x] Validar migraciones SQLite locales pendientes en instalaciones antiguas (caso `deleted_at`).
 - [ ] Implementar integración VeriFactu (cumplimiento y envío fiscal según normativa vigente).
 
 ### Prioridad media
@@ -108,6 +108,6 @@ Pendiente opcional:
 
 ## 4) Criterio de cierre del plan maestro
 El plan se considerará cerrado cuando:
-- [ ] La unificación de Perfil quede finalizada y validada visual/funcionalmente.
+- [x] La unificación de Perfil quede finalizada y validada visual/funcionalmente.
 - [ ] No haya incidencias abiertas de sincronización entre dispositivos.
-- [ ] Se complete pasada final de QA en dark/light para Finanzas, Agenda/Bolos y Perfil.
+- [x] Se complete pasada final de QA en dark/light para Finanzas, Agenda/Bolos y Perfil.

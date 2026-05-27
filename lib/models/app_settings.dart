@@ -12,6 +12,7 @@ class AppSettings {
   final String emisorTelefono;
   final String iban;
   final double ivaDefault;
+  final double irpfDefault;
   final bool notificacionesActivas;
   final int diasRecordatorio;
   final String? driveRootFolderId;
@@ -44,6 +45,7 @@ class AppSettings {
     this.emisorTelefono = '',
     this.iban = '',
     this.ivaDefault = 0.21,
+    this.irpfDefault = 0.15,
     this.notificacionesActivas = true,
     this.diasRecordatorio = 7,
     this.driveRootFolderId,
@@ -77,6 +79,7 @@ class AppSettings {
     String? emisorTelefono,
     String? iban,
     double? ivaDefault,
+    double? irpfDefault,
     bool? notificacionesActivas,
     int? diasRecordatorio,
     String? driveRootFolderId,
@@ -113,6 +116,7 @@ class AppSettings {
       emisorTelefono: emisorTelefono ?? this.emisorTelefono,
       iban: iban ?? this.iban,
       ivaDefault: ivaDefault ?? this.ivaDefault,
+      irpfDefault: irpfDefault ?? this.irpfDefault,
       notificacionesActivas:
           notificacionesActivas ?? this.notificacionesActivas,
       diasRecordatorio: diasRecordatorio ?? this.diasRecordatorio,
@@ -164,6 +168,7 @@ class AppSettings {
       'emisor_telefono': emisorTelefono,
       'iban': iban,
       'iva_default': ivaDefault,
+      'irpf_default': irpfDefault,
       'notificaciones_activas': notificacionesActivas ? 1 : 0,
       'dias_recordatorio': diasRecordatorio,
       'drive_root_folder_id': driveRootFolderId,
@@ -199,6 +204,7 @@ class AppSettings {
       emisorTelefono: map['emisor_telefono'] as String? ?? '',
       iban: map['iban'] as String? ?? '',
       ivaDefault: (map['iva_default'] as num?)?.toDouble() ?? 0.21,
+      irpfDefault: (map['irpf_default'] as num?)?.toDouble() ?? 0.15,
       notificacionesActivas: (map['notificaciones_activas'] as int?) == 1,
       diasRecordatorio: map['dias_recordatorio'] as int? ?? 7,
       driveRootFolderId: map['drive_root_folder_id'] as String?,

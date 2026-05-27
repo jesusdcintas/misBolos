@@ -1,10 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/constants/app_colors.dart';
-import '../../core/constants/app_strings.dart';
+import 'package:go_router/go_router.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
+import 'dart:io';
+
 import '../../models/app_settings.dart';
+import '../../models/gig.dart';
 import '../../models/pdf_theme.dart';
+import '../../providers/gig_provider.dart';
+import '../../providers/invoice_provider.dart';
 import '../../providers/settings_provider.dart';
+import '../settings/duplicate_clients_screen.dart';
+import '../settings/import_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -15,6 +23,7 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   double _ivaDefault = 0.21;
+  double _irpfDefault = 0.15;
   double _logoSize = 180;
   String _pdfTheme = 'clasico';
   bool _notificaciones = true;
@@ -25,12 +34,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _securityPinEnabled = false;
   String _securityPinCode = '';
   bool _securityBiometricEnabled = false;
+  int _lockDelaySeconds = 5;
   bool _loaded = false;
 
   void _loadSettings(AppSettings s) {
     if (_loaded) return;
     _loaded = true;
     _ivaDefault = s.ivaDefault;
+    _irpfDefault = s.irpfDefault;
     _logoSize = s.logoSize;
     _pdfTheme = s.pdfTheme;
     _notificaciones = s.notificacionesActivas;
@@ -48,297 +59,68 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final settingsAsync = ref.watch(settingsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text(AppStrings.ajustes)),
+      appBar: AppBar(title: const Text('Ajustes')),
       body: settingsAsync.when(
         data: (settings) {
           _loadSettings(settings);
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              // IVA
-              Text(
-                AppStrings.ivaPorDefecto,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              SegmentedButton<double>(
-                segments: const [
-                  ButtonSegment(value: 0.21, label: Text('21%')),
-                  ButtonSegment(value: 0.10, label: Text('10%')),
-                  ButtonSegment(value: 0.0, label: Text('0%')),
-                ],
-                selected: {_ivaDefault},
-                onSelectionChanged: (v) =>
-                    setState(() => _ivaDefault = v.first),
-              ),
-              const SizedBox(height: 24),
-
-              // Tamaño logo
-              Text(
-                'Tamaño del logo en PDF',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  const Text('10'),
-                  Expanded(
-                    child: Slider(
-                      value: _logoSize,
-                      min: 10,
-                      max: 300,
-                      divisions: 29,
-                      label: '${_logoSize.round()}pt',
-                      onChanged: (v) => setState(() => _logoSize = v),
-                    ),
-                  ),
-                  const Text('300'),
-                ],
-              ),
-              Center(
-                child: Text(
-                  '${_logoSize.round()}pt',
-                  style: Theme.of(context).textTheme.bodyLarge,
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // Tema PDF
-              Text(
-                'Tema de color del PDF',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 12),
-              GridView.count(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: 3,
-                childAspectRatio: 1.5,
-                mainAxisSpacing: 8,
-                crossAxisSpacing: 8,
-                children: PdfTheme.values.map((theme) {
-                  final isSelected = _pdfTheme == theme.name;
-                  final color = _pdfThemeColor(theme);
-                  return GestureDetector(
-                    onTap: () => setState(() => _pdfTheme = theme.name),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: color,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: isSelected ? Colors.white : Colors.transparent,
-                          width: 3,
-                        ),
-                        boxShadow: isSelected
-                            ? [
-                                BoxShadow(
-                                  color: color.withValues(alpha: 0.5),
-                                  blurRadius: 8,
-                                ),
-                              ]
-                            : null,
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          if (isSelected)
-                            const Icon(
-                              Icons.check,
-                              color: Colors.white,
-                              size: 20,
-                            ),
-                          Text(
-                            theme.label,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 16),
-
-              // Preview del tema
-              _buildThemePreview(),
-              const SizedBox(height: 24),
-
-              // Notificaciones
-              Text(
-                AppStrings.notificaciones,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              SwitchListTile(
-                title: const Text('Activar recordatorios'),
-                value: _notificaciones,
-                onChanged: (v) => setState(() => _notificaciones = v),
-              ),
-              if (_notificaciones)
-                ListTile(
-                  title: const Text(AppStrings.diasRecordatorio),
-                  trailing: DropdownButton<int>(
-                    value: _diasRecordatorio,
-                    items: [3, 5, 7, 10, 14, 30]
-                        .map(
-                          (d) => DropdownMenuItem(
-                            value: d,
-                            child: Text('$d días'),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (v) =>
-                        setState(() => _diasRecordatorio = v ?? 7),
-                  ),
-                ),
-              const SizedBox(height: 24),
-
-              Text(
-                'Preferencias de sincronización',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              SwitchListTile(
-                title: const Text('Auto-sync'),
-                subtitle: const Text(
-                  'Sincronización automática en segundo plano',
-                ),
-                value: _autoCloudSyncEnabled,
-                onChanged: (v) => setState(() => _autoCloudSyncEnabled = v),
-              ),
-              if (_autoCloudSyncEnabled)
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Frecuencia de sync'),
-                  trailing: DropdownButton<int>(
-                    value: _autoCloudSyncIntervalSeconds,
-                    items: const [
-                      DropdownMenuItem(value: 30, child: Text('30 segundos')),
-                      DropdownMenuItem(value: 45, child: Text('45 segundos')),
-                      DropdownMenuItem(value: 60, child: Text('1 minuto')),
-                      DropdownMenuItem(value: 120, child: Text('2 minutos')),
-                      DropdownMenuItem(value: 300, child: Text('5 minutos')),
-                    ],
-                    onChanged: (v) =>
-                        setState(() => _autoCloudSyncIntervalSeconds = v ?? 45),
-                  ),
-                ),
-              const SizedBox(height: 24),
-
-              Text(
-                'Apariencia',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(value: 'light', label: Text('Claro')),
-                  ButtonSegment(value: 'dark', label: Text('Oscuro')),
-                  ButtonSegment(value: 'system', label: Text('Sistema')),
-                ],
-                selected: {_appThemeMode},
-                onSelectionChanged: (v) =>
-                    setState(() => _appThemeMode = v.first),
-              ),
-              const SizedBox(height: 24),
-
-              Text(
-                'Seguridad',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              SwitchListTile(
-                title: const Text('Bloqueo con PIN'),
-                subtitle: const Text('Solicitar PIN al desbloquear la app'),
-                value: _securityPinEnabled,
-                onChanged: (v) => setState(() {
-                  _securityPinEnabled = v;
-                  if (!v) {
-                    _securityPinCode = '';
-                  }
-                }),
-              ),
-              if (_securityPinEnabled)
-                TextFormField(
-                  initialValue: _securityPinCode,
-                  decoration: const InputDecoration(
-                    labelText: 'PIN (4-8 dígitos)',
-                    hintText: 'Ejemplo: 1234',
-                  ),
-                  keyboardType: TextInputType.number,
-                  obscureText: true,
-                  onChanged: (v) => _securityPinCode = v,
-                ),
-              const SizedBox(height: 8),
-              SwitchListTile(
-                title: const Text('Bloqueo biométrico'),
-                subtitle: const Text(
-                  'Huellas/Face ID cuando el dispositivo lo permita',
-                ),
-                value: _securityBiometricEnabled,
-                onChanged: (v) => setState(() => _securityBiometricEnabled = v),
-              ),
-              const SizedBox(height: 24),
-
-              // Guardar
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: _save,
-                  icon: const Icon(Icons.save),
-                  label: const Text(AppStrings.guardar),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 32),
-
-              const SizedBox(height: 32),
-
-              // Aviso legal
-              Container(
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              final isWide = constraints.maxWidth >= 900;
+              return SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppColors.purpleBg,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: AppColors.purple.withValues(alpha: 0.2),
-                    width: 0.5,
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1080),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (isWide)
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(child: _buildAppearanceCard()),
+                              const SizedBox(width: 12),
+                              Expanded(child: _buildSyncCard()),
+                            ],
+                          )
+                        else ...[
+                          _buildAppearanceCard(),
+                          const SizedBox(height: 12),
+                          _buildSyncCard(),
+                        ],
+                        const SizedBox(height: 12),
+                        if (isWide)
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(child: _buildSecurityCard()),
+                              const SizedBox(width: 12),
+                              Expanded(child: _buildPdfCard()),
+                            ],
+                          )
+                        else ...[
+                          _buildSecurityCard(),
+                          const SizedBox(height: 12),
+                          _buildPdfCard(),
+                        ],
+                        const SizedBox(height: 12),
+                        _buildAdvancedCard(),
+                        const SizedBox(height: 18),
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(14),
+                            child: Text(
+                              'Tus datos se sincronizan de forma segura y privada.',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-                child: Row(
-                  children: [
-                    Icon(Icons.lock_outline, color: AppColors.purple, size: 20),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        AppStrings.avisoLegal,
-                        style: TextStyle(fontSize: 12, color: AppColors.purple),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 40),
-            ],
+              );
+            },
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -347,9 +129,447 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  Future<void> _save() async {
+  Widget _sectionCard(String title, IconData icon, Widget child) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            child,
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAppearanceCard() {
+    return _sectionCard(
+      'Apariencia',
+      Icons.palette_outlined,
+      Column(
+        children: [
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'light', label: Text('Claro')),
+              ButtonSegment(value: 'dark', label: Text('Oscuro')),
+              ButtonSegment(value: 'system', label: Text('Sistema')),
+            ],
+            selected: {_appThemeMode},
+            onSelectionChanged: (v) async {
+              setState(() => _appThemeMode = v.first);
+              await _saveInstant();
+            },
+          ),
+          const SizedBox(height: 10),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'El tema se aplica al instante.',
+              style: TextStyle(color: Theme.of(context).colorScheme.outline),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSyncCard() {
+    return _sectionCard(
+      'Sincronización',
+      Icons.sync,
+      Column(
+        children: [
+          SwitchListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Auto-sync'),
+            subtitle: const Text('Sincronización automática en segundo plano'),
+            value: _autoCloudSyncEnabled,
+            onChanged: (v) async {
+              setState(() => _autoCloudSyncEnabled = v);
+              await _saveInstant();
+            },
+          ),
+          if (_autoCloudSyncEnabled)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Frecuencia de sync'),
+              trailing: DropdownButton<int>(
+                value: _autoCloudSyncIntervalSeconds,
+                items: const [
+                  DropdownMenuItem(value: 30, child: Text('30 s')),
+                  DropdownMenuItem(value: 45, child: Text('45 s')),
+                  DropdownMenuItem(value: 60, child: Text('1 min')),
+                  DropdownMenuItem(value: 120, child: Text('2 min')),
+                  DropdownMenuItem(value: 300, child: Text('5 min')),
+                ],
+                onChanged: (v) async {
+                  setState(() => _autoCloudSyncIntervalSeconds = v ?? 45);
+                  await _saveInstant();
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSecurityCard() {
+    return _sectionCard(
+      'Seguridad',
+      Icons.shield_outlined,
+      Column(
+        children: [
+          SwitchListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Bloqueo con PIN'),
+            subtitle: const Text('Solicitar PIN al desbloquear la app'),
+            value: _securityPinEnabled,
+            onChanged: (v) async {
+              setState(() {
+                _securityPinEnabled = v;
+                if (!v) _securityPinCode = '';
+              });
+              await _saveInstant();
+            },
+          ),
+          if (_securityPinEnabled)
+            TextFormField(
+              initialValue: _securityPinCode,
+              decoration: const InputDecoration(
+                labelText: 'PIN (4-8 dígitos)',
+                hintText: 'Ejemplo: 1234',
+              ),
+              keyboardType: TextInputType.number,
+              obscureText: true,
+              onChanged: (v) => _securityPinCode = v,
+              onFieldSubmitted: (_) async => _saveInstant(),
+            ),
+          const SizedBox(height: 8),
+          SwitchListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Bloqueo biométrico'),
+            subtitle: const Text('Touch ID / Face ID según dispositivo'),
+            value: _securityBiometricEnabled,
+            onChanged: (v) async {
+              setState(() => _securityBiometricEnabled = v);
+              await _saveInstant();
+            },
+          ),
+          ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Tiempo antes de bloqueo'),
+            subtitle: Text('$_lockDelaySeconds segundos'),
+            trailing: DropdownButton<int>(
+              value: _lockDelaySeconds,
+              items: const [
+                DropdownMenuItem(value: 0, child: Text('Inmediato')),
+                DropdownMenuItem(value: 5, child: Text('5 s')),
+                DropdownMenuItem(value: 15, child: Text('15 s')),
+                DropdownMenuItem(value: 30, child: Text('30 s')),
+              ],
+              onChanged: (v) {
+                setState(() => _lockDelaySeconds = v ?? 5);
+                _showUpdated();
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPdfCard() {
+    return _sectionCard(
+      'Facturación PDF',
+      Icons.receipt_long_outlined,
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final sideBySide = constraints.maxWidth >= 700;
+              final iva = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'IVA por defecto',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 8),
+                  SegmentedButton<double>(
+                    segments: const [
+                      ButtonSegment(value: 0.21, label: Text('21%')),
+                      ButtonSegment(value: 0.10, label: Text('10%')),
+                      ButtonSegment(value: 0.0, label: Text('0%')),
+                    ],
+                    selected: {_ivaDefault},
+                    onSelectionChanged: (v) =>
+                        setState(() => _ivaDefault = v.first),
+                  ),
+                ],
+              );
+              final irpf = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Retención IRPF por defecto',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 8),
+                  SegmentedButton<double>(
+                    segments: const [
+                      ButtonSegment(value: 0.0, label: Text('0%')),
+                      ButtonSegment(value: 0.07, label: Text('7%')),
+                      ButtonSegment(value: 0.15, label: Text('15%')),
+                      ButtonSegment(value: 0.19, label: Text('19%')),
+                    ],
+                    selected: {_irpfDefault},
+                    onSelectionChanged: (v) =>
+                        setState(() => _irpfDefault = v.first),
+                  ),
+                ],
+              );
+
+              if (!sideBySide) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [iva, const SizedBox(height: 12), irpf],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: iva),
+                  const SizedBox(width: 12),
+                  Expanded(child: irpf),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Tamaño del logo',
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          Slider(
+            value: _logoSize,
+            min: 10,
+            max: 300,
+            divisions: 29,
+            label: '${_logoSize.round()}pt',
+            onChanged: (v) => setState(() => _logoSize = v),
+          ),
+          const SizedBox(height: 8),
+          Text('Plantilla PDF', style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 10),
+          GridView.count(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisCount: 2,
+            childAspectRatio: 1.7,
+            mainAxisSpacing: 8,
+            crossAxisSpacing: 8,
+            children: PdfTheme.values.map((theme) {
+              final isSelected = _pdfTheme == theme.name;
+              final color = _pdfThemeColor(theme);
+              return InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () => setState(() => _pdfTheme = theme.name),
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isSelected
+                          ? Theme.of(context).colorScheme.primary
+                          : Theme.of(context).dividerColor,
+                      width: isSelected ? 2 : 1,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(height: 6, width: 90, color: color),
+                      const SizedBox(height: 8),
+                      Container(
+                        height: 4,
+                        width: 120,
+                        color: color.withValues(alpha: 0.5),
+                      ),
+                      const SizedBox(height: 3),
+                      Container(
+                        height: 4,
+                        width: 80,
+                        color: color.withValues(alpha: 0.35),
+                      ),
+                      const Spacer(),
+                      Align(
+                        alignment: Alignment.bottomRight,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          color: color,
+                          child: Text(
+                            theme.label,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 12),
+          _buildThemePreview(),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: _saveComplex,
+              icon: const Icon(Icons.save_outlined),
+              label: const Text('Guardar configuración PDF'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAdvancedCard() {
+    return _sectionCard(
+      'Avanzado',
+      Icons.tune,
+      ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        title: const Text('Herramientas técnicas'),
+        subtitle: const Text('Importación y utilidades de mantenimiento'),
+        childrenPadding: const EdgeInsets.only(bottom: 8),
+        children: [
+          ListTile(
+            leading: const Icon(Icons.upload_file_outlined),
+            title: const Text('Importar Excel o CSV'),
+            onTap: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const ImportScreen())),
+          ),
+          ListTile(
+            leading: const Icon(Icons.download_outlined),
+            title: const Text('Exportar CSV'),
+            onTap: _showExportWarning,
+          ),
+          ListTile(
+            leading: const Icon(Icons.people_outline),
+            title: const Text('Buscar clientes duplicados'),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const DuplicateClientsScreen()),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.broken_image_outlined),
+            title: const Text('Reparar adjuntos y limpiar inválidos'),
+            onTap: () => context.push('/attachments/broken'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _exportCsv({required bool oficialOnly}) async {
+    final box = context.findRenderObject() as RenderBox?;
+    final shareOrigin = box != null
+        ? box.localToGlobal(Offset.zero) & box.size
+        : const Rect.fromLTWH(0, 0, 100, 100);
+    try {
+      final gigs = await ref.read(gigsProvider.future);
+      final invoices = await ref.read(invoicesProvider.future);
+      final rows = <List<dynamic>>[
+        ['Fecha', 'ClienteId', 'Caché', 'Facturable', 'Estado', 'Nº Factura'],
+      ];
+      for (final gig in gigs) {
+        if (oficialOnly && !gig.facturable) continue;
+        final inv = invoices.where((i) => i.gigId == gig.id).firstOrNull;
+        rows.add([
+          gig.fecha.toIso8601String().substring(0, 10),
+          gig.facturable ? gig.clientId : 'PRIVADO',
+          gig.cachet ?? 0,
+          gig.facturable ? 'Sí' : 'No',
+          gig.status.dbValue,
+          inv?.numero ?? '',
+        ]);
+      }
+      final csv = rows.map((r) => r.map((e) => '"$e"').join(',')).join('\n');
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/misbolos_export.csv');
+      await file.writeAsString(csv);
+      await Share.shareXFiles([
+        XFile(file.path),
+      ], sharePositionOrigin: shareOrigin);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error exportando CSV: $e')));
+    }
+  }
+
+  void _showExportWarning() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Exportar CSV'),
+        content: const Text(
+          '¿Quieres exportar solo bolos oficiales facturables o todos los datos?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _exportCsv(oficialOnly: true);
+            },
+            child: const Text('Solo oficiales'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _exportCsv(oficialOnly: false);
+            },
+            child: const Text('Todos'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _saveInstant() async {
     final pin = _securityPinCode.trim();
-    if (_securityPinEnabled && !RegExp(r'^\d{4,8}$').hasMatch(pin)) {
+    if (_securityPinEnabled && !RegExp(r'^\\d{4,8}$').hasMatch(pin)) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -359,13 +579,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       }
       return;
     }
-
-    // Preserve profile fields that are edited in ProfileScreen
     final current = await ref.read(settingsProvider.future);
     final settings = current.copyWith(
-      ivaDefault: _ivaDefault,
-      logoSize: _logoSize,
-      pdfTheme: _pdfTheme,
       notificacionesActivas: _notificaciones,
       diasRecordatorio: _diasRecordatorio,
       autoCloudSyncEnabled: _autoCloudSyncEnabled,
@@ -375,14 +590,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       securityPinCode: pin,
       securityBiometricEnabled: _securityBiometricEnabled,
     );
-
     await ref.read(settingsProvider.notifier).save(settings);
+    _showUpdated();
+  }
 
-    if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Ajustes guardados')));
-    }
+  Future<void> _saveComplex() async {
+    final current = await ref.read(settingsProvider.future);
+    final settings = current.copyWith(
+      ivaDefault: _ivaDefault,
+      irpfDefault: _irpfDefault,
+      logoSize: _logoSize,
+      pdfTheme: _pdfTheme,
+    );
+    await ref.read(settingsProvider.notifier).save(settings);
+    _showUpdated();
+  }
+
+  void _showUpdated() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Preferencia actualizada')));
   }
 
   Color _pdfThemeColor(PdfTheme theme) {
@@ -430,18 +658,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: Colors.grey.shade300),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header simulado
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -466,212 +686,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(height: 6),
           Divider(color: Colors.grey.shade300, thickness: 1),
           const SizedBox(height: 6),
-
-          // Info simulada
           Row(
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'EMISOR',
-                      style: TextStyle(
-                        fontSize: 8,
-                        fontWeight: FontWeight.bold,
-                        color: primaryColor,
-                      ),
-                    ),
-                    Container(
-                      height: 4,
-                      width: 50,
-                      color: Colors.grey.shade300,
-                      margin: const EdgeInsets.only(top: 2),
-                    ),
-                    Container(
-                      height: 4,
-                      width: 40,
-                      color: Colors.grey.shade300,
-                      margin: const EdgeInsets.only(top: 2),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'FACTURAR A',
-                      style: TextStyle(
-                        fontSize: 8,
-                        fontWeight: FontWeight.bold,
-                        color: primaryColor,
-                      ),
-                    ),
-                    Container(
-                      height: 4,
-                      width: 50,
-                      color: Colors.grey.shade300,
-                      margin: const EdgeInsets.only(top: 2),
-                    ),
-                    Container(
-                      height: 4,
-                      width: 40,
-                      color: Colors.grey.shade300,
-                      margin: const EdgeInsets.only(top: 2),
-                    ),
-                  ],
-                ),
-              ),
+              Expanded(child: Container(height: 10, color: rowAltColor)),
+              const SizedBox(width: 8),
+              Expanded(child: Container(height: 10, color: rowAltColor)),
             ],
           ),
           const SizedBox(height: 10),
-
-          // Tabla simulada
-          Container(
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.grey.shade300, width: 0.5),
-              borderRadius: BorderRadius.circular(2),
-            ),
-            child: Column(
-              children: [
-                // Header de tabla
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 4,
-                    horizontal: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: primaryColor,
-                    borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(1),
-                    ),
-                  ),
-                  child: const Row(
-                    children: [
-                      Expanded(
-                        flex: 1,
-                        child: Text(
-                          'Cant.',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 7,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        flex: 3,
-                        child: Text(
-                          'Descripción',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 7,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        flex: 2,
-                        child: Text(
-                          'Precio',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 7,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          textAlign: TextAlign.right,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                // Filas
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 3,
-                    horizontal: 6,
-                  ),
-                  color: Colors.white,
-                  child: Row(
-                    children: [
-                      const Expanded(
-                        flex: 1,
-                        child: Text('1', style: TextStyle(fontSize: 7)),
-                      ),
-                      const Expanded(
-                        flex: 3,
-                        child: Text(
-                          'Servicio DJ',
-                          style: TextStyle(fontSize: 7),
-                        ),
-                      ),
-                      Expanded(
-                        flex: 2,
-                        child: Text(
-                          '500,00 €',
-                          style: const TextStyle(fontSize: 7),
-                          textAlign: TextAlign.right,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 3,
-                    horizontal: 6,
-                  ),
-                  color: rowAltColor,
-                  child: Row(
-                    children: [
-                      const Expanded(
-                        flex: 1,
-                        child: Text('2', style: TextStyle(fontSize: 7)),
-                      ),
-                      const Expanded(
-                        flex: 3,
-                        child: Text(
-                          'Desplazamiento',
-                          style: TextStyle(fontSize: 7),
-                        ),
-                      ),
-                      Expanded(
-                        flex: 2,
-                        child: Text(
-                          '50,00 €',
-                          style: const TextStyle(fontSize: 7),
-                          textAlign: TextAlign.right,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-
-          // Total
-          Align(
-            alignment: Alignment.centerRight,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              decoration: BoxDecoration(
-                color: primaryColor,
-                borderRadius: BorderRadius.circular(2),
-              ),
-              child: const Text(
-                'TOTAL  665,50 €',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 9,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ),
+          Container(height: 8, color: primaryColor),
         ],
       ),
     );

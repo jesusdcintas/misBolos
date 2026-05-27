@@ -330,7 +330,9 @@ class SyncNotifier extends StateNotifier<SyncState> {
       gigsWatch.stop();
       final invoicesWatch = Stopwatch()..start();
       final forceFullInvoicesPull =
-          (reason == 'manual_button' || reason == 'auth_signed_in') &&
+          (reason == 'manual_button' ||
+              reason == 'auth_signed_in' ||
+              reason == 'app_start') &&
           _shouldRunDefensiveCloudPull(reason);
       var cloudInvoices = await _supabase.downloadInvoices(
         changedAfter: forceFullInvoicesPull ? null : lastSyncAt,
@@ -354,9 +356,16 @@ class SyncNotifier extends StateNotifier<SyncState> {
         changedAfter: lastSyncAt,
       );
       final expensesWatch = Stopwatch()..start();
+      final forceFullExpensesPull =
+          reason == 'app_start' && _shouldRunDefensiveCloudPull(reason);
       var cloudExpenses = await _supabase.downloadExpenseChangesRaw(
-        changedAfter: lastSyncAt,
+        changedAfter: forceFullExpensesPull ? null : lastSyncAt,
       );
+      if (forceFullExpensesPull) {
+        debugPrint(
+          '[SYNC][DATA] expenses pull completo forzado (reason=$reason)',
+        );
+      }
       if (cloudExpenses.isEmpty &&
           lastSyncAt != null &&
           _shouldRunDefensiveCloudPull(reason)) {
@@ -369,9 +378,16 @@ class SyncNotifier extends StateNotifier<SyncState> {
       }
       expensesWatch.stop();
       final assetsWatch = Stopwatch()..start();
+      final forceFullAssetsPull =
+          reason == 'app_start' && _shouldRunDefensiveCloudPull(reason);
       var cloudAssets = await _supabase.downloadAssetChangesRaw(
-        changedAfter: lastSyncAt,
+        changedAfter: forceFullAssetsPull ? null : lastSyncAt,
       );
+      if (forceFullAssetsPull) {
+        debugPrint(
+          '[SYNC][DATA] assets pull completo forzado (reason=$reason)',
+        );
+      }
       if (cloudAssets.isEmpty &&
           lastSyncAt != null &&
           _shouldRunDefensiveCloudPull(reason)) {
@@ -441,7 +457,9 @@ class SyncNotifier extends StateNotifier<SyncState> {
         if (hasPending) continue;
         final local = await InvoiceRepository.instance.getById(invoice.id);
         final numberDiffers = local != null && local.numero != invoice.numero;
-        if (local == null || invoice.updatedAt.isAfter(local.updatedAt) || numberDiffers) {
+        if (local == null ||
+            invoice.updatedAt.isAfter(local.updatedAt) ||
+            numberDiffers) {
           String? source;
           if (numberDiffers) {
             // En descarga cloud->local la numeración remota debe prevalecer:

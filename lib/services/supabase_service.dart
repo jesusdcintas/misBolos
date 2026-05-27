@@ -24,6 +24,11 @@ class SupabaseService {
   bool get isAuthenticated => _client?.auth.currentUser != null;
   String? get userId => _client?.auth.currentUser?.id;
   String? get userEmail => _client?.auth.currentUser?.email;
+  String? get providerAccessToken =>
+      _client?.auth.currentSession?.providerToken;
+  String? get providerRefreshToken =>
+      _client?.auth.currentSession?.providerRefreshToken;
+  User? get currentUser => _client?.auth.currentUser;
 
   /// Stream de cambios de estado de autenticación
   Stream<AuthState>? get authStateChanges => _client?.auth.onAuthStateChange;
@@ -81,6 +86,12 @@ class SupabaseService {
       final response = await _client!.auth.signInWithOAuth(
         OAuthProvider.google,
         redirectTo: Platform.isMacOS ? 'misbolos://login-callback' : null,
+        scopes:
+            'openid email profile https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events',
+        queryParams: const {
+          'access_type': 'offline',
+          'include_granted_scopes': 'true',
+        },
         authScreenLaunchMode: LaunchMode.externalApplication,
       );
 
@@ -127,7 +138,8 @@ class SupabaseService {
     if (_client == null) {
       throw StateError('Supabase no está inicializado');
     }
-    final effectiveRedirect = redirectTo ??
+    final effectiveRedirect =
+        redirectTo ??
         (Platform.isIOS || Platform.isAndroid || Platform.isMacOS
             ? 'misbolos://reset-password'
             : null);
@@ -153,6 +165,38 @@ class SupabaseService {
     }
     final response = await _client!.functions.invoke(functionName, body: body);
     return response.data;
+  }
+
+  Future<void> requestCreateOrResetPassword() async {
+    final email = userEmail;
+    if (email == null || email.trim().isEmpty) {
+      throw StateError('No hay email de usuario autenticado.');
+    }
+    await sendPasswordResetEmail(email: email);
+  }
+
+  Future<void> deleteCurrentAccount() async {
+    if (!isAuthenticated) {
+      throw StateError('No hay sesión autenticada.');
+    }
+    await invokeFunction('delete-user-account', body: const {});
+  }
+
+  Future<bool?> checkAccountExistsByEmail(String email) async {
+    if (!isInitialized) return null;
+    try {
+      final response = await _client!.functions.invoke(
+        'check-account-exists',
+        body: {'email': email.trim().toLowerCase()},
+      );
+      final data = response.data;
+      if (data is Map && data['ok'] == true) {
+        return data['exists'] == true;
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
   }
 
   // ================== UPLOAD (Local → Cloud) ==================
@@ -675,7 +719,11 @@ class SupabaseService {
   Future<void> deleteClient(String id) async {
     if (!isAuthenticated) return;
     try {
-      await _client!.from('clients').delete().eq('id', id);
+      await _client!
+          .from('clients')
+          .delete()
+          .eq('user_id', userId!)
+          .eq('id', id);
       debugPrint('[Supabase] Deleted client $id from cloud');
     } catch (e) {
       debugPrint('[Supabase] Delete client error: $e');
@@ -698,6 +746,7 @@ class SupabaseService {
     await _client!
         .from('gigs')
         .update({'deleted_at': at, 'updated_at': at})
+        .eq('user_id', userId!)
         .eq('id', id);
     debugPrint('[Supabase] Soft-deleted gig $id');
   }
@@ -708,6 +757,7 @@ class SupabaseService {
     await _client!
         .from('invoices')
         .update({'deleted_at': at, 'updated_at': at})
+        .eq('user_id', userId!)
         .eq('id', id);
     debugPrint('[Supabase] Soft-deleted invoice $id');
   }
@@ -728,12 +778,14 @@ class SupabaseService {
         await _client!
             .from('invoices')
             .update({'deleted_at': now, 'updated_at': now})
+            .eq('user_id', userId!)
             .inFilter('id', invoices);
       }
       if (gigs.isNotEmpty) {
         await _client!
             .from('gigs')
             .update({'deleted_at': now, 'updated_at': now})
+            .eq('user_id', userId!)
             .inFilter('id', gigs);
       }
       debugPrint(
@@ -759,9 +811,14 @@ class SupabaseService {
       await _client!
           .from(tableName)
           .update({'deleted_at': now, 'updated_at': now})
+          .eq('user_id', userId!)
           .eq('id', recordId);
     } else {
-      await _client!.from(tableName).delete().eq('id', recordId);
+      await _client!
+          .from(tableName)
+          .delete()
+          .eq('user_id', userId!)
+          .eq('id', recordId);
     }
     debugPrint('[Supabase] Deleted $tableName/$recordId from cloud');
   }
@@ -776,7 +833,12 @@ class SupabaseService {
       changedAfter: null,
       includeDeletedAt: false,
     );
-    final clients = data.map((e) => _clientFromSupabase(e)).toList();
+    final clients = data
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .where((row) => _isOwnedByCurrentUser(row, 'clients'))
+        .map(_clientFromSupabase)
+        .toList();
     debugPrint('[Supabase] Downloaded ${clients.length} clients');
     return clients;
   }
@@ -790,7 +852,12 @@ class SupabaseService {
       changedAfter: changedAfter,
       includeDeletedAt: false,
     );
-    final clients = data.map((e) => _clientFromSupabase(e)).toList();
+    final clients = data
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .where((row) => _isOwnedByCurrentUser(row, 'clients'))
+        .map(_clientFromSupabase)
+        .toList();
     debugPrint(
       '[Supabase] Downloaded clients changes=${clients.length} since=$changedAfter',
     );
@@ -804,7 +871,12 @@ class SupabaseService {
       table: 'gigs',
       changedAfter: changedAfter,
     );
-    final gigs = data.map((e) => _gigFromSupabase(e)).toList();
+    final gigs = data
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .where((row) => _isOwnedByCurrentUser(row, 'gigs'))
+        .map(_gigFromSupabase)
+        .toList();
     debugPrint('[Supabase] Downloaded ${gigs.length} gigs since=$changedAfter');
     return gigs;
   }
@@ -817,6 +889,9 @@ class SupabaseService {
       changedAfter: changedAfter,
     );
     final invoices = data
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .where((row) => _isOwnedByCurrentUser(row, 'invoices'))
         .map((e) => _invoiceFromSupabase(e))
         .where((invoice) => invoice.numero > 0)
         .toList();
@@ -1021,7 +1096,13 @@ class SupabaseService {
       changedAfter: changedAfter,
       includeDeletedAt: false,
     );
-    final result = data.map((e) => expenseFromCloudRow(e)).toList();
+    final result = data
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .where((row) => _isOwnedByCurrentUser(row, 'expenses'))
+        .where((row) => row['deleted_at'] == null)
+        .map(expenseFromCloudRow)
+        .toList();
     debugPrint(
       '[Supabase] Downloaded ${result.length} expenses since=$changedAfter',
     );
@@ -1037,7 +1118,11 @@ class SupabaseService {
       changedAfter: changedAfter,
       includeDeletedAt: true,
     );
-    return data.map((row) => Map<String, dynamic>.from(row as Map)).toList();
+    return data
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .where((row) => _isOwnedByCurrentUser(row, 'expenses'))
+        .toList();
   }
 
   Future<void> deleteExpense(String cloudId) async {
@@ -1047,6 +1132,7 @@ class SupabaseService {
       await _client!
           .from('expenses')
           .update({'deleted_at': now, 'updated_at': now})
+          .eq('user_id', userId!)
           .eq('id', cloudId);
       debugPrint('[Supabase] Deleted expense $cloudId');
     } catch (e) {
@@ -1123,7 +1209,13 @@ class SupabaseService {
       changedAfter: changedAfter,
       includeDeletedAt: false,
     );
-    final result = data.map((e) => assetFromCloudRow(e)).toList();
+    final result = data
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .where((row) => _isOwnedByCurrentUser(row, 'assets'))
+        .where((row) => row['deleted_at'] == null)
+        .map(assetFromCloudRow)
+        .toList();
     debugPrint(
       '[Supabase] Downloaded ${result.length} assets since=$changedAfter',
     );
@@ -1139,7 +1231,11 @@ class SupabaseService {
       changedAfter: changedAfter,
       includeDeletedAt: true,
     );
-    return data.map((row) => Map<String, dynamic>.from(row as Map)).toList();
+    return data
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .where((row) => _isOwnedByCurrentUser(row, 'assets'))
+        .toList();
   }
 
   Future<void> deleteAsset(String cloudId) async {
@@ -1149,6 +1245,7 @@ class SupabaseService {
       await _client!
           .from('assets')
           .update({'deleted_at': now, 'updated_at': now})
+          .eq('user_id', userId!)
           .eq('id', cloudId);
       debugPrint('[Supabase] Deleted asset $cloudId');
     } catch (e) {
@@ -1242,5 +1339,17 @@ class SupabaseService {
       }
     }
     return query;
+  }
+
+  bool _isOwnedByCurrentUser(Map<String, dynamic> row, String table) {
+    final uid = userId;
+    if (uid == null) return false;
+    final rowUserId = row['user_id']?.toString();
+    if (rowUserId == null || rowUserId == uid) return true;
+    debugPrint(
+      '[SECURITY][CRITICAL] Fila bloqueada por user_id distinto. '
+      'table=$table expected=$uid got=$rowUserId row_id=${row['id']}',
+    );
+    return false;
   }
 }

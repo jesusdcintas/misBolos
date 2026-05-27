@@ -31,10 +31,12 @@ import 'migrations/v28_drive_sync_queue_metadata.dart';
 import 'migrations/v29_drive_sync_queue_remote_fields.dart';
 import 'migrations/v30_settings_sync_security_theme.dart';
 import 'migrations/v31_expenses_assets_soft_delete.dart';
+import 'migrations/v32_settings_irpf_default.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._internal();
   static Database? _database;
+  String? _activeUserId;
 
   DatabaseHelper._internal();
 
@@ -44,19 +46,39 @@ class DatabaseHelper {
     return _database!;
   }
 
+  String? get activeUserId => _activeUserId;
+
   Future<Database> _initDatabase() async {
     final dbPath = await getDatabasesPath();
-    final path = join(dbPath, 'misbolos.db');
+    final dbName = _dbNameForUser(_activeUserId);
+    final path = join(dbPath, dbName);
 
     return await openDatabase(
       path,
-      version: 31,
+      version: 32,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
     );
+  }
+
+  String _dbNameForUser(String? userId) {
+    final clean = (userId ?? '').trim();
+    if (clean.isEmpty) return 'misbolos_guest.db';
+    final safe = clean.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+    return 'misbolos_$safe.db';
+  }
+
+  Future<void> switchToUserDatabase(String? userId) async {
+    final nextUserId = (userId ?? '').trim().isEmpty ? null : userId!.trim();
+    if (_database != null && _activeUserId == nextUserId) {
+      return;
+    }
+    await close();
+    _activeUserId = nextUserId;
+    _database = await _initDatabase();
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -158,6 +180,10 @@ class DatabaseHelper {
     if (version >= 31) {
       await _applyMigration(db, v31ExpensesAssetsSoftDelete);
     }
+    if (version >= 32) {
+      await _applyMigration(db, v32SettingsIrpfDefault);
+    }
+    await _ensureSoftDeleteColumns(db);
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -251,6 +277,10 @@ class DatabaseHelper {
     if (oldVersion < 31) {
       await _applyMigration(db, v31ExpensesAssetsSoftDelete);
     }
+    if (oldVersion < 32) {
+      await _applyMigration(db, v32SettingsIrpfDefault);
+    }
+    await _ensureSoftDeleteColumns(db);
   }
 
   Future<void> _applyMigration(Database db, String migration) async {
@@ -268,6 +298,35 @@ class DatabaseHelper {
         }
       }
     }
+  }
+
+  Future<void> _ensureSoftDeleteColumns(Database db) async {
+    await _ensureColumnExists(db, table: 'expenses', column: 'deleted_at');
+    await _ensureColumnExists(db, table: 'assets', column: 'deleted_at');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_expenses_deleted_at ON expenses(deleted_at)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_assets_deleted_at ON assets(deleted_at)',
+    );
+  }
+
+  Future<void> _ensureColumnExists(
+    Database db, {
+    required String table,
+    required String column,
+  }) async {
+    final tableRows = await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+      [table],
+    );
+    if (tableRows.isEmpty) return;
+
+    final columns = await db.rawQuery('PRAGMA table_info($table)');
+    final exists = columns.any((row) => row['name'] == column);
+    if (exists) return;
+
+    await db.execute('ALTER TABLE $table ADD COLUMN $column TEXT');
   }
 
   Future<void> close() async {

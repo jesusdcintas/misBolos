@@ -28,8 +28,8 @@ Future<void> main() async {
         databaseFactory = databaseFactoryFfi;
       }
 
-      // Initialize database
-      await DatabaseHelper.instance.database;
+      // Inicializar DB invitado; al autenticar se conmuta a DB por usuario.
+      await DatabaseHelper.instance.switchToUserDatabase(null);
 
       // Initialize Supabase
       await SupabaseService.instance.initialize(

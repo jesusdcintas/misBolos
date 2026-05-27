@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'supabase_service.dart';
 
 /// Servicio de autenticación con Google para sincronización con Supabase
@@ -192,7 +193,15 @@ class PlatformAuthService {
   /// Devuelve un access token fresco de Google en móvil.
   /// En macOS no aplica (se usa otro flujo OAuth).
   Future<String?> getAccessToken() async {
-    if (Platform.isMacOS) return null;
+    if (Platform.isMacOS) {
+      var token = SupabaseService.instance.providerAccessToken;
+      if (token != null && token.isNotEmpty) return token;
+      try {
+        await Supabase.instance.client.auth.refreshSession();
+      } catch (_) {}
+      token = SupabaseService.instance.providerAccessToken;
+      return (token == null || token.isEmpty) ? null : token;
+    }
     if (_currentUser == null) return null;
     try {
       final auth = await _currentUser!.authentication;
