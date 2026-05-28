@@ -14,6 +14,7 @@ class Client {
   final String? email;
   final String? telefono;
   final String? whatsappPhone;
+  final String notas;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -30,6 +31,7 @@ class Client {
     this.email,
     this.telefono,
     this.whatsappPhone,
+    this.notas = '',
     DateTime? createdAt,
     DateTime? updatedAt,
   }) : id = id ?? const Uuid().v4(),
@@ -48,6 +50,7 @@ class Client {
     String? email,
     String? telefono,
     String? whatsappPhone,
+    String? notas,
     DateTime? updatedAt,
   }) {
     return Client(
@@ -63,6 +66,7 @@ class Client {
       email: email ?? this.email,
       telefono: telefono ?? this.telefono,
       whatsappPhone: whatsappPhone ?? this.whatsappPhone,
+      notas: notas ?? this.notas,
       createdAt: createdAt,
       updatedAt: updatedAt ?? DateTime.now(),
     );
@@ -82,6 +86,7 @@ class Client {
       'email': email,
       'telefono': telefono,
       'whatsapp_phone': whatsappPhone,
+      'notas': notas,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
     };
@@ -103,6 +108,7 @@ class Client {
       email: map['email'] as String?,
       telefono: map['telefono'] as String?,
       whatsappPhone: map['whatsapp_phone'] as String?,
+      notas: map['notas'] as String? ?? '',
       createdAt: DateTime.parse(map['created_at'] as String),
       updatedAt: DateTime.parse(map['updated_at'] as String),
     );

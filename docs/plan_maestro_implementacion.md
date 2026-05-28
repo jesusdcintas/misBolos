@@ -69,10 +69,12 @@ Checklist consolidada:
 - [x] Revisión manual antes de guardar.
 - [x] Postprocesado determinista de inversiones.
 - [x] Retirada del cambio de concepto masivo.
+- [x] Base de asistente IA operativo con acciones estructuradas, preview y confirmación antes de ejecutar.
+- [x] Persistencia local del historial del asistente IA con chats activos y mensajes en SQLite.
 
 Pendiente inmediato:
 - [x] Reestructuración final UI de Perfil para unificar sesión MisBolos + Google + Drive + Calendar sin redundancias.
-- [ ] Exponer redacción IA diaria para WhatsApp/email/resúmenes en flujos de uso.
+- [ ] Ampliar asistente IA con redacción diaria para WhatsApp/email/resúmenes en flujos de uso.
 
 Pendiente opcional:
 - [ ] Trazabilidad funcional mínima (logs sin datos sensibles).
@@ -92,6 +94,7 @@ Pendiente opcional:
 ### Prioridad media
 - [ ] Exponer funcionalidades IA clave en pantallas de trabajo diario.
 - [ ] Repaso final de textos de error y estados de sincronización.
+- [x] Corregir bug de teclado iOS en `Perfil > Datos de facturación` (foco estable + scroll visible sobre teclado).
 
 ### Prioridad baja
 - [ ] Mejoras opcionales de observabilidad IA y OCR.
@@ -111,3 +114,4 @@ El plan se considerará cerrado cuando:
 - [x] La unificación de Perfil quede finalizada y validada visual/funcionalmente.
 - [ ] No haya incidencias abiertas de sincronización entre dispositivos.
 - [x] Se complete pasada final de QA en dark/light para Finanzas, Agenda/Bolos y Perfil.
+- [x] En iPhone, campos inferiores de facturación se editan sin cierre automático del teclado.

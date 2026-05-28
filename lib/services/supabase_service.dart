@@ -917,6 +917,7 @@ class SupabaseService {
     'email': c.email,
     'telefono': c.telefono,
     'whatsapp_phone': c.whatsappPhone,
+    'notas': c.notas,
     'created_at': c.createdAt.toUtc().toIso8601String(),
     'updated_at': c.updatedAt.toUtc().toIso8601String(),
   };
@@ -934,6 +935,7 @@ class SupabaseService {
     email: m['email'],
     telefono: m['telefono'],
     whatsappPhone: m['whatsapp_phone'],
+    notas: m['notas'] ?? '',
     createdAt: DateTime.parse(m['created_at']),
     updatedAt: DateTime.parse(m['updated_at']),
   );

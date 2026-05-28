@@ -74,6 +74,18 @@ class SyncNotifier extends StateNotifier<SyncState> {
     }
   }
 
+  String _friendlySyncError(Object error) {
+    final msg = error.toString().toLowerCase();
+    if (msg.contains('failed host lookup') ||
+        msg.contains('socketexception') ||
+        msg.contains('network is unreachable') ||
+        msg.contains('connection refused') ||
+        msg.contains('timed out')) {
+      return 'Sin conexión a internet. Reintenta cuando vuelvas a estar conectado.';
+    }
+    return 'No se pudieron sincronizar algunos datos.';
+  }
+
   /// Procesa borrados pendientes que fallaron offline/por error
   Future<void> processPendingDeletions() async {
     if (!_supabase.isAuthenticated) return;
@@ -257,7 +269,10 @@ class SyncNotifier extends StateNotifier<SyncState> {
       );
     } catch (e) {
       debugPrint('[Sync] Upload error: $e');
-      state = state.copyWith(status: SyncStatus.error, message: 'Error: $e');
+      state = state.copyWith(
+        status: SyncStatus.error,
+        message: _friendlySyncError(e),
+      );
     }
   }
 
@@ -574,7 +589,10 @@ class SyncNotifier extends StateNotifier<SyncState> {
       );
     } catch (e) {
       debugPrint('[Sync] Download error: $e');
-      state = state.copyWith(status: SyncStatus.error, message: 'Error: $e');
+      state = state.copyWith(
+        status: SyncStatus.error,
+        message: _friendlySyncError(e),
+      );
     }
   }
 

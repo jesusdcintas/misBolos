@@ -68,21 +68,27 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   Widget build(BuildContext context) {
     final settingsAsync = ref.watch(settingsProvider);
     final googleAuth = ref.watch(googleAuthProvider);
+    final mediaQuery = MediaQuery.of(context);
+    final keyboardInset = mediaQuery.viewInsets.bottom;
+    final bottomSafeArea = mediaQuery.padding.bottom;
+    final bottomPadding =
+        (keyboardInset > 0 ? keyboardInset : bottomSafeArea) +
+        kBottomNavigationBarHeight +
+        24;
 
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(title: const Text('Perfil')),
       body: settingsAsync.when(
         data: (settings) {
-          return GestureDetector(
-            onTap: () => FocusScope.of(context).unfocus(),
-            behavior: HitTestBehavior.translucent,
+          return SafeArea(
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final wide = constraints.maxWidth >= 980;
                 return ListView(
                   keyboardDismissBehavior:
                       ScrollViewKeyboardDismissBehavior.onDrag,
-                  padding: const EdgeInsets.all(16),
+                  padding: EdgeInsets.fromLTRB(16, 16, 16, bottomPadding),
                   children: [
                     Center(
                       child: ConstrainedBox(
@@ -196,15 +202,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             : AppColors.success,
                       ),
                       const SizedBox(width: 6),
-                      Text(
-                        syncText,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: sync.status == SyncStatus.error
-                              ? AppColors.error
-                              : sync.status == SyncStatus.syncing
-                              ? AppColors.warning
-                              : AppColors.success,
+                      Expanded(
+                        child: Text(
+                          syncText,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: sync.status == SyncStatus.error
+                                ? AppColors.error
+                                : sync.status == SyncStatus.syncing
+                                ? AppColors.warning
+                                : AppColors.success,
+                          ),
                         ),
                       ),
                     ],
@@ -2343,6 +2353,7 @@ class FiscalTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final keyboardInset = MediaQuery.of(context).viewInsets.bottom;
     return ConstrainedBox(
       constraints: const BoxConstraints(minHeight: 56),
       child: TextFormField(
@@ -2352,7 +2363,25 @@ class FiscalTextField extends StatelessWidget {
         textInputAction: textInputAction,
         maxLines: 1,
         enableInteractiveSelection: true,
-        scrollPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        scrollPadding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          top: 24,
+          bottom: keyboardInset + 120,
+        ),
+        onTap: () {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            final textFieldContext = focusNode.context;
+            if (textFieldContext == null) return;
+            Scrollable.ensureVisible(
+              textFieldContext,
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeOut,
+              alignment: 0.35,
+            );
+          });
+        },
+        onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
         decoration: InputDecoration(labelText: labelText),
       ),
     );
@@ -2382,6 +2411,7 @@ class _SyncSection extends ConsumerWidget {
       SyncStatus.idle =>
         pendingCount > 0 ? 'Hay cambios pendientes' : 'Todo actualizado',
     };
+    final safeMessage = _sanitizeSyncMessage(syncState.message);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -2589,7 +2619,7 @@ class _SyncSection extends ConsumerWidget {
               ],
 
               // Estado de sincronización
-              if (syncState.message != null) ...[
+              if (safeMessage != null) ...[
                 const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.all(10),
@@ -2619,7 +2649,7 @@ class _SyncSection extends ConsumerWidget {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          syncState.message!,
+                          safeMessage,
                           style: TextStyle(
                             fontSize: 12,
                             color: syncState.status == SyncStatus.error
@@ -2678,5 +2708,20 @@ class _SyncSection extends ConsumerWidget {
         context,
       ).showSnackBar(const SnackBar(content: Text('No se pudo cerrar sesión')));
     }
+  }
+
+  String? _sanitizeSyncMessage(String? message) {
+    if (message == null) return null;
+    final lower = message.toLowerCase();
+    if (lower.contains('failed host lookup') ||
+        lower.contains('socketexception') ||
+        lower.contains('network is unreachable') ||
+        lower.contains('connection refused') ||
+        lower.contains('timed out') ||
+        lower.contains('https://') ||
+        lower.contains('/rest/v1/')) {
+      return 'Sin conexión a internet. Reintenta cuando vuelvas a estar conectado.';
+    }
+    return message;
   }
 }

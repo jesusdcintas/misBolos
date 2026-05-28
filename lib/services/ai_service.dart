@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import 'supabase_service.dart';
 
 class AiService {
@@ -110,6 +112,23 @@ class AiService {
       contextData: contextData,
     );
     return (data['text']?.toString() ?? '').trim();
+  }
+
+  Future<Map<String, dynamic>> interpretAssistantAction({
+    required String message,
+    Map<String, dynamic>? contextData,
+  }) async {
+    final data = await _invoke(
+      taskType: 'assistant_action',
+      message: message,
+      contextData: contextData,
+    );
+    final action = data['action'];
+    if (action is! Map<String, dynamic>) {
+      throw Exception('La IA no devolvió una acción válida.');
+    }
+    debugPrint('[AiService] assistant_action JSON: $action');
+    return action;
   }
 
   Future<Map<String, dynamic>> extractExpenseFromText({

@@ -32,6 +32,8 @@ import 'migrations/v29_drive_sync_queue_remote_fields.dart';
 import 'migrations/v30_settings_sync_security_theme.dart';
 import 'migrations/v31_expenses_assets_soft_delete.dart';
 import 'migrations/v32_settings_irpf_default.dart';
+import 'migrations/v33_ai_chat_history.dart';
+import 'migrations/v34_client_notes.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._internal();
@@ -55,7 +57,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 32,
+      version: 34,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       onConfigure: (db) async {
@@ -183,6 +185,12 @@ class DatabaseHelper {
     if (version >= 32) {
       await _applyMigration(db, v32SettingsIrpfDefault);
     }
+    if (version >= 33) {
+      await _applyMigration(db, v33AiChatHistory);
+    }
+    if (version >= 34) {
+      await _applyMigration(db, v34ClientNotes);
+    }
     await _ensureSoftDeleteColumns(db);
   }
 
@@ -280,6 +288,12 @@ class DatabaseHelper {
     if (oldVersion < 32) {
       await _applyMigration(db, v32SettingsIrpfDefault);
     }
+    if (oldVersion < 33) {
+      await _applyMigration(db, v33AiChatHistory);
+    }
+    if (oldVersion < 34) {
+      await _applyMigration(db, v34ClientNotes);
+    }
     await _ensureSoftDeleteColumns(db);
   }
 
@@ -367,6 +381,8 @@ class DatabaseHelper {
       await txn.delete('sync_queue');
       await txn.delete('pending_deletions');
       await txn.delete('drive_sync_queue');
+      await txn.delete('ai_chat_messages');
+      await txn.delete('ai_chats');
       await txn.delete('expenses');
       await txn.delete('assets');
       await txn.delete('invoices');

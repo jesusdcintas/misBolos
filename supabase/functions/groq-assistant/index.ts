@@ -2,6 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 type TaskType =
   | "chat"
+  | "assistant_action"
   | "whatsapp"
   | "email"
   | "summarize"
@@ -94,6 +95,7 @@ Deno.serve(async (req) => {
       return json({ ok: false, error: "Imagen demasiado grande para Groq Vision" }, 413);
     }
 
+    const isAssistantAction = body.task_type === "assistant_action";
     const isExtract =
       body.task_type === "extract_expense" ||
       body.task_type === "extract_investment";
@@ -116,9 +118,11 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         model,
-        temperature: isExtract ? 0.1 : 0.4,
-        max_tokens: isExtract ? 900 : 700,
-        ...(isExtract ? { response_format: { type: "json_object" } } : {}),
+        temperature: isExtract || isAssistantAction ? 0.1 : 0.4,
+        max_tokens: isExtract ? 900 : isAssistantAction ? 1200 : 700,
+        ...(isExtract || isAssistantAction
+          ? { response_format: { type: "json_object" } }
+          : {}),
         messages,
       }),
     });
@@ -181,6 +185,24 @@ Deno.serve(async (req) => {
       }
     }
 
+    if (body.task_type === "assistant_action") {
+      try {
+        const action = normalizeAssistantAction(parseJsonContent(content));
+        console.log(
+          `[groq-assistant] assistant_action user=${user.id} action=${action.accion} payload=${JSON.stringify(action).slice(0, 3000)}`,
+        );
+        return json({ ok: true, task_type: body.task_type, model, action });
+      } catch (_) {
+        return json(
+          {
+            ok: false,
+            error: "La IA no devolvió una acción válida. Puedes intentarlo con más detalle.",
+          },
+          502,
+        );
+      }
+    }
+
     return json({ ok: true, task_type: body.task_type, model, text: content.trim() });
   } catch (error) {
     return json({ ok: false, error: error.message ?? String(error) }, 400);
@@ -190,6 +212,7 @@ Deno.serve(async (req) => {
 function isAllowedTask(task: string): task is TaskType {
   return (
     task === "chat" ||
+    task === "assistant_action" ||
     task === "whatsapp" ||
     task === "email" ||
     task === "summarize" ||
@@ -240,6 +263,98 @@ function normalizeExtractedExpense(input: unknown) {
     confidence,
     warnings,
   };
+}
+
+function normalizeAssistantAction(input: unknown) {
+  const source = isRecord(input) ? input : {};
+  const accion = readString(source.accion);
+  const allowed = new Set([
+    "crear_bolos",
+    "buscar_bolos",
+    "actualizar_bolo",
+    "crear_factura",
+    "enviar_factura_email",
+    "buscar_cliente",
+    "crear_cliente",
+    "crear_clientes",
+    "resumen_agenda",
+    "pregunta_aclaratoria",
+    "no_soportado",
+  ]);
+  const normalizedAction = accion && allowed.has(accion)
+    ? accion
+    : "pregunta_aclaratoria";
+
+  return {
+    accion: normalizedAction,
+    requiere_confirmacion:
+      typeof source.requiere_confirmacion === "boolean"
+        ? source.requiere_confirmacion
+        : !["buscar_bolos", "buscar_cliente", "resumen_agenda", "pregunta_aclaratoria", "no_soportado"].includes(
+            normalizedAction,
+          ),
+    confianza: clamp(readNumber(source.confianza) ?? 0.7, 0, 1),
+    pregunta: readString(source.pregunta),
+    respuesta: readString(source.respuesta),
+    bolos: Array.isArray(source.bolos) ? source.bolos.filter(isRecord) : [],
+    filtros: isRecord(source.filtros) ? source.filtros : {},
+    objetivo: isRecord(source.objetivo) ? source.objetivo : {},
+    cambios: isRecord(source.cambios) ? source.cambios : {},
+    cliente: normalizeAssistantClient(source.cliente),
+    clientes: normalizeAssistantClients(source.clientes),
+    factura: isRecord(source.factura) ? source.factura : {},
+    email: isRecord(source.email) ? source.email : {},
+    advertencias: readWarnings(source.advertencias),
+  };
+}
+
+function parseJsonContent(content: string) {
+  const trimmed = content.trim();
+  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  const clean = fenced ? fenced[1].trim() : trimmed;
+  return JSON.parse(clean);
+}
+
+function normalizeAssistantClient(input: unknown) {
+  const source = isRecord(input) ? input : {};
+  return {
+    nombre: readString(source.nombre) ?? "",
+    alias_principal:
+      readString(source.alias_principal) ??
+      readString(source.alias) ??
+      "",
+    nombres_alternativos: readStringArray(
+      source.nombres_alternativos ?? source.aliases,
+    ),
+    cif_nif:
+      readString(source.cif_nif) ??
+      readString(source.cifNif) ??
+      readString(source.cif) ??
+      readString(source.nif) ??
+      "",
+    direccion: readString(source.direccion) ?? "",
+    ciudad: readString(source.ciudad) ?? "",
+    codigo_postal:
+      readString(source.codigo_postal) ??
+      readString(source.codigoPostal) ??
+      readString(source.cp) ??
+      readString(source["c.p."]) ??
+      "",
+    provincia: readString(source.provincia) ?? "",
+    email: readString(source.email) ?? "",
+    telefono: readString(source.telefono) ?? "",
+    telefono_whatsapp:
+      readString(source.telefono_whatsapp) ??
+      readString(source.whatsapp) ??
+      readString(source.whatsapp_phone) ??
+      "",
+    notas: readString(source.notas) ?? "",
+  };
+}
+
+function normalizeAssistantClients(input: unknown) {
+  if (!Array.isArray(input)) return [];
+  return input.map(normalizeAssistantClient);
 }
 
 function normalizeExtractedInvestment(input: unknown) {
@@ -618,6 +733,18 @@ function readWarnings(value: unknown) {
   return value.map((item) => String(item).trim()).filter(Boolean);
 }
 
+function readStringArray(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item).trim()).filter(Boolean);
+  }
+  const text = readString(value);
+  if (!text) return [];
+  return text
+    .split(/\n|,|;/)
+    .map((item) => item.replace(/^[-*]\s*/, "").trim())
+    .filter(Boolean);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -644,6 +771,47 @@ function buildMessages({
   imageUrl: string;
 }) {
   const contextText = JSON.stringify(context);
+
+  if (task === "assistant_action") {
+    const assistantPrompt = [
+      "Eres el intérprete operativo de MisBolos, una app para gestionar bolos, clientes, facturas y agenda.",
+      "Tu única salida debe ser JSON válido. No escribas texto fuera del JSON.",
+      "No ejecutes acciones y no afirmes que una acción se ha realizado. Solo interpreta intención.",
+      "Acciones permitidas: crear_bolos, buscar_bolos, actualizar_bolo, crear_factura, enviar_factura_email, buscar_cliente, crear_cliente, crear_clientes, resumen_agenda, pregunta_aclaratoria, no_soportado.",
+      "Formato base: {\"accion\":string,\"requiere_confirmacion\":boolean,\"confianza\":number,\"pregunta\":string|null,\"respuesta\":string|null,\"bolos\":array,\"filtros\":object,\"objetivo\":object,\"cambios\":object,\"cliente\":object,\"clientes\":array,\"factura\":object,\"email\":object,\"advertencias\":array}.",
+      "Para crear_cliente, devuelve SIEMPRE cliente con este esquema exacto: {\"nombre\":\"\",\"alias_principal\":\"\",\"nombres_alternativos\":[],\"cif_nif\":\"\",\"direccion\":\"\",\"ciudad\":\"\",\"codigo_postal\":\"\",\"provincia\":\"\",\"email\":\"\",\"telefono\":\"\",\"telefono_whatsapp\":\"\",\"notas\":\"\"}.",
+      "Si detectas varios clientes, usa SIEMPRE accion=crear_clientes y devuelve array clientes con un objeto por cliente usando el mismo esquema exacto. No mezcles varios clientes dentro de cliente único.",
+      "Extrae TODOS los campos de cliente que el usuario proporcione. No te limites al nombre. Si un campo no aparece, usa cadena vacía o lista vacía.",
+      "Detecta 'Alias principal' como alias_principal. Detecta listas o viñetas de 'Nombres alternativos' como array nombres_alternativos.",
+      "Detecta CIF/NIF, CIF, NIF como cif_nif. Detecta 'C.P.', 'CP' y 'Código postal' como codigo_postal.",
+      "Mantén formato limpio: sin etiquetas repetidas, sin saltos innecesarios, sin inventar datos.",
+      "Para crear_bolos usa bolos con {\"fecha\":\"YYYY-MM-DD\",\"nombre\":string,\"importe\":number|null,\"facturable\":boolean,\"estado\":\"pendiente_gestion\",\"notas\":string|null}.",
+      "Interpreta facturable como bolo oficial. Interpreta no facturable, en b o sin factura como facturable=false.",
+      "Para actualizar_bolo usa este esquema: filtros {\"cliente_o_nombre\":\"\",\"fecha\":\"YYYY-MM-DD|null\",\"importe_actual\":number|null} y updates {\"fecha\":\"YYYY-MM-DD|null\",\"importe\":number|null,\"estado\":string|null,\"facturable\":boolean|null}.",
+      "Si el usuario dice 'de 500€ a 400€', interpreta importe_actual=500 y updates.importe=400.",
+      "Si el usuario no indica año, usa el año actual indicado en contexto. Resuelve fechas relativas con la fecha actual del contexto.",
+      "Si falta una fecha concreta para crear o cambiar un bolo, devuelve accion=pregunta_aclaratoria y pregunta breve.",
+      "Si hay ambigüedad importante, pregunta. No inventes clientes, emails, importes ni fechas.",
+      "Para búsquedas usa filtros con fecha_desde y fecha_hasta cuando sea posible.",
+      "Para actualizar_bolo, crear_factura y enviar_factura_email, intenta rellenar objetivo con pistas estructuradas: cliente, cliente_nombre, nombre, gig_nombre, fecha, importe, numero_factura, selector, gig_id, invoice_id si existen.",
+      "Si el usuario menciona varios bolos y no queda claro cuál modificar, usa accion=pregunta_aclaratoria con una pregunta breve.",
+      "Para 'último bolo' usa objetivo {\"selector\":\"ultimo_bolo\"}. Para 'última factura' usa objetivo {\"selector\":\"ultima_factura\"}.",
+      "Para marcar cobrado usa cambios {\"estado\":\"cobrado\"}. Para cambiar fecha usa cambios {\"fecha\":\"YYYY-MM-DD\"}.",
+      "Para enviar email incluye email {\"destinatario\":string|null,\"asunto\":string|null,\"mensaje\":string|null}. Si falta destinatario, deja null.",
+      "No incluyas fiscalidad avanzada.",
+    ].join(" ");
+
+    return [
+      {
+        role: "system",
+        content: assistantPrompt,
+      },
+      {
+        role: "user",
+        content: `Contexto:\n${contextText}\nMensaje:\n${message}`,
+      },
+    ];
+  }
 
   if (task === "extract_expense" || task === "extract_investment") {
     const isInvestment = task === "extract_investment";

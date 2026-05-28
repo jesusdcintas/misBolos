@@ -47,6 +47,7 @@ import 'screens/expenses/expense_detail_screen.dart';
 import 'screens/assets/asset_form_screen.dart';
 import 'screens/assets/asset_detail_screen.dart';
 import 'screens/finanzas/finanzas_screen.dart';
+import 'screens/ai/ai_assistant_screen.dart';
 
 Page<void> _slideUpPage(Widget child, GoRouterState state) {
   return CustomTransitionPage(
@@ -153,6 +154,16 @@ final routerProvider = Provider<GoRouter>((ref) {
             pageBuilder: (context, state) => CustomTransitionPage(
               key: state.pageKey,
               child: const FinanzasScreen(),
+              transitionDuration: const Duration(milliseconds: 200),
+              transitionsBuilder: (context, animation, secondary, child) =>
+                  FadeTransition(opacity: animation, child: child),
+            ),
+          ),
+          GoRoute(
+            path: '/assistant',
+            pageBuilder: (context, state) => CustomTransitionPage(
+              key: state.pageKey,
+              child: const AiAssistantScreen(),
               transitionDuration: const Duration(milliseconds: 200),
               transitionsBuilder: (context, animation, secondary, child) =>
                   FadeTransition(opacity: animation, child: child),
@@ -535,50 +546,34 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp>
             return GestureDetector(
               behavior: HitTestBehavior.translucent,
               onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
-              child: NotificationListener<ScrollStartNotification>(
-                onNotification: (notification) {
-                  final focused = FocusManager.instance.primaryFocus;
-                  final focusContext = focused?.context;
-                  final editingInsideFocus =
-                      focusContext?.widget is EditableText;
-                  final horizontalInputScroll =
-                      editingInsideFocus &&
-                      notification.metrics.axis == Axis.horizontal;
-                  if (horizontalInputScroll) {
-                    return false;
-                  }
-                  FocusManager.instance.primaryFocus?.unfocus();
-                  return false;
-                },
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    if (_sessionReady)
-                      content
-                    else
-                      _SecureSessionLoading(message: _sessionMessage),
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 260),
-                      switchInCurve: Curves.easeOutCubic,
-                      switchOutCurve: Curves.easeInCubic,
-                      child: _lockManager.isLocked
-                          ? LockScreen(
-                              key: const ValueKey('app-lock-screen'),
-                              manager: _lockManager,
-                            )
-                          : const SizedBox.shrink(),
-                    ),
-                    if (_sessionSwitching)
-                      const ColoredBox(
-                        color: Color(0xEE0B1220),
-                        child: Center(
-                          child: _SecureSessionLoading(
-                            message: 'Preparando tu espacio seguro…',
-                          ),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (_sessionReady)
+                    content
+                  else
+                    _SecureSessionLoading(message: _sessionMessage),
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 260),
+                    switchInCurve: Curves.easeOutCubic,
+                    switchOutCurve: Curves.easeInCubic,
+                    child: _lockManager.isLocked
+                        ? LockScreen(
+                            key: const ValueKey('app-lock-screen'),
+                            manager: _lockManager,
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+                  if (_sessionSwitching)
+                    const ColoredBox(
+                      color: Color(0xEE0B1220),
+                      child: Center(
+                        child: _SecureSessionLoading(
+                          message: 'Preparando tu espacio seguro…',
                         ),
                       ),
-                  ],
-                ),
+                    ),
+                ],
               ),
             );
           },
@@ -641,6 +636,7 @@ class _ScaffoldWithNavBarState extends State<_ScaffoldWithNavBar> {
     '/',
     '/calendar',
     '/finanzas',
+    '/assistant',
     '/profile',
     '/settings',
   ];
@@ -649,8 +645,9 @@ class _ScaffoldWithNavBarState extends State<_ScaffoldWithNavBar> {
     if (location == '/') return 0;
     if (location.startsWith('/calendar')) return 1;
     if (location.startsWith('/finanzas')) return 2;
-    if (location.startsWith('/profile')) return 3;
-    if (location.startsWith('/settings')) return 4;
+    if (location.startsWith('/assistant')) return 3;
+    if (location.startsWith('/profile')) return 4;
+    if (location.startsWith('/settings')) return 5;
     return 0;
   }
 
@@ -670,6 +667,7 @@ class _ScaffoldWithNavBarState extends State<_ScaffoldWithNavBar> {
     );
 
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       body: widget.child,
       bottomNavigationBar: NavigationBar(
         selectedIndex: selectedIndex,
@@ -689,6 +687,11 @@ class _ScaffoldWithNavBarState extends State<_ScaffoldWithNavBar> {
             icon: Icon(Icons.account_balance_wallet_outlined),
             selectedIcon: Icon(Icons.account_balance_wallet),
             label: 'Finanzas',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.auto_awesome_outlined),
+            selectedIcon: Icon(Icons.auto_awesome),
+            label: 'IA',
           ),
           NavigationDestination(
             icon: Icon(Icons.person_outline),

@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_strings.dart';
+import '../../models/client.dart';
 import '../../providers/client_provider.dart';
+import '../../providers/gig_provider.dart';
 import '../../widgets/common/empty_state.dart';
 import '../../widgets/common/skeleton_loading.dart';
 import '../../core/utils/app_haptics.dart';
@@ -26,56 +29,77 @@ class _ClientsListScreenState extends ConsumerState<ClientsListScreen> {
 
     final content = Column(
       children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: TextField(
-              decoration: const InputDecoration(
-                hintText: 'Buscar cliente...',
-                prefixIcon: Icon(Icons.search),
-              ),
-              onChanged: (v) => setState(() => _searchQuery = v),
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: TextField(
+            decoration: const InputDecoration(
+              hintText: 'Buscar cliente...',
+              prefixIcon: Icon(Icons.search),
             ),
+            onChanged: (v) => setState(() => _searchQuery = v),
           ),
-          Expanded(
-            child: clientsAsync.when(
-              data: (clients) {
-                if (clients.isEmpty) {
-                  return const EmptyState(
-                    icon: Icons.people_outline,
-                    message: AppStrings.sinClientes,
-                  );
-                }
-                return ListView.builder(
-                  itemCount: clients.length,
-                  itemBuilder: (context, index) {
-                    final client = clients[index];
-                    final displayName = client.alias.isNotEmpty ? client.alias : client.nombre;
-                    final subtitle = client.alias.isNotEmpty 
-                        ? '${client.nombre}${client.cifNif.isNotEmpty ? ' · ${client.cifNif}' : ''}'
-                        : (client.cifNif.isNotEmpty ? client.cifNif : null);
-                    return Card(
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          child: Text(displayName[0].toUpperCase()),
-                        ),
-                        title: Text(displayName),
-                        subtitle: subtitle != null ? Text(subtitle) : null,
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () {
-                          AppHaptics.light();
-                          context.push('/client/${client.id}');
-                        },
-                      ),
-                    );
-                  },
+        ),
+        Expanded(
+          child: clientsAsync.when(
+            data: (clients) {
+              if (clients.isEmpty) {
+                return const EmptyState(
+                  icon: Icons.people_outline,
+                  message: AppStrings.sinClientes,
                 );
-              },
-              loading: () => Column(
-                children: List.generate(6, (_) => const ClientCardSkeleton()),
-              ),
-              error: (e, _) => Center(child: Text('Error: $e')),
+              }
+              return ListView.builder(
+                itemCount: clients.length,
+                itemBuilder: (context, index) {
+                  final client = clients[index];
+                  final displayName = client.alias.isNotEmpty
+                      ? client.alias
+                      : client.nombre;
+                  final subtitle = client.alias.isNotEmpty
+                      ? '${client.nombre}${client.cifNif.isNotEmpty ? ' · ${client.cifNif}' : ''}'
+                      : (client.cifNif.isNotEmpty ? client.cifNif : null);
+                  return Card(
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        child: Text(displayName[0].toUpperCase()),
+                      ),
+                      title: Text(displayName),
+                      subtitle: subtitle != null ? Text(subtitle) : null,
+                      trailing: PopupMenuButton<String>(
+                        tooltip: 'Opciones',
+                        onSelected: (value) {
+                          if (value == 'delete') {
+                            _confirmDeleteClient(context, client);
+                          }
+                        },
+                        itemBuilder: (context) => const [
+                          PopupMenuItem(
+                            value: 'delete',
+                            child: Row(
+                              children: [
+                                Icon(Icons.delete_outline),
+                                SizedBox(width: 8),
+                                Text('Eliminar'),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      onTap: () {
+                        AppHaptics.light();
+                        context.push('/client/${client.id}');
+                      },
+                    ),
+                  );
+                },
+              );
+            },
+            loading: () => Column(
+              children: List.generate(6, (_) => const ClientCardSkeleton()),
             ),
+            error: (e, _) => Center(child: Text('Error: $e')),
           ),
+        ),
       ],
     );
 
@@ -103,5 +127,68 @@ class _ClientsListScreenState extends ConsumerState<ClientsListScreen> {
         child: const Icon(Icons.add),
       ),
     );
+  }
+
+  Future<void> _confirmDeleteClient(BuildContext context, Client client) async {
+    final gigs = await ref.read(gigsByClientProvider(client.id).future);
+    if (!context.mounted) return;
+
+    if (gigs.isNotEmpty) {
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('No se puede eliminar'),
+          content: Text(
+            'Este cliente tiene ${gigs.length} bolo(s) asociados. Para evitar romper el historial, elimina o reasigna primero esos bolos.',
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Entendido'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Eliminar cliente'),
+        content: Text(
+          'Se eliminará "${client.nombre}". Esta acción no se puede deshacer.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    try {
+      await ref.read(clientsProvider.notifier).remove(client.id);
+      ref.invalidate(clientsProvider);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Cliente eliminado: ${client.nombre}')),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('No se pudo eliminar: $e')));
+    }
   }
 }

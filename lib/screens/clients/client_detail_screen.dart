@@ -40,6 +40,16 @@ class ClientDetailScreen extends ConsumerWidget {
                   ref.invalidate(clientsProvider);
                 },
               ),
+              IconButton(
+                tooltip: 'Eliminar cliente',
+                icon: const Icon(Icons.delete_outline),
+                onPressed: () => _confirmDeleteClient(
+                  context: context,
+                  ref: ref,
+                  clientId: client.id,
+                  clientName: client.nombre,
+                ),
+              ),
             ],
           ),
           body: ListView(
@@ -83,6 +93,8 @@ class ClientDetailScreen extends ConsumerWidget {
                           label: 'Teléfono WhatsApp',
                           value: client.whatsappPhone!,
                         ),
+                      if (client.notas.isNotEmpty)
+                        _InfoRow(label: 'Notas', value: client.notas),
                     ],
                   ),
                 ),
@@ -218,6 +230,80 @@ class ClientDetailScreen extends ConsumerWidget {
         body: Center(child: Text('Error: $e')),
       ),
     );
+  }
+
+  Future<void> _confirmDeleteClient({
+    required BuildContext context,
+    required WidgetRef ref,
+    required String clientId,
+    required String clientName,
+  }) async {
+    final gigs = await ref.read(gigsByClientProvider(clientId).future);
+    if (!context.mounted) return;
+
+    if (gigs.isNotEmpty) {
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('No se puede eliminar'),
+          content: Text(
+            'Este cliente tiene ${gigs.length} bolo(s) asociados. Para evitar romper el historial, elimina o reasigna primero esos bolos.',
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Entendido'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Eliminar cliente'),
+        content: Text(
+          'Se eliminará "$clientName". Esta acción no se puede deshacer.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    try {
+      await ref.read(clientsProvider.notifier).remove(clientId);
+      ref.invalidate(clientsProvider);
+      ref.invalidate(clientByIdProvider(clientId));
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Cliente eliminado: $clientName')));
+      if (context.canPop()) {
+        context.pop();
+      } else {
+        context.go('/finanzas');
+      }
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('No se pudo eliminar: $e')));
+    }
   }
 }
 
