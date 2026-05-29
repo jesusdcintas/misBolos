@@ -260,14 +260,12 @@ class GoogleAuthNotifier extends StateNotifier<GoogleAuthState> {
 
       final success = await PlatformAuthService.instance.signInSilently();
       if (success) {
-        _updateStateFromPlatform();
+        await _updateStateFromPlatform();
         await _saveMobileCalendarState();
       } else if (wasConnected) {
-        // google_sign_in perdió la sesión pero el usuario estaba conectado.
-        // Restauramos el estado desde disco para que la UI no muestre desconectado.
         state = GoogleAuthState(
           isSignedIn: true,
-          calendarConnected: true,
+          calendarConnected: false,
           email: savedEmail,
           displayName: savedEmail?.split('@').first,
         );
@@ -282,7 +280,7 @@ class GoogleAuthNotifier extends StateNotifier<GoogleAuthState> {
     if (_usesPlatformAuth) {
       final success = await PlatformAuthService.instance.signIn();
       if (success) {
-        _updateStateFromPlatform();
+        await _updateStateFromPlatform();
         await _saveMobileCalendarState();
       }
       return success;
@@ -296,6 +294,9 @@ class GoogleAuthNotifier extends StateNotifier<GoogleAuthState> {
   Future<void> signOut() async {
     if (_usesPlatformAuth) {
       await PlatformAuthService.instance.signOut();
+      if (Platform.isMacOS) {
+        await GoogleAuthService.instance.signOut();
+      }
       await _clearMobileCalendarState();
     } else {
       await GoogleAuthService.instance.signOut();
@@ -306,13 +307,34 @@ class GoogleAuthNotifier extends StateNotifier<GoogleAuthState> {
   /// Solicita acceso a Calendar sin requerir login completo si ya hay sesión.
   Future<bool> connectCalendarOnly() async {
     if (_usesPlatformAuth) {
-      // En plataformas nativas, los scopes se solicitan en login Google.
-      // Si ya hay sesión activa, se considera Calendar conectado.
       if (PlatformAuthService.instance.isSignedIn) {
-        state = state.copyWith(calendarConnected: true);
-        return true;
+        final hasToken = await _hasPlatformCalendarAccess();
+        state = state.copyWith(calendarConnected: hasToken);
+        if (hasToken) {
+          await _saveMobileCalendarState();
+          return true;
+        }
+        if (Platform.isMacOS) {
+          final success = await GoogleAuthService.instance.signIn();
+          final hasAccess =
+              success && await GoogleAuthService.instance.checkCalendarAccess();
+          state = GoogleAuthState(
+            isSignedIn: true,
+            calendarConnected: hasAccess,
+            email:
+                GoogleAuthService.instance.userEmail ??
+                PlatformAuthService.instance.userEmail,
+            displayName:
+                GoogleAuthService.instance.displayName ??
+                PlatformAuthService.instance.displayName,
+            photoUrl: PlatformAuthService.instance.photoUrl,
+          );
+          await _saveMobileCalendarState();
+          return hasAccess;
+        }
       }
-      return await signIn();
+      final success = await signIn();
+      return success && state.calendarConnected;
     } else {
       final currentUser = GoogleAuthService.instance.isSignedIn;
       if (currentUser) {
@@ -327,17 +349,26 @@ class GoogleAuthNotifier extends StateNotifier<GoogleAuthState> {
     }
   }
 
-  void _updateStateFromPlatform() {
+  Future<void> _updateStateFromPlatform() async {
     final svc = PlatformAuthService.instance;
-    // En móvil con google_sign_in, los scopes de Calendar se solicitan
-    // en el login, así que si está conectado asumimos Calendar activo.
+    final calendarConnected = await _hasPlatformCalendarAccess();
     state = GoogleAuthState(
       isSignedIn: true,
-      calendarConnected: true,
+      calendarConnected: calendarConnected,
       email: svc.userEmail,
       displayName: svc.displayName,
       photoUrl: svc.photoUrl,
     );
+  }
+
+  Future<bool> _hasPlatformCalendarAccess() async {
+    final token = await PlatformAuthService.instance.getAccessToken();
+    if (token != null && token.isNotEmpty) return true;
+    if (Platform.isMacOS) {
+      await GoogleAuthService.instance.signInSilently();
+      return GoogleAuthService.instance.checkCalendarAccess();
+    }
+    return false;
   }
 
   Future<void> _saveMobileCalendarState() async {

@@ -202,6 +202,15 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
         driveSyncedAt: m['drive_synced_at'] != null
             ? DateTime.tryParse(m['drive_synced_at'].toString())
             : null,
+        driveUploadedAt: m['drive_uploaded_at'] != null
+            ? DateTime.tryParse(m['drive_uploaded_at'].toString())
+            : null,
+        driveSyncStatus: (m['drive_sync_status']?.toString().trim().isNotEmpty ??
+                false)
+            ? m['drive_sync_status'].toString()
+            : (m['drive_file_id']?.toString().trim().isNotEmpty ?? false)
+            ? 'uploaded'
+            : 'pending',
         status: status,
         createdAt: createdAt,
         updatedAt:
@@ -469,6 +478,36 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
     ref.invalidate(gigByIdProvider(invoice.gigId));
     ref.invalidate(gigsProvider);
     await reloadLocal();
+    final invoiceForDrive = savedInvoice ?? invoice;
+    try {
+      if (invoiceForDrive.driveFileId?.trim().isNotEmpty == true) {
+        debugPrint(
+          '[DriveAutoUpload] enqueue skipped: already has drive_file_id entity=invoice/${invoiceForDrive.id}',
+        );
+        return;
+      }
+      await DriveDocumentSyncService.instance.enqueuePendingUpload(
+        entityType: 'invoice',
+        entityId: invoiceForDrive.id,
+        targetFolderType: 'FACTURAS',
+        documentType: 'invoice_pdf',
+        mimeType: 'application/pdf',
+        driveFileId: invoiceForDrive.driveFileId,
+        logicalPath: 'FACTURAS/${invoiceForDrive.id}',
+      );
+      debugPrint(
+        '[DriveAutoUpload] queued invoice/${invoiceForDrive.id} after create',
+      );
+      unawaited(
+        DriveDocumentSyncService.instance.processPendingUploads(
+          reason: 'invoice_created',
+        ),
+      );
+    } catch (e) {
+      debugPrint(
+        '[DriveAutoUpload] invoice/${invoiceForDrive.id} queue failed: $e',
+      );
+    }
   }
 
   Future<void> updateInvoice(Invoice invoice) async {

@@ -365,7 +365,16 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
       await ref.read(assetsProvider.notifier).add(asset);
     }
 
-    if (mounted) context.pop();
+    if (mounted) {
+      if (_documentoPath?.trim().isNotEmpty == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Guardado localmente. Pendiente de subir a Drive.'),
+          ),
+        );
+      }
+      context.pop();
+    }
   }
 
   Future<bool> _confirmPotentialDuplicate() async {

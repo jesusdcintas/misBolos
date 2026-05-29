@@ -1050,6 +1050,15 @@ class SupabaseService {
       driveSyncedAt: m['drive_synced_at'] != null
           ? DateTime.tryParse(m['drive_synced_at'].toString())
           : null,
+      driveUploadedAt: m['drive_uploaded_at'] != null
+          ? DateTime.tryParse(m['drive_uploaded_at'].toString())
+          : null,
+      driveSyncStatus: (m['drive_sync_status']?.toString().trim().isNotEmpty ??
+              false)
+          ? m['drive_sync_status'].toString()
+          : ((m['drive_file_id']?.toString().trim().isNotEmpty ?? false)
+                ? 'uploaded'
+                : 'pending'),
       status: InvoiceStatusExtension.fromDb(m['status'] ?? 'borrador'),
       createdAt: DateTime.parse(m['created_at']),
       updatedAt: DateTime.parse(

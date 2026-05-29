@@ -28,7 +28,7 @@ class ProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
-  final _driveSearchController = TextEditingController(text: 'MisBolos Test');
+  final _driveSearchController = TextEditingController();
   List<DriveFolderResult> _driveFolderResults = [];
   bool _driveBusy = false;
   String _driveProgressLabel = '';
@@ -255,13 +255,24 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             ? _showGoogleAccountSheet(googleAuth)
             : ref.read(googleAuthProvider.notifier).signIn(),
       ),
-      _serviceStatusCard(
-        title: 'Google Drive',
-        icon: Icons.add_to_drive_outlined,
-        status: _driveStatusText(driveState),
-        subtitle: _driveSubtitleText(driveState, settings),
-        tone: _driveTone(driveState),
-        onTap: () => _handleDriveCardTap(driveState, settings),
+      FutureBuilder<DriveConnectionCheck>(
+        future: GoogleDriveService.instance.checkDriveConnectionStatus(),
+        builder: (context, snapshot) {
+          final check = snapshot.data;
+          final effectiveState = check == null
+              ? driveState
+              : _driveStateFromConnection(check.status);
+          return _serviceStatusCard(
+            title: 'Google Drive',
+            icon: Icons.add_to_drive_outlined,
+            status: check == null
+                ? _driveStatusText(driveState)
+                : _driveStatusText(effectiveState),
+            subtitle: check?.message ?? _driveSubtitleText(driveState, settings),
+            tone: _driveTone(effectiveState),
+            onTap: () => _handleDriveCardTap(effectiveState, settings),
+          );
+        },
       ),
       _serviceStatusCard(
         title: 'Google Calendar',
@@ -478,6 +489,24 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
     if (!folderConfigured) return _DriveServiceState.connectedUnconfigured;
     return _DriveServiceState.ready;
+  }
+
+  _DriveServiceState _driveStateFromConnection(DriveConnectionStatus status) {
+    if (_driveBusy) return _DriveServiceState.syncing;
+    if (_driveConnectionError) return _DriveServiceState.error;
+    switch (status) {
+      case DriveConnectionStatus.connected:
+        return _DriveServiceState.ready;
+      case DriveConnectionStatus.missingFolder:
+      case DriveConnectionStatus.googleConnectedNoDrive:
+      case DriveConnectionStatus.permissionMissing:
+      case DriveConnectionStatus.folderNotAccessible:
+        return _DriveServiceState.connectedUnconfigured;
+      case DriveConnectionStatus.disconnected:
+        return _DriveServiceState.disconnected;
+      case DriveConnectionStatus.error:
+        return _DriveServiceState.error;
+    }
   }
 
   _CalendarServiceState _calendarState(GoogleAuthState auth) {
@@ -930,24 +959,27 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final rootName = settings.driveRootFolderName;
     final rootId = settings.driveRootFolderId;
     final accountLabel = _driveAccountLabel(settings);
-    final statusLabel = !connected
-        ? 'Drive no conectado'
-        : hasFolder
+    final hasDriveAccount =
+        settings.driveAccountEmail?.trim().isNotEmpty == true ||
+        settings.driveAccountName?.trim().isNotEmpty == true;
+    final statusLabel = driveReady
         ? 'Drive listo'
-        : 'Falta seleccionar carpeta';
-    final statusBg = !connected
+        : hasFolder || hasDriveAccount
+        ? 'Requiere configuración'
+        : 'Drive no conectado';
+    final statusBg = !driveReady && !hasFolder && !hasDriveAccount
         ? AppColors.errorBg
-        : hasFolder
+        : driveReady
         ? AppColors.successBg
         : AppColors.warningBg;
-    final statusFg = !connected
+    final statusFg = !driveReady && !hasFolder && !hasDriveAccount
         ? AppColors.error
-        : hasFolder
+        : driveReady
         ? AppColors.success
         : AppColors.warning;
-    final statusIcon = !connected
+    final statusIcon = !driveReady && !hasFolder && !hasDriveAccount
         ? Icons.error_outline
-        : hasFolder
+        : driveReady
         ? Icons.check_circle
         : Icons.warning_amber_rounded;
 
@@ -1038,6 +1070,32 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ],
               ),
             ),
+            const SizedBox(height: 8),
+            FutureBuilder<DriveConnectionCheck>(
+              future: GoogleDriveService.instance.checkDriveConnectionStatus(),
+              builder: (context, snapshot) {
+                final check = snapshot.data;
+                if (check == null) {
+                  return const Text(
+                    'Diagnosticando conexión de Drive...',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
+                  );
+                }
+                return Text(
+                  check.message,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: check.isConnected
+                        ? AppColors.success
+                        : AppColors.warning,
+                    fontWeight: FontWeight.w600,
+                  ),
+                );
+              },
+            ),
             const SizedBox(height: 14),
             Container(
               width: double.infinity,
@@ -1074,7 +1132,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    connected
+                    connected || hasDriveAccount
                         ? accountLabel
                         : 'Conecta Google Drive para activar la sincronización documental.',
                     style: const TextStyle(
@@ -1082,6 +1140,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       color: AppColors.textSecondary,
                     ),
                   ),
+                  if (settings.lastDriveSyncAt != null) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      'Última subida: ${_formatDate(settings.lastDriveSyncAt!)}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 10),
                   Wrap(
                     spacing: 8,
@@ -1306,7 +1374,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           ? _retryPendingDriveSync
                           : null,
                       icon: const Icon(Icons.refresh_outlined),
-                      label: const Text('Reintentar válidos'),
+                      label: const Text('Reintentar subidas pendientes'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: _driveBusy ? null : _diagnoseDriveConnection,
+                      icon: const Icon(Icons.health_and_safety_outlined),
+                      label: const Text('Diagnosticar conexión'),
                     ),
                     OutlinedButton.icon(
                       onPressed: (!_driveBusy && driveReady)
@@ -1405,6 +1478,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             'Selecciona una carpeta manualmente para completar la configuración de Drive.',
           );
         }
+        await DriveDocumentSyncService.instance.processPendingUploads(
+          reason: 'drive_connected',
+        );
         ref.invalidate(settingsProvider);
       },
       progressLabel: 'Conectando Google Drive y preparando espacio...',
@@ -1447,6 +1523,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     await _runDriveAction(
       () async {
         await GoogleDriveService.instance.selectRootFolder(folder);
+        await DriveDocumentSyncService.instance.processPendingUploads(
+          reason: 'drive_folder_selected',
+        );
         ref.invalidate(settingsProvider);
       },
       progressLabel: 'Guardando carpeta seleccionada...',
@@ -1561,6 +1640,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       },
       progressLabel: 'Reintentando pendientes válidos de Drive...',
       errorPrefix: 'No se pudieron reintentar pendientes de Drive',
+    );
+  }
+
+  Future<void> _diagnoseDriveConnection() async {
+    await _runDriveAction(
+      () async {
+        final status = await GoogleDriveService.instance
+            .checkDriveConnectionStatus();
+        ref.invalidate(settingsProvider);
+        _showDriveMessage(status.message);
+      },
+      progressLabel: 'Diagnosticando Google Drive...',
+      errorPrefix: 'No se pudo diagnosticar Google Drive',
     );
   }
 

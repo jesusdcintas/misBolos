@@ -79,6 +79,7 @@ class CalendarScreen extends ConsumerWidget {
     ref.read(_syncingProvider.notifier).state = true;
     int synced = 0;
     int failed = 0;
+    String? blockingError;
     try {
       final service = GoogleCalendarService();
       for (final gig in gigs) {
@@ -95,6 +96,13 @@ class CalendarScreen extends ConsumerWidget {
         } catch (e) {
           failed++;
           debugPrint('[CalendarScreen] Error syncing gig ${gig.id}: $e');
+          final text = e.toString();
+          if (text.contains('Google Calendar no está conectado') ||
+              text.contains('No hay access token de Google')) {
+            blockingError =
+                'Google Calendar no está conectado. Vuelve a conectarlo desde Perfil.';
+            break;
+          }
         }
       }
     } finally {
@@ -102,9 +110,11 @@ class CalendarScreen extends ConsumerWidget {
     }
 
     if (!context.mounted) return;
-    final message = failed == 0
-        ? 'Google Calendar sincronizado ($synced bolos)'
-        : 'Sincronizados $synced bolos · $failed con error';
+    final message =
+        blockingError ??
+        (failed == 0
+            ? 'Google Calendar sincronizado ($synced bolos)'
+            : 'Sincronizados $synced bolos · $failed con error');
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));

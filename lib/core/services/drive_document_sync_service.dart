@@ -188,12 +188,17 @@ class DriveDocumentSyncService {
   static const String errorInternalBug =
       'internal_bug_bad_descriptor_googleapi';
   static const String statusPending = 'pending';
+  static const String statusUploading = 'uploading';
+  static const String statusUploaded = 'uploaded';
   static const String statusRetryable = 'retryable';
+  static const String statusFailed = 'failed';
   static const String statusInvalidLocalFile = 'invalid_local_file';
   static const String statusInternalBug = 'internal_bug';
   static Future<DriveDocumentSyncResult>? _documentSyncInFlight;
+  static Future<DriveRetryResult>? _retryInFlight;
   final ValueNotifier<DriveProgressSnapshot> progress =
       ValueNotifier<DriveProgressSnapshot>(const DriveProgressSnapshot());
+  final Set<String> _entityLocks = <String>{};
   int _driveListMs = 0;
   int _driveUploadMs = 0;
   int _driveDownloadMs = 0;
@@ -239,6 +244,118 @@ class DriveDocumentSyncService {
       _finishProgress();
       debugPrint('[SYNC] total: ${totalWatch.elapsedMilliseconds} ms');
       _documentSyncInFlight = null;
+    }
+  }
+
+  Future<void> enqueuePendingUpload({
+    required String entityType,
+    required String entityId,
+    String action = 'upload',
+    String? localFilePath,
+    String? targetFolderType,
+    String? documentType,
+    String? fileName,
+    String? mimeType,
+    int? fileSizeBytes,
+    String? driveFileId,
+    String? remoteFolderId,
+    String? logicalPath,
+  }) async {
+    final normalizedType = _canonicalEntityType(entityType);
+    if (normalizedType == 'invoice') {
+      final invoice = await _invoiceRepository.getById(entityId);
+      if (invoice?.driveFileId?.trim().isNotEmpty == true) {
+        debugPrint(
+          '[DriveAutoUpload] enqueue skipped: already has drive_file_id entity=invoice/$entityId',
+        );
+        return;
+      }
+    }
+    final db = await DatabaseHelper.instance.database;
+    final existing = await db.query(
+      'drive_sync_queue',
+      where: 'entity_type = ? AND entity_id = ?',
+      whereArgs: [normalizedType, entityId],
+      limit: 1,
+    );
+    final now = DateTime.now().toIso8601String();
+    final payload = {
+      'entity_type': normalizedType,
+      'entity_id': entityId,
+      'action': action,
+      'local_file_path': _safeLocalPath(localFilePath),
+      'target_folder_type': targetFolderType ?? _defaultTargetFolder(normalizedType),
+      'attempts': 0,
+      'last_error': null,
+      'last_error_code': null,
+      'sync_status': statusPending,
+      'next_retry_at': null,
+      'document_type': documentType,
+      'file_name': fileName,
+      'mime_type': mimeType,
+      'file_size_bytes': fileSizeBytes,
+      'drive_file_id': driveFileId,
+      'remote_folder_id': remoteFolderId,
+      'logical_path': logicalPath ?? '${_defaultTargetFolder(normalizedType)}/$entityId',
+      'updated_at': now,
+    };
+    if (existing.isEmpty) {
+      await db.insert('drive_sync_queue', {
+        'id': const Uuid().v4(),
+        ...payload,
+        'created_at': now,
+      });
+    } else {
+      final currentStatus =
+          (existing.first['sync_status'] as String?)?.trim() ?? statusPending;
+      if (currentStatus == statusPending || currentStatus == statusUploading) {
+        debugPrint(
+          '[DriveUploadQueue] skipped duplicate pending task entity=$normalizedType/$entityId status=$currentStatus',
+        );
+        return;
+      }
+      if (currentStatus == statusUploaded) {
+        debugPrint(
+          '[DriveUploadQueue] skipped duplicate pending task entity=$normalizedType/$entityId status=$currentStatus',
+        );
+        return;
+      }
+      await db.update(
+        'drive_sync_queue',
+        payload,
+        where: 'id = ?',
+        whereArgs: [existing.first['id']],
+      );
+    }
+    debugPrint(
+      '[DriveUploadQueue] enqueue entity=$normalizedType/$entityId action=$action status=$statusPending',
+    );
+  }
+
+  Future<DriveRetryResult> processPendingUploads({
+    String reason = 'drive_worker',
+  }) async {
+    if (_retryInFlight != null) {
+      debugPrint('[DriveUploadWorker] reused in-flight worker reason=$reason');
+      return _retryInFlight!;
+    }
+    debugPrint('[DriveUploadWorker] start reason=$reason');
+    final status = await _drive.checkDriveConnectionStatus();
+    if (!status.isConnected) {
+      debugPrint(
+        '[DriveUploadWorker] skipped status=${status.status.name} message="${status.message}"',
+      );
+      return DriveRetryResult(recentErrors: [status.message]);
+    }
+    _retryInFlight = retryPendingDriveSync();
+    try {
+      final result = await _retryInFlight!;
+      debugPrint(
+        '[DriveUploadWorker] done retried=${result.retried} succeeded=${result.succeeded} failed=${result.failed}',
+      );
+      return result;
+    } finally {
+      _retryInFlight = null;
     }
   }
 
@@ -492,6 +609,9 @@ class DriveDocumentSyncService {
       driveFileId: uploaded.fileId,
       driveFileUrl: uploaded.fileUrl,
       driveSyncedAt: DateTime.now(),
+    );
+    debugPrint(
+      '[DriveUploadWorker] uploaded invoice -> drive_file_id=${uploaded.fileId}',
     );
     final refreshed = await _invoiceRepository.getById(invoice.id);
     if (refreshed != null && SupabaseService.instance.isAuthenticated) {
@@ -1115,16 +1235,21 @@ class DriveDocumentSyncService {
   }
 
   Future<DriveRetryResult> retryPendingDriveSync() async {
+    final driveStatus = await _drive.checkDriveConnectionStatus();
+    if (!driveStatus.isConnected) {
+      throw Exception(driveStatus.message);
+    }
     await _drive.ensureRootFolder();
     final db = await DatabaseHelper.instance.database;
     final queue = await db.query(
       'drive_sync_queue',
       where:
-          "attempts < ? AND sync_status != ? AND sync_status != ? AND (next_retry_at IS NULL OR next_retry_at <= ?) AND (last_error IS NULL OR (last_error NOT LIKE ? AND last_error NOT LIKE ?))",
+          "attempts < ? AND sync_status != ? AND sync_status != ? AND sync_status != ? AND (next_retry_at IS NULL OR next_retry_at <= ?) AND (last_error IS NULL OR (last_error NOT LIKE ? AND last_error NOT LIKE ?))",
       whereArgs: [
         maxRetryAttempts,
         statusInvalidLocalFile,
         statusInternalBug,
+        statusUploaded,
         DateTime.now().toIso8601String(),
         '$errorMissingFile:%',
         '$errorDevicePath:%',
@@ -1149,6 +1274,11 @@ class DriveDocumentSyncService {
         (item['entity_type'] as String?) ?? '',
       );
       final entityId = (item['entity_id'] as String?) ?? '';
+      final lockKey = '$entityType::$entityId';
+      if (!_entityLocks.add(lockKey)) {
+        debugPrint('[DriveUploadWorker] skipped lock entity=$entityType/$entityId');
+        continue;
+      }
       final attempts = (item['attempts'] as int?) ?? 0;
       final queuedLocalPath = (item['local_file_path'] as String?)?.trim();
       if (queuedLocalPath != null &&
@@ -1172,10 +1302,33 @@ class DriveDocumentSyncService {
       }
 
       try {
+        await db.update(
+          'drive_sync_queue',
+          {
+            'sync_status': statusUploading,
+            'updated_at': DateTime.now().toIso8601String(),
+          },
+          where: 'id = ?',
+          whereArgs: [id],
+        );
         if (entityType == 'invoice') {
           final invoice = await _invoiceRepository.getById(entityId);
           if (invoice == null) {
             throw Exception('Factura $entityId no encontrada.');
+          }
+          if (invoice.driveFileId?.trim().isNotEmpty == true) {
+            await db.update(
+              'drive_sync_queue',
+              {
+                'sync_status': statusUploaded,
+                'updated_at': DateTime.now().toIso8601String(),
+              },
+              where: 'id = ?',
+              whereArgs: [id],
+            );
+            debugPrint('[DriveUploadWorker] skipped: already uploaded entity=invoice/$entityId');
+            succeeded++;
+            continue;
           }
           await _syncInvoice(invoice);
         } else if (entityType == 'expense') {
@@ -1206,7 +1359,19 @@ class DriveDocumentSyncService {
           throw Exception('Tipo de entidad no soportado: $entityType');
         }
 
-        await db.delete('drive_sync_queue', where: 'id = ?', whereArgs: [id]);
+        await db.update(
+          'drive_sync_queue',
+          {
+            'sync_status': statusUploaded,
+            'attempts': attempts,
+            'last_error': null,
+            'last_error_code': null,
+            'next_retry_at': null,
+            'updated_at': DateTime.now().toIso8601String(),
+          },
+          where: 'id = ?',
+          whereArgs: [id],
+        );
         succeeded++;
       } catch (error) {
         final nextAttempts = attempts + 1;
@@ -1233,6 +1398,8 @@ class DriveDocumentSyncService {
         if (nextAttempts >= maxRetryAttempts) {
           skippedByMaxAttempts++;
         }
+      } finally {
+        _entityLocks.remove(lockKey);
       }
     }
 
@@ -1962,6 +2129,10 @@ class DriveDocumentSyncService {
   }
 
   bool _invoiceDriveAlreadySynced(Invoice invoice) {
+    if (invoice.driveFileId?.isNotEmpty == true &&
+        invoice.driveSyncStatus == statusUploaded) {
+      return true;
+    }
     final syncedAt = invoice.driveSyncedAt;
     if (invoice.driveFileId?.isNotEmpty != true || syncedAt == null) {
       return false;
@@ -2219,8 +2390,8 @@ class DriveDocumentSyncService {
     })();
     final existing = await db.query(
       'drive_sync_queue',
-      where: 'entity_type = ? AND entity_id = ? AND action = ?',
-      whereArgs: [entityType, entityId, action],
+      where: 'entity_type = ? AND entity_id = ?',
+      whereArgs: [entityType, entityId],
       limit: 1,
     );
     final now = DateTime.now().toIso8601String();
@@ -2279,6 +2450,26 @@ class DriveDocumentSyncService {
       where: 'id = ?',
       whereArgs: [current['id']],
     );
+  }
+
+  String? _safeLocalPath(String? localFilePath) {
+    final raw = localFilePath?.trim();
+    if (raw == null || raw.isEmpty) return null;
+    if (raw.startsWith('http://') || raw.startsWith('https://')) return null;
+    return raw;
+  }
+
+  String _defaultTargetFolder(String entityType) {
+    switch (_canonicalEntityType(entityType)) {
+      case 'invoice':
+        return 'FACTURAS';
+      case 'expense':
+        return 'GASTOS';
+      case 'asset':
+        return 'INVERSIONES';
+      default:
+        return 'DOCUMENTOS';
+    }
   }
 
   Client _fallbackClient() => Client(nombre: 'Sin cliente');

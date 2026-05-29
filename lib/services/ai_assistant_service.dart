@@ -27,7 +27,15 @@ class AiAssistantService {
   Future<AiAssistantAction> interpret(
     String message, {
     List<Map<String, String>> conversationEntities = const [],
+    List<String> collectionGigIds = const [],
   }) async {
+    final localBulkAction = _tryParseBulkInvoiceAction(
+      message,
+      collectionGigIds: collectionGigIds,
+    );
+    if (localBulkAction != null) {
+      return localBulkAction;
+    }
     final context = await _buildContext(
       conversationEntities: conversationEntities,
     );
@@ -95,6 +103,37 @@ class AiAssistantService {
               : await _gigLines([gig]),
           requiresConfirmation: true,
           executable: gig != null,
+        );
+      case 'crear_facturas_masivas':
+        final plan = await _buildBulkInvoicePlan(action);
+        final usesCollection = _readStringList(action.raw['gig_ids']).isNotEmpty;
+        if (plan.eligible.isEmpty) {
+          return AiActionPreview(
+            title: 'Facturación masiva',
+            description: 'No hay bolos facturables pendientes de facturar.',
+            requiresConfirmation: true,
+            executable: false,
+          );
+        }
+        final items = <String>[
+          'Facturas a crear: ${plan.eligible.length}',
+          ...await _bulkInvoiceGigLines(plan.eligible),
+          'Importe total: ${_money(plan.totalAmount)}',
+          if (plan.skippedAlreadyInvoiced > 0)
+            'Omitidos (ya facturados): ${plan.skippedAlreadyInvoiced}',
+          if (plan.skippedNotBillable > 0)
+            'Omitidos (no facturables): ${plan.skippedNotBillable}',
+          if (plan.skippedCancelled > 0)
+            'Omitidos (cancelados): ${plan.skippedCancelled}',
+        ];
+        return AiActionPreview(
+          title: 'Crear facturas masivas',
+          description: usesCollection
+              ? 'Voy a crear ${plan.eligible.length} facturas para estos bolos facturables pendientes de facturar.'
+              : 'Voy a crear ${plan.eligible.length} facturas para todos los bolos facturables pendientes de facturar.',
+          items: items,
+          requiresConfirmation: true,
+          executable: true,
         );
       case 'enviar_factura_email':
         final invoiceResolution = await _resolveTargetInvoice(action);
@@ -230,6 +269,9 @@ class AiAssistantService {
         );
       case 'crear_factura':
         final message = await _executeCreateInvoice(action, ref);
+        return AiAssistantActionResult(message: message);
+      case 'crear_facturas_masivas':
+        final message = await _executeCreateBulkInvoices(action, ref);
         return AiAssistantActionResult(message: message);
       case 'enviar_factura_email':
         final message = await _executeSendInvoiceEmail(action, ref);
@@ -404,13 +446,13 @@ class AiAssistantService {
     if (existing != null) return 'Ese bolo ya tiene factura.';
     final settings = ref.read(settingsProvider).valueOrNull;
     final numero = await InvoiceRepository.instance.getNextNumberForYear(
-      DateTime.now().year,
+      gig.fecha.year,
     );
     final client = await ClientRepository.instance.getById(gig.clientId);
     final subtotal = gig.cachet ?? 0;
     final invoice = Invoice(
       numero: numero,
-      fecha: DateTime.now(),
+      fecha: gig.fecha,
       clientId: gig.clientId,
       gigId: gig.id,
       items: [
@@ -447,6 +489,54 @@ class AiAssistantService {
         .read(invoicesProvider.notifier)
         .updateStatus(invoice.id, InvoiceStatus.enviada);
     return 'Factura #${invoice.numero} enviada a ${client.email}.';
+  }
+
+  Future<String> _executeCreateBulkInvoices(
+    AiAssistantAction action,
+    Ref ref,
+  ) async {
+    final plan = await _buildBulkInvoicePlan(action);
+    debugPrint(
+      '[BULK_INVOICE_CREATE] candidates=${plan.eligible.length} skippedAlreadyInvoiced=${plan.skippedAlreadyInvoiced} skippedNotBillable=${plan.skippedNotBillable} createdInvoices=0',
+    );
+    if (plan.eligible.isEmpty) {
+      return 'No hay bolos facturables pendientes de facturar.';
+    }
+    final settings = ref.read(settingsProvider).valueOrNull;
+    var created = 0;
+    for (final gig in plan.eligible) {
+      final numero = await InvoiceRepository.instance.getNextNumberForYear(
+        gig.fecha.year,
+      );
+      final client = await ClientRepository.instance.getById(gig.clientId);
+      final subtotal = gig.cachet ?? 0;
+      final invoice = Invoice(
+        numero: numero,
+        fecha: gig.fecha,
+        clientId: gig.clientId,
+        gigId: gig.id,
+        items: [
+          InvoiceLineItem(
+            cantidad: 1,
+            descripcion: 'Actuación ${client?.nombre ?? ''}'.trim(),
+            precioUnitario: subtotal,
+          ),
+        ],
+        subtotal: subtotal,
+        ivaRate: settings?.ivaDefault ?? 0.21,
+        irpfRate: settings?.irpfDefault ?? 0,
+      );
+      await ref.read(invoicesProvider.notifier).addAndLinkToGig(invoice);
+      created++;
+    }
+    ref.invalidate(gigsProvider);
+    ref.invalidate(invoicesProvider);
+    ref.invalidate(dashboardStatsProvider);
+    ref.invalidate(financialSummaryProvider);
+    debugPrint(
+      '[BULK_INVOICE_CREATE] candidates=${plan.eligible.length} skippedAlreadyInvoiced=${plan.skippedAlreadyInvoiced} skippedNotBillable=${plan.skippedNotBillable} createdInvoices=$created',
+    );
+    return 'He creado $created factura(s) y he actualizado agenda, facturas, dashboard y resumen financiero.';
   }
 
   Future<String> _executeCreateClients(
@@ -691,6 +781,16 @@ class AiAssistantService {
     }).toList();
   }
 
+  Future<List<String>> _bulkInvoiceGigLines(List<Gig> gigs) async {
+    final clients = await ClientRepository.instance.getAll();
+    final byId = {for (final client in clients) client.id: client};
+    return gigs.map((gig) {
+      final clientName = byId[gig.clientId]?.nombre ?? 'Cliente';
+      final amount = gig.cachet == null ? 'Sin importe' : _money(gig.cachet!);
+      return 'Fecha: ${_date(gig.fecha)} · Nombre: Bolo · Cliente: $clientName · Importe: $amount';
+    }).toList();
+  }
+
   String? _readString(Object? value) {
     if (value == null) return null;
     final text = value.toString().trim();
@@ -762,6 +862,109 @@ class AiAssistantService {
       return true;
     }
     return null;
+  }
+
+  Future<List<String>> collectionGigIdsFor(AiAssistantAction action) async {
+    if (action.accion != 'buscar_bolos' && action.accion != 'resumen_agenda') {
+      return const [];
+    }
+    final gigs = await _searchGigs(action);
+    return gigs.map((gig) => gig.id).toList();
+  }
+
+  AiAssistantAction? _tryParseBulkInvoiceAction(
+    String message, {
+    List<String> collectionGigIds = const [],
+  }) {
+    final normalized = _normalizeForParser(message);
+    final hasInvoiceIntent = RegExp(
+      r'\bfactura(?:r|s)?\b',
+    ).hasMatch(normalized);
+    final referencesAll =
+        RegExp(r'\btod[oa]s?\b').hasMatch(normalized) ||
+        normalized.contains('a los facturables');
+    final referencesCollection =
+        normalized.contains('estos') ||
+        normalized.contains('estas') ||
+        normalized.contains('los de la lista') ||
+        normalized.contains('las de la lista') ||
+        normalized.contains('los bolos de la lista');
+    final isBulkInvoice =
+        hasInvoiceIntent &&
+        !normalized.contains('email') &&
+        (referencesAll || (referencesCollection && collectionGigIds.isNotEmpty));
+    if (!isBulkInvoice) return null;
+    final gigIds = referencesAll ? const <String>[] : collectionGigIds;
+    final raw = <String, dynamic>{
+      'accion': 'crear_facturas_masivas',
+      'requiere_confirmacion': true,
+      'confianza': 0.99,
+      'filtros': {
+        'facturable': true,
+        'sin_factura': true,
+        'cancelado': false,
+      },
+      'gig_ids': gigIds,
+      'advertencias': const <String>[],
+      '_source_message': message,
+    };
+    return AiAssistantAction.fromJson(raw);
+  }
+
+  String _normalizeForParser(String input) {
+    return input
+        .toLowerCase()
+        .replaceAll('á', 'a')
+        .replaceAll('é', 'e')
+        .replaceAll('í', 'i')
+        .replaceAll('ó', 'o')
+        .replaceAll('ú', 'u')
+        .trim();
+  }
+
+  Future<_BulkInvoicePlan> _buildBulkInvoicePlan(
+    AiAssistantAction action,
+  ) async {
+    final gigs = await GigRepository.instance.getAll();
+    final requestedIds = _readStringList(action.raw['gig_ids']).toSet();
+    var skippedNotBillable = 0;
+    var skippedAlreadyInvoiced = 0;
+    var skippedCancelled = 0;
+    final eligible = <Gig>[];
+    for (final gig in gigs) {
+      if (requestedIds.isNotEmpty && !requestedIds.contains(gig.id)) {
+        continue;
+      }
+      if (gig.status == GigStatus.cancelado) {
+        skippedCancelled++;
+        continue;
+      }
+      if (!gig.facturable) {
+        skippedNotBillable++;
+        continue;
+      }
+      if (gig.invoiceId != null && gig.invoiceId!.trim().isNotEmpty) {
+        skippedAlreadyInvoiced++;
+        continue;
+      }
+      final existing = await InvoiceRepository.instance.getByGigId(gig.id);
+      if (existing != null) {
+        skippedAlreadyInvoiced++;
+        continue;
+      }
+      eligible.add(gig);
+    }
+    final totalAmount = eligible.fold<double>(
+      0,
+      (sum, gig) => sum + (gig.cachet ?? 0),
+    );
+    return _BulkInvoicePlan(
+      eligible: eligible,
+      skippedAlreadyInvoiced: skippedAlreadyInvoiced,
+      skippedNotBillable: skippedNotBillable,
+      skippedCancelled: skippedCancelled,
+      totalAmount: totalAmount,
+    );
   }
 
   Future<AiAssistantAction> _normalizeCreateBolos(AiAssistantAction action) async {
@@ -987,6 +1190,22 @@ class AiAssistantService {
     }
     return null;
   }
+}
+
+class _BulkInvoicePlan {
+  final List<Gig> eligible;
+  final int skippedAlreadyInvoiced;
+  final int skippedNotBillable;
+  final int skippedCancelled;
+  final double totalAmount;
+
+  const _BulkInvoicePlan({
+    required this.eligible,
+    required this.skippedAlreadyInvoiced,
+    required this.skippedNotBillable,
+    required this.skippedCancelled,
+    required this.totalAmount,
+  });
 }
 
 class _CreateGigClientDatePattern {

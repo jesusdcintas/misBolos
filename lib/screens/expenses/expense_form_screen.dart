@@ -182,7 +182,16 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
       await ref.read(expensesProvider.notifier).add(expense);
     }
 
-    if (mounted) context.pop();
+    if (mounted) {
+      if (_documentoPath?.trim().isNotEmpty == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Guardado localmente. Pendiente de subir a Drive.'),
+          ),
+        );
+      }
+      context.pop();
+    }
   }
 
   Future<bool> _confirmPotentialDuplicate() async {

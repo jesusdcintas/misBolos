@@ -12,7 +12,6 @@ import '../core/services/drive_document_sync_service.dart';
 import '../core/services/google_drive_service.dart';
 import '../services/supabase_service.dart';
 import '../services/ai_attachment_service.dart';
-import '../repositories/settings_repository.dart';
 
 final assetRepositoryProvider = Provider((ref) => AssetRepository.instance);
 
@@ -252,7 +251,7 @@ class AssetsNotifier extends AsyncNotifier<List<Asset>> {
     }
     ref.invalidateSelf();
     await _tryUploadAsset(localId);
-    await _tryAutoSyncAssetToDrive(localId);
+    await _queueAutoUploadAssetToDrive(localId);
   }
 
   Future<void> updateAsset(Asset asset) async {
@@ -291,7 +290,7 @@ class AssetsNotifier extends AsyncNotifier<List<Asset>> {
     ref.invalidateSelf();
     if (asset.id != null) {
       await _tryUploadAsset(asset.id!);
-      await _tryAutoSyncAssetToDrive(asset.id!);
+      await _queueAutoUploadAssetToDrive(asset.id!);
     }
   }
 
@@ -391,16 +390,32 @@ class AssetsNotifier extends AsyncNotifier<List<Asset>> {
     }
   }
 
-  Future<void> _tryAutoSyncAssetToDrive(int localId) async {
-    final settings = await SettingsRepository().get();
-    final ready =
-        settings.driveConnected &&
-        (settings.driveRootFolderId?.trim().isNotEmpty ?? false);
-    if (!ready) return;
+  Future<void> _queueAutoUploadAssetToDrive(int localId) async {
+    final asset = await ref.read(assetRepositoryProvider).getById(localId);
+    if (asset == null) return;
+    if (asset.driveFileId?.trim().isNotEmpty == true) return;
+    final path = asset.documentoPath?.trim();
+    if (path == null || path.isEmpty) return;
     try {
-      await DriveDocumentSyncService.instance.syncAssetById(localId);
+      await DriveDocumentSyncService.instance.enqueuePendingUpload(
+        entityType: 'asset',
+        entityId: localId.toString(),
+        localFilePath: path,
+        targetFolderType: 'INVERSIONES',
+        documentType: 'asset_attachment',
+        fileName: asset.attachmentDisplayName,
+        mimeType: asset.attachmentMimeType,
+        driveFileId: asset.driveFileId,
+        logicalPath: 'INVERSIONES/$localId',
+      );
+      debugPrint('[DriveAutoUpload] queued asset/$localId after save');
+      unawaited(
+        DriveDocumentSyncService.instance.processPendingUploads(
+          reason: 'asset_saved',
+        ),
+      );
     } catch (e) {
-      debugPrint('[AssetsSync] Auto Drive sync error asset_id=$localId: $e');
+      debugPrint('[DriveAutoUpload] asset/$localId queue failed: $e');
     }
   }
 }

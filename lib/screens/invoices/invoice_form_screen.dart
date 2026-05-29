@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -41,6 +43,9 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
   DateTime _fecha = DateTime.now();
 
   static const List<double> _irpfOptions = [0.0, 0.07, 0.15, 0.19];
+
+  DateTime _asDateOnly(DateTime value) =>
+      DateTime(value.year, value.month, value.day);
 
   @override
   void initState() {
@@ -129,7 +134,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
 
           // Si no hay factura existente, crear items por defecto
           if (_existingInvoice == null) {
-            _fecha = _gig!.fecha;
+            _fecha = _asDateOnly(_gig!.fecha);
             _items = [
               _LineItemState(
                 cantidad: 1,
@@ -734,9 +739,10 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
         final nextNum = await ref.read(
           nextInvoiceNumberProvider(_fecha.year).future,
         );
+        final invoiceDate = _gig != null ? _asDateOnly(_gig!.fecha) : _fecha;
         final invoice = Invoice(
           numero: nextNum,
-          fecha: _fecha,
+          fecha: invoiceDate,
           clientId: _client!.id,
           gigId: _gig!.id,
           items: items,
@@ -748,13 +754,16 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
           total: total,
         );
         await ref.read(invoicesProvider.notifier).addAndLinkToGig(invoice);
-        await _tryAutoSyncInvoiceToDrive(invoice.id);
       }
 
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('Factura guardada')));
+        ).showSnackBar(
+          const SnackBar(
+            content: Text('Factura guardada. Pendiente de subir a Drive.'),
+          ),
+        );
         context.pop();
       }
     } catch (e) {
@@ -771,23 +780,22 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
   }
 
   Future<void> _tryAutoSyncInvoiceToDrive(String invoiceId) async {
-    final settings = await ref.read(settingsProvider.future);
-    final hasDriveRoot = (settings.driveRootFolderId ?? '').isNotEmpty;
-    if (!settings.driveConnected || !hasDriveRoot) return;
-
     try {
-      await DriveDocumentSyncService.instance.syncInvoiceById(invoiceId);
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Factura subida a Drive.')));
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No se pudo subir a Drive. Se añadirá a pendientes.'),
+      await DriveDocumentSyncService.instance.enqueuePendingUpload(
+        entityType: 'invoice',
+        entityId: invoiceId,
+        targetFolderType: 'FACTURAS',
+        documentType: 'invoice_pdf',
+        mimeType: 'application/pdf',
+        logicalPath: 'FACTURAS/$invoiceId',
+      );
+      unawaited(
+        DriveDocumentSyncService.instance.processPendingUploads(
+          reason: 'invoice_form_saved',
         ),
       );
+    } catch (_) {
+      // La factura ya está guardada; Drive se puede reintentar desde Perfil.
     }
   }
 }

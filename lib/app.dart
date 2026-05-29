@@ -20,6 +20,7 @@ import 'providers/invoice_provider.dart';
 import 'providers/stats_provider.dart';
 import 'providers/settings_provider.dart';
 import 'providers/sync_provider.dart';
+import 'core/services/drive_document_sync_service.dart';
 import 'core/services/google_drive_service.dart';
 import 'services/sync_queue_processor.dart';
 import 'screens/dashboard/dashboard_screen.dart';
@@ -457,6 +458,11 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp>
       final restored = await GoogleDriveService.instance.restoreSilently();
       if (restored && mounted) {
         ref.invalidate(settingsProvider);
+        unawaited(
+          DriveDocumentSyncService.instance.processPendingUploads(
+            reason: 'drive_restored',
+          ),
+        );
       }
     } catch (_) {
       // La UI conserva la carpeta local y las acciones pedirán reconectar si hace falta.
@@ -494,6 +500,11 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp>
     if (state != AppLifecycleState.resumed) return;
     unawaited(
       SyncQueueProcessor.instance.processPending(reason: 'app_resumed'),
+    );
+    unawaited(
+      DriveDocumentSyncService.instance.processPendingUploads(
+        reason: 'app_resumed',
+      ),
     );
     unawaited(_autoCloudSyncTick());
   }

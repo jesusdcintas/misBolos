@@ -83,6 +83,8 @@ class Invoice {
   final String? driveFileId;
   final String? driveFileUrl;
   final DateTime? driveSyncedAt;
+  final DateTime? driveUploadedAt;
+  final String driveSyncStatus;
 
   Invoice({
     String? id,
@@ -104,6 +106,8 @@ class Invoice {
     this.driveFileId,
     this.driveFileUrl,
     this.driveSyncedAt,
+    this.driveUploadedAt,
+    this.driveSyncStatus = 'pending',
   }) : id = id ?? const Uuid().v4(),
        ivaAmount = ivaAmount ?? (subtotal * ivaRate),
        irpfAmount = irpfAmount ?? (subtotal * irpfRate),
@@ -133,6 +137,8 @@ class Invoice {
     String? driveFileId,
     String? driveFileUrl,
     DateTime? driveSyncedAt,
+    DateTime? driveUploadedAt,
+    String? driveSyncStatus,
     bool clearDriveFile = false,
   }) {
     return Invoice(
@@ -157,6 +163,12 @@ class Invoice {
       driveSyncedAt: clearDriveFile
           ? null
           : driveSyncedAt ?? this.driveSyncedAt,
+      driveUploadedAt: clearDriveFile
+          ? null
+          : driveUploadedAt ?? this.driveUploadedAt,
+      driveSyncStatus: clearDriveFile
+          ? 'pending'
+          : driveSyncStatus ?? this.driveSyncStatus,
     );
   }
 
@@ -183,6 +195,8 @@ class Invoice {
       'drive_file_id': driveFileId,
       'drive_file_url': driveFileUrl,
       'drive_synced_at': driveSyncedAt?.toIso8601String(),
+      'drive_uploaded_at': driveUploadedAt?.toIso8601String(),
+      'drive_sync_status': driveSyncStatus,
     };
   }
 
@@ -216,6 +230,13 @@ class Invoice {
       driveSyncedAt: map['drive_synced_at'] != null
           ? DateTime.tryParse(map['drive_synced_at'] as String)
           : null,
+      driveUploadedAt: map['drive_uploaded_at'] != null
+          ? DateTime.tryParse(map['drive_uploaded_at'] as String)
+          : null,
+      driveSyncStatus:
+          (map['drive_sync_status'] as String?)?.trim().isNotEmpty == true
+          ? (map['drive_sync_status'] as String)
+          : 'pending',
     );
   }
 }

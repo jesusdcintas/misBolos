@@ -12,7 +12,6 @@ import '../core/services/drive_document_sync_service.dart';
 import '../core/services/google_drive_service.dart';
 import '../services/supabase_service.dart';
 import '../services/ai_attachment_service.dart';
-import '../repositories/settings_repository.dart';
 
 final expenseRepositoryProvider = Provider((ref) => ExpenseRepository.instance);
 
@@ -265,7 +264,7 @@ class ExpensesNotifier extends AsyncNotifier<List<Expense>> {
     }
     ref.invalidateSelf();
     await _tryUploadExpense(localId);
-    await _tryAutoSyncExpenseToDrive(localId);
+    await _queueAutoUploadExpenseToDrive(localId);
   }
 
   Future<void> updateExpense(Expense expense) async {
@@ -304,7 +303,7 @@ class ExpensesNotifier extends AsyncNotifier<List<Expense>> {
     ref.invalidateSelf();
     if (expense.id != null) {
       await _tryUploadExpense(expense.id!);
-      await _tryAutoSyncExpenseToDrive(expense.id!);
+      await _queueAutoUploadExpenseToDrive(expense.id!);
     }
   }
 
@@ -395,17 +394,33 @@ class ExpensesNotifier extends AsyncNotifier<List<Expense>> {
     }
   }
 
-  Future<void> _tryAutoSyncExpenseToDrive(int localId) async {
-    final settings = await SettingsRepository().get();
-    final ready =
-        settings.driveConnected &&
-        (settings.driveRootFolderId?.trim().isNotEmpty ?? false);
-    if (!ready) return;
+  Future<void> _queueAutoUploadExpenseToDrive(int localId) async {
+    final expense = await ref.read(expenseRepositoryProvider).getById(localId);
+    if (expense == null) return;
+    if (expense.driveFileId?.trim().isNotEmpty == true) return;
+    final path = expense.documentoPath?.trim();
+    if (path == null || path.isEmpty) return;
     try {
-      await DriveDocumentSyncService.instance.syncExpenseById(localId);
+      await DriveDocumentSyncService.instance.enqueuePendingUpload(
+        entityType: 'expense',
+        entityId: localId.toString(),
+        localFilePath: path,
+        targetFolderType: 'GASTOS',
+        documentType: 'expense_attachment',
+        fileName: expense.attachmentDisplayName,
+        mimeType: expense.attachmentMimeType,
+        driveFileId: expense.driveFileId,
+        logicalPath: 'GASTOS/$localId',
+      );
+      debugPrint('[DriveAutoUpload] queued expense/$localId after save');
+      unawaited(
+        DriveDocumentSyncService.instance.processPendingUploads(
+          reason: 'expense_saved',
+        ),
+      );
     } catch (e) {
       debugPrint(
-        '[ExpensesSync] Auto Drive sync error expense_id=$localId: $e',
+        '[DriveAutoUpload] expense/$localId queue failed: $e',
       );
     }
   }

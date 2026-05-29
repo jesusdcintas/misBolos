@@ -183,6 +183,7 @@ class AiChatNotifier extends AsyncNotifier<AiChatState> {
         return;
       }
       final entities = _conversationEntities(current.messages);
+      final collectionGigIds = _lastCollectionGigIds(current.messages);
       if (conversationContext.lastReferencedEntity != null) {
         final refEntity = conversationContext.lastReferencedEntity!;
         final entityType = refEntity['entity_type'] ?? '';
@@ -195,6 +196,7 @@ class AiChatNotifier extends AsyncNotifier<AiChatState> {
           await AiAssistantService.instance.interpret(
             trimmed,
             conversationEntities: entities,
+            collectionGigIds: collectionGigIds,
           );
       debugPrint('[AiChat] intent_detectado=${interpreted.accion}');
       final action = await AiAssistantService.instance.resolveEntities(
@@ -222,6 +224,11 @@ class AiChatNotifier extends AsyncNotifier<AiChatState> {
             ? AiActionStatus.pendingConfirmation
             : null,
       );
+      final previewCollectionGigIds = await AiAssistantService.instance
+          .collectionGigIdsFor(action);
+      if (previewCollectionGigIds.isNotEmpty) {
+        metadata['collection_gig_ids'] = previewCollectionGigIds;
+      }
       metadata = AiConversationContextService.instance.attach(
         metadata,
         nextContext,
@@ -468,6 +475,19 @@ class AiChatNotifier extends AsyncNotifier<AiChatState> {
       if (entities.length >= 8) break;
     }
     return entities;
+  }
+
+  List<String> _lastCollectionGigIds(List<AiAssistantMessage> messages) {
+    for (final message in messages.reversed) {
+      final raw = message.metadata?['collection_gig_ids'];
+      if (raw is List) {
+        return raw
+            .map((item) => item.toString().trim())
+            .where((item) => item.isNotEmpty)
+            .toList();
+      }
+    }
+    return const [];
   }
 
   AiAssistantMessage _withActionStatus(

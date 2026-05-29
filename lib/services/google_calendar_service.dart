@@ -17,32 +17,60 @@ class GoogleCalendarService {
   ];
 
   Future<gcal.CalendarApi> _getApi() async {
-    // En iOS/Android/macOS usamos el token del proveedor Google
-    // asociado a la sesión (PlatformAuthService).
-    if (!kIsWeb && (Platform.isIOS || Platform.isAndroid || Platform.isMacOS)) {
-      final token = await PlatformAuthService.instance.getAccessToken();
+    // En iOS/Android usamos google_sign_in y pedimos un token fresco.
+    if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
+      var token = await PlatformAuthService.instance.getAccessToken();
       if (token == null || token.isEmpty) {
-        throw StateError('No hay access token de Google');
+        await PlatformAuthService.instance.signInSilently();
+        token = await PlatformAuthService.instance.getAccessToken();
       }
-      final creds = gauth.AccessCredentials(
-        gauth.AccessToken(
-          'Bearer',
-          token,
-          DateTime.now().toUtc().add(const Duration(minutes: 30)),
-        ),
-        null,
-        _calendarScopes,
+      if (token == null || token.isEmpty) {
+        throw StateError(
+          'Google Calendar no está conectado. Vuelve a conectar Google desde Perfil.',
+        );
+      }
+      return _apiFromAccessToken(token);
+    }
+
+    // En macOS puede existir sesión Supabase sin provider token. Si no hay
+    // token de proveedor, caemos al OAuth desktop persistido.
+    if (!kIsWeb && Platform.isMacOS) {
+      final token = await PlatformAuthService.instance.getAccessToken();
+      if (token != null && token.isNotEmpty) {
+        return _apiFromAccessToken(token);
+      }
+      await GoogleAuthService.instance.signInSilently();
+      final desktopApi = GoogleAuthService.instance.calendarApi;
+      if (desktopApi != null) return desktopApi;
+      throw StateError(
+        'Google Calendar no está conectado. Vuelve a conectar Google Calendar desde Perfil.',
       );
-      final client = gauth.authenticatedClient(http.Client(), creds);
-      return gcal.CalendarApi(client);
     }
 
     // En escritorio seguimos con el cliente OAuth persistido.
-    final desktopApi = GoogleAuthService.instance.calendarApi;
+    var desktopApi = GoogleAuthService.instance.calendarApi;
+    if (desktopApi == null) {
+      await GoogleAuthService.instance.signInSilently();
+      desktopApi = GoogleAuthService.instance.calendarApi;
+    }
     if (desktopApi == null) {
       throw StateError('No hay sesión de Google activa');
     }
     return desktopApi;
+  }
+
+  gcal.CalendarApi _apiFromAccessToken(String token) {
+    final creds = gauth.AccessCredentials(
+      gauth.AccessToken(
+        'Bearer',
+        token,
+        DateTime.now().toUtc().add(const Duration(minutes: 30)),
+      ),
+      null,
+      _calendarScopes,
+    );
+    final client = gauth.authenticatedClient(http.Client(), creds);
+    return gcal.CalendarApi(client);
   }
 
   /// Obtiene o crea el calendario "MisBolos" en la cuenta del usuario.

@@ -89,6 +89,36 @@ class DriveWorkspaceSetupResult {
   });
 }
 
+enum DriveConnectionStatus {
+  disconnected,
+  googleConnectedNoDrive,
+  missingFolder,
+  permissionMissing,
+  folderNotAccessible,
+  connected,
+  error,
+}
+
+class DriveConnectionCheck {
+  final DriveConnectionStatus status;
+  final String message;
+  final GoogleAccount? account;
+  final String? folderId;
+  final String? folderName;
+  final Object? error;
+
+  const DriveConnectionCheck({
+    required this.status,
+    required this.message,
+    this.account,
+    this.folderId,
+    this.folderName,
+    this.error,
+  });
+
+  bool get isConnected => status == DriveConnectionStatus.connected;
+}
+
 class GoogleDriveService {
   static final GoogleDriveService instance = GoogleDriveService._();
   GoogleDriveService._();
@@ -100,6 +130,115 @@ class GoogleDriveService {
   bool get _usesPlatformAuth =>
       !kIsWeb && (Platform.isIOS || Platform.isAndroid || Platform.isMacOS);
 
+  Future<DriveConnectionCheck> checkDriveConnectionStatus() async {
+    final settings = await _settingsRepository.get();
+    final account = await getCurrentAccount();
+    final hasGoogleAccount =
+        account?.email?.trim().isNotEmpty == true ||
+        PlatformAuthService.instance.isSignedIn ||
+        GoogleAuthService.instance.isSignedIn;
+    if (!hasGoogleAccount) {
+      await _persistDriveConnected(false);
+      final result = DriveConnectionCheck(
+        status: DriveConnectionStatus.disconnected,
+        message: 'Sesión caducada, vuelve a conectar',
+        account: account,
+      );
+      _logStatus(result);
+      return result;
+    }
+
+    final folderId = settings.driveRootFolderId?.trim();
+    final folderName = settings.driveRootFolderName?.trim();
+    drive.DriveApi api;
+    try {
+      api = await _driveApi();
+    } catch (e) {
+      await _persistDriveConnected(false);
+      final result = DriveConnectionCheck(
+        status: _looksLikePermissionError(e)
+            ? DriveConnectionStatus.permissionMissing
+            : DriveConnectionStatus.googleConnectedNoDrive,
+        message: _looksLikePermissionError(e)
+            ? 'Permisos insuficientes'
+            : 'Sesión caducada, vuelve a conectar',
+        account: account,
+        folderId: folderId,
+        folderName: folderName,
+        error: e,
+      );
+      _logStatus(result);
+      return result;
+    }
+
+    if (folderId == null || folderId.isEmpty) {
+      await _persistDriveConnected(false);
+      final result = DriveConnectionCheck(
+        status: DriveConnectionStatus.missingFolder,
+        message: 'Drive conectado a Google, pero falta seleccionar carpeta',
+        account: account,
+      );
+      _logStatus(result);
+      return result;
+    }
+
+    try {
+      final folder = await api.files.get(
+        folderId,
+        $fields: 'id,name,mimeType,trashed',
+        supportsAllDrives: true,
+      ) as drive.File;
+      final accessible = folder.id != null &&
+          folder.trashed != true &&
+          folder.mimeType == 'application/vnd.google-apps.folder';
+      if (!accessible) {
+        await _persistDriveConnected(false);
+        final result = DriveConnectionCheck(
+          status: DriveConnectionStatus.folderNotAccessible,
+          message: 'No se puede acceder a la carpeta seleccionada',
+          account: account,
+          folderId: folderId,
+          folderName: folderName,
+        );
+        _logStatus(result);
+        return result;
+      }
+      await _settingsRepository.save(
+        settings.copyWith(
+          driveConnected: true,
+          driveRootFolderName: folder.name ?? folderName,
+          driveAccountEmail: account?.email ?? settings.driveAccountEmail,
+          driveAccountName: account?.displayName ?? settings.driveAccountName,
+        ),
+      );
+      final result = DriveConnectionCheck(
+        status: DriveConnectionStatus.connected,
+        message: 'Drive conectado',
+        account: account,
+        folderId: folderId,
+        folderName: folder.name ?? folderName,
+      );
+      _logStatus(result);
+      return result;
+    } catch (e) {
+      await _persistDriveConnected(false);
+      final result = DriveConnectionCheck(
+        status: _looksLikePermissionError(e)
+            ? DriveConnectionStatus.permissionMissing
+            : DriveConnectionStatus.folderNotAccessible,
+        message: _looksLikePermissionError(e)
+            ? 'Permisos insuficientes'
+            : 'No se puede acceder a la carpeta seleccionada',
+        account: account,
+        folderId: folderId,
+        folderName: folderName,
+        error: e,
+      );
+      _logStatus(result);
+      return result;
+    }
+  }
+
   Future<void> signIn() async {
     final success = _usesPlatformAuth
         ? await PlatformAuthService.instance.signIn()
@@ -108,12 +247,21 @@ class GoogleDriveService {
     if (!success) {
       throw Exception('No se pudo conectar con Google Drive.');
     }
+    if (!kIsWeb && Platform.isMacOS) {
+      final token = await PlatformAuthService.instance.getAccessToken();
+      if (token == null || token.isEmpty) {
+        final desktopSuccess = await GoogleAuthService.instance.signIn();
+        if (!desktopSuccess) {
+          throw Exception('Permisos insuficientes');
+        }
+      }
+    }
 
     final settings = await _settingsRepository.get();
     final account = await getCurrentAccount();
     await _settingsRepository.save(
       settings.copyWith(
-        driveConnected: true,
+        driveConnected: false,
         driveAccountEmail: account?.email,
         driveAccountName: account?.displayName,
       ),
@@ -164,12 +312,19 @@ class GoogleDriveService {
   }
 
   Future<bool> isConnected() async {
-    final settings = await _settingsRepository.get();
-    return settings.driveConnected;
+    return (await checkDriveConnectionStatus()).isConnected;
   }
 
   Future<GoogleAccount?> getCurrentAccount() async {
     if (_usesPlatformAuth) {
+      if (!kIsWeb &&
+          Platform.isMacOS &&
+          GoogleAuthService.instance.userEmail?.trim().isNotEmpty == true) {
+        return GoogleAccount(
+          email: GoogleAuthService.instance.userEmail,
+          displayName: GoogleAuthService.instance.displayName,
+        );
+      }
       return GoogleAccount(
         email: PlatformAuthService.instance.userEmail,
         displayName: PlatformAuthService.instance.displayName,
@@ -215,13 +370,17 @@ class GoogleDriveService {
     final account = await getCurrentAccount();
     await _settingsRepository.save(
       settings.copyWith(
-        driveConnected: true,
+        driveConnected: false,
         driveRootFolderId: folder.id,
         driveRootFolderName: folder.name,
         driveAccountEmail: account?.email ?? settings.driveAccountEmail,
         driveAccountName: account?.displayName ?? settings.driveAccountName,
       ),
     );
+    final status = await checkDriveConnectionStatus();
+    if (!status.isConnected) {
+      throw Exception(status.message);
+    }
   }
 
   Future<bool> restoreSilently() async {
@@ -235,15 +394,8 @@ class GoogleDriveService {
       return false;
     }
 
-    final account = await getCurrentAccount();
-    await _settingsRepository.save(
-      settings.copyWith(
-        driveConnected: true,
-        driveAccountEmail: account?.email ?? settings.driveAccountEmail,
-        driveAccountName: account?.displayName ?? settings.driveAccountName,
-      ),
-    );
-    return true;
+    final status = await checkDriveConnectionStatus();
+    return status.isConnected;
   }
 
   Future<String> ensureRootFolder() {
@@ -694,7 +846,7 @@ class GoogleDriveService {
   }
 
   Future<drive.DriveApi> _driveApi() async {
-    if (_usesPlatformAuth) {
+    if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
       var token = await PlatformAuthService.instance.getAccessToken();
       if (token == null) {
         final signedIn = await PlatformAuthService.instance.signInSilently();
@@ -717,6 +869,25 @@ class GoogleDriveService {
       return drive.DriveApi(
         auth.authenticatedClient(http.Client(), credentials),
       );
+    }
+
+    if (!kIsWeb && Platform.isMacOS) {
+      var token = await PlatformAuthService.instance.getAccessToken();
+      if (token != null && token.isNotEmpty) {
+        final credentials = auth.AccessCredentials(
+          auth.AccessToken(
+            'Bearer',
+            token,
+            DateTime.now().toUtc().add(const Duration(hours: 1)),
+          ),
+          null,
+          [drive.DriveApi.driveScope],
+        );
+        return drive.DriveApi(
+          auth.authenticatedClient(http.Client(), credentials),
+        );
+      }
+      await GoogleAuthService.instance.signInSilently();
     }
 
     if (!GoogleAuthService.instance.isSignedIn) {
@@ -746,6 +917,29 @@ class GoogleDriveService {
   void _clearFolderCache() {
     _folderIdCache.clear();
     _monthStructureCache.clear();
+  }
+
+  Future<void> _persistDriveConnected(bool connected) async {
+    final settings = await _settingsRepository.get();
+    if (settings.driveConnected == connected) return;
+    await _settingsRepository.save(settings.copyWith(driveConnected: connected));
+  }
+
+  bool _looksLikePermissionError(Object error) {
+    final message = error.toString().toLowerCase();
+    return message.contains('insufficient') ||
+        message.contains('permission') ||
+        message.contains('forbidden') ||
+        message.contains('403') ||
+        message.contains('scope');
+  }
+
+  void _logStatus(DriveConnectionCheck result) {
+    debugPrint(
+      '[DriveStatus] status=${result.status.name} message="${result.message}" '
+      'folder=${result.folderId ?? '-'} account=${result.account?.email ?? '-'} '
+      'error=${result.error ?? '-'}',
+    );
   }
 }
 
