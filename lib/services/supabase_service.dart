@@ -214,7 +214,7 @@ class SupabaseService {
   /// IDs de invoices válidos (se establecen antes de subir gigs)
   Set<String> _validInvoiceIds = {};
 
-  /// Sincroniza todos los bolos (incluidos los "en B")
+  /// Sincroniza todos los bolos (incluidos los privados)
   Future<void> uploadGigs(List<Gig> gigs) async {
     if (!isAuthenticated) return;
 

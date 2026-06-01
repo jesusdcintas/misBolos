@@ -20,11 +20,11 @@ extension GigStatusExtension on GigStatus {
       case GigStatus.cobrado:
         return 'Cobrado';
       case GigStatus.confirmadoB:
-        return 'Confirmado en B';
+        return 'Confirmado privado';
       case GigStatus.realizadoB:
-        return 'Realizado en B';
+        return 'Realizado privado';
       case GigStatus.cobradoB:
-        return 'Cobrado en B';
+        return 'Cobrado privado';
       case GigStatus.cancelado:
         return 'Cancelado';
     }
@@ -158,7 +158,7 @@ class Gig {
   factory Gig.fromMap(Map<String, dynamic> map) {
     final facturable = (map['facturable'] as int) == 1;
     var status = GigStatusExtension.fromDb(map['status'] as String);
-    // Compatibilidad con datos antiguos: "pendiente" en bolos en B
+    // Compatibilidad con datos antiguos: "pendiente" en eventos privados
     // debe leerse como "confirmado_b".
     if (!facturable && status == GigStatus.confirmado) {
       status = GigStatus.confirmadoB;

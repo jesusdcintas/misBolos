@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'core/constants/app_colors.dart';
 import 'core/security/app_lock_manager.dart';
 import 'core/theme/app_theme.dart';
 import 'database/database_helper.dart';
@@ -161,16 +162,6 @@ final routerProvider = Provider<GoRouter>((ref) {
             ),
           ),
           GoRoute(
-            path: '/assistant',
-            pageBuilder: (context, state) => CustomTransitionPage(
-              key: state.pageKey,
-              child: const AiAssistantScreen(),
-              transitionDuration: const Duration(milliseconds: 200),
-              transitionsBuilder: (context, animation, secondary, child) =>
-                  FadeTransition(opacity: animation, child: child),
-            ),
-          ),
-          GoRoute(
             path: '/settings',
             pageBuilder: (context, state) => CustomTransitionPage(
               key: state.pageKey,
@@ -191,6 +182,12 @@ final routerProvider = Provider<GoRouter>((ref) {
             ),
           ),
         ],
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/assistant',
+        pageBuilder: (context, state) =>
+            _slideUpPage(const AiAssistantScreen(), state),
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
@@ -643,11 +640,16 @@ class _ScaffoldWithNavBar extends StatefulWidget {
 }
 
 class _ScaffoldWithNavBarState extends State<_ScaffoldWithNavBar> {
+  static const double _bolinSize = 58;
+  static const double _bolinMargin = 16;
+  static const double _bolinDefaultBottom = 96;
+
+  Offset? _bolinOffset;
+
   static const _paths = [
     '/',
     '/calendar',
     '/finanzas',
-    '/assistant',
     '/profile',
     '/settings',
   ];
@@ -656,9 +658,8 @@ class _ScaffoldWithNavBarState extends State<_ScaffoldWithNavBar> {
     if (location == '/') return 0;
     if (location.startsWith('/calendar')) return 1;
     if (location.startsWith('/finanzas')) return 2;
-    if (location.startsWith('/assistant')) return 3;
-    if (location.startsWith('/profile')) return 4;
-    if (location.startsWith('/settings')) return 5;
+    if (location.startsWith('/profile')) return 3;
+    if (location.startsWith('/settings')) return 4;
     return 0;
   }
 
@@ -673,13 +674,53 @@ class _ScaffoldWithNavBarState extends State<_ScaffoldWithNavBar> {
 
   @override
   Widget build(BuildContext context) {
-    final selectedIndex = _indexFromLocation(
-      GoRouterState.of(context).uri.path,
-    );
+    final location = GoRouterState.of(context).uri.path;
+    final selectedIndex = _indexFromLocation(location);
+    final showBolin = !location.startsWith('/assistant');
 
     return Scaffold(
       resizeToAvoidBottomInset: true,
-      body: widget.child,
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final maxWidth = constraints.maxWidth;
+          final maxHeight = constraints.maxHeight;
+          final defaultOffset = Offset(
+            maxWidth - _bolinSize - _bolinMargin,
+            maxHeight - _bolinSize - _bolinDefaultBottom,
+          );
+          final effectiveOffset = _clampBolinOffset(
+            _bolinOffset ?? defaultOffset,
+            Size(maxWidth, maxHeight),
+          );
+          _bolinOffset = effectiveOffset;
+
+          return Stack(
+            children: [
+              Positioned.fill(child: widget.child),
+              if (showBolin)
+                Positioned(
+                  left: effectiveOffset.dx,
+                  top: effectiveOffset.dy,
+                  child: _BolinBubble(
+                    size: _bolinSize,
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      context.push('/assistant');
+                    },
+                    onDrag: (delta) {
+                      setState(() {
+                        _bolinOffset = _clampBolinOffset(
+                          effectiveOffset + delta,
+                          Size(maxWidth, maxHeight),
+                        );
+                      });
+                    },
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: selectedIndex,
         onDestinationSelected: _onNavTapped,
@@ -700,11 +741,6 @@ class _ScaffoldWithNavBarState extends State<_ScaffoldWithNavBar> {
             label: 'Finanzas',
           ),
           NavigationDestination(
-            icon: Icon(Icons.auto_awesome_outlined),
-            selectedIcon: Icon(Icons.auto_awesome),
-            label: 'IA',
-          ),
-          NavigationDestination(
             icon: Icon(Icons.person_outline),
             selectedIcon: Icon(Icons.person),
             label: 'Perfil',
@@ -715,6 +751,70 @@ class _ScaffoldWithNavBarState extends State<_ScaffoldWithNavBar> {
             label: 'Ajustes',
           ),
         ],
+      ),
+    );
+  }
+
+  Offset _clampBolinOffset(Offset offset, Size size) {
+    final maxX = (size.width - _bolinSize - _bolinMargin).clamp(
+      _bolinMargin,
+      double.infinity,
+    );
+    final maxY = (size.height - _bolinSize - _bolinMargin).clamp(
+      _bolinMargin,
+      double.infinity,
+    );
+    return Offset(
+      offset.dx.clamp(_bolinMargin, maxX.toDouble()),
+      offset.dy.clamp(_bolinMargin, maxY.toDouble()),
+    );
+  }
+}
+
+class _BolinBubble extends StatelessWidget {
+  final double size;
+  final VoidCallback onTap;
+  final ValueChanged<Offset> onDrag;
+
+  const _BolinBubble({
+    required this.size,
+    required this.onTap,
+    required this.onDrag,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: 'Abrir Bolín',
+      child: GestureDetector(
+        onTap: onTap,
+        onPanUpdate: (details) => onDrag(details.delta),
+        child: Material(
+          color: Colors.transparent,
+          elevation: 8,
+          shape: const CircleBorder(),
+          child: Container(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppColors.primary,
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.primary.withValues(alpha: 0.24),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.auto_awesome,
+              color: Colors.white,
+              size: 28,
+            ),
+          ),
+        ),
       ),
     );
   }

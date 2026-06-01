@@ -149,7 +149,7 @@ class ClientDetailScreen extends ConsumerWidget {
                             child: Column(
                               children: [
                                 const Text(
-                                  'Cobrado en B',
+                                  'Cobrado privado',
                                   style: TextStyle(fontSize: 12),
                                 ),
                                 Text(

@@ -461,11 +461,11 @@ class _SummaryCard extends StatelessWidget {
             ),
             const SizedBox(height: 14),
 
-            // Cobrado en B
+            // Eventos privados
             _statRow(
               icon: Icons.money_off,
               color: AppColors.purple,
-              label: 'Cobrado en B',
+              label: 'Cobrado privado',
               value: summary.cobradoEnB,
             ),
 
@@ -474,7 +474,7 @@ class _SummaryCard extends StatelessWidget {
               _statRow(
                 icon: Icons.hourglass_empty,
                 color: AppColors.purple,
-                label: 'Pendiente de cobro en B',
+                label: 'Pendiente de cobro privado',
                 value: summary.pendienteEnB,
               ),
             ],
@@ -484,7 +484,7 @@ class _SummaryCard extends StatelessWidget {
               _statRow(
                 icon: Icons.event_available,
                 color: AppColors.purple,
-                label: 'Previsto en B',
+                label: 'Previsto privado',
                 value: summary.previstoEnB,
               ),
             ],
@@ -1273,10 +1273,14 @@ class _SubPeriodCard extends StatelessWidget {
                   stats.pendiente,
                   AppColors.warning,
                 ),
-                _detailRow('Cobrado en B', stats.cobradoEnB, AppColors.purple),
+                _detailRow(
+                  'Cobrado privado',
+                  stats.cobradoEnB,
+                  AppColors.purple,
+                ),
                 if (stats.pendienteEnB > 0)
                   _detailRow(
-                    'Pendiente de cobro en B',
+                    'Pendiente de cobro privado',
                     stats.pendienteEnB,
                     AppColors.purple,
                   ),
@@ -1284,7 +1288,7 @@ class _SubPeriodCard extends StatelessWidget {
                   _detailRow('Previsto', stats.previsto, AppColors.primary),
                 if (stats.previstoEnB > 0)
                   _detailRow(
-                    'Previsto en B',
+                    'Previsto privado',
                     stats.previstoEnB,
                     AppColors.purple,
                   ),

@@ -195,7 +195,7 @@ class _GigDetailContent extends ConsumerWidget {
       if (gig.status == GigStatus.confirmadoB) {
         actions.add(
           _ActionButton(
-            label: 'Marcar realizado en B',
+            label: 'Marcar realizado privado',
             icon: Icons.task_alt,
             color: AppColors.purple,
             onPressed: () => _markAsRealizadoEnB(context, ref, gig),
@@ -297,7 +297,7 @@ class _GigDetailContent extends ConsumerWidget {
     ref.invalidate(gigByIdProvider(gig.id));
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Marcado como cobrado en B')),
+        const SnackBar(content: Text('Marcado como cobrado privado')),
       );
     }
   }
@@ -314,7 +314,7 @@ class _GigDetailContent extends ConsumerWidget {
     ref.invalidate(gigByIdProvider(gig.id));
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Marcado como realizado en B')),
+        const SnackBar(content: Text('Marcado como realizado privado')),
       );
     }
   }

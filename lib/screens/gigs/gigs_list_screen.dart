@@ -496,7 +496,7 @@ class _GigsListScreenState extends ConsumerState<GigsListScreen> {
                               ? 'Facturable'
                               : facturableFilter == true
                               ? 'Facturable'
-                              : 'En B',
+                              : 'Privado',
                           active: facturableFilter != null,
                           onTap: () => _showFacturableSheet(context, ref),
                         ),
@@ -598,7 +598,7 @@ class _GigsListScreenState extends ConsumerState<GigsListScreen> {
                           icon: const Icon(Icons.hourglass_empty),
                         ),
                         IconButton(
-                          tooltip: 'En B',
+                          tooltip: 'Privado',
                           onPressed: () => _applyBulkStatus(GigStatus.cobradoB),
                           icon: const Icon(
                             Icons.account_balance_wallet_outlined,
@@ -889,7 +889,10 @@ class _GigsListScreenState extends ConsumerState<GigsListScreen> {
                     title: Text('Solo facturables'),
                     value: true,
                   ),
-                  RadioListTile<bool?>(title: Text('Solo en B'), value: false),
+                  RadioListTile<bool?>(
+                    title: Text('Solo privados'),
+                    value: false,
+                  ),
                 ],
               ),
             ),

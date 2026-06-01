@@ -335,7 +335,7 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
       if (_existingGig != null) {
         GigStatus status = _existingGig!.status;
         if (_existingGig!.facturable != _facturable) {
-          // Adaptar estado al cambiar entre facturable y en B.
+          // Adaptar estado al cambiar entre facturable y privado.
           if (_facturable) {
             if (status == GigStatus.confirmadoB ||
                 status == GigStatus.realizadoB) {

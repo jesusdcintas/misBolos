@@ -59,6 +59,21 @@ class AiService {
           'Has alcanzado el límite gratuito temporal de IA. Inténtalo más tarde.',
         );
       }
+      if (code == 'upstream_error') {
+        final upstreamStatus = data['upstream_status']?.toString();
+        final upstreamError = data['upstream_error']?.toString();
+        final detail = [
+          if (upstreamStatus != null && upstreamStatus.isNotEmpty)
+            'Proveedor IA: $upstreamStatus',
+          if (upstreamError != null && upstreamError.isNotEmpty)
+            upstreamError,
+        ].join(' · ');
+        throw Exception(
+          detail.isEmpty
+              ? 'La IA no está disponible temporalmente.'
+              : 'La IA no está disponible temporalmente. $detail',
+        );
+      }
       final error = data['error']?.toString().trim();
       throw Exception(error?.isNotEmpty == true ? error : 'Error de IA.');
     }

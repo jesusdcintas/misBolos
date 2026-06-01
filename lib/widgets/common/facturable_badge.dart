@@ -30,7 +30,7 @@ class FacturableBadge extends StatelessWidget {
         : facturable
         ? AppColors.success
         : AppColors.purple;
-    final label = facturable ? 'Facturable' : 'En B';
+    final label = facturable ? 'Facturable' : 'Privado';
 
     return Container(
       padding: EdgeInsets.symmetric(

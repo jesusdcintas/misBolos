@@ -27,7 +27,7 @@ enum ColumnRole {
   fecha('Fecha del bolo', true),
   cliente('Nombre del cliente/venue', true),
   importeFacturable('Importe facturable', false),
-  importeEnB('Importe en B', false),
+  importeEnB('Importe privado', false),
   numeroFactura('Número de factura', false),
   estado('Estado', false),
   ignorar('— Ignorar —', false);

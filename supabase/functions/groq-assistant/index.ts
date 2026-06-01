@@ -29,7 +29,8 @@ const corsHeaders = {
 
 const MAX_MESSAGE = 6000;
 const MAX_IMAGE_TEXT = 12000;
-const MAX_CONTEXT = 12000;
+const MAX_CONTEXT = 4000;
+const MAX_CONTEXT_ASSISTANT = 1500;
 const MAX_IMAGE_BASE64 = 4 * 1024 * 1024;
 
 Deno.serve(async (req) => {
@@ -80,7 +81,10 @@ Deno.serve(async (req) => {
 
     const message = truncate(body.message.trim(), MAX_MESSAGE);
     const imageText = truncate(body.image_text?.trim() ?? "", MAX_IMAGE_TEXT);
-    const contextData = truncateJson(body.context_data ?? {}, MAX_CONTEXT);
+    const contextLimit = body.task_type === "assistant_action"
+      ? MAX_CONTEXT_ASSISTANT
+      : MAX_CONTEXT;
+    const contextData = truncateJson(body.context_data ?? {}, contextLimit);
     const imageBase64 = body.image_base64?.trim() ?? "";
     const imageUrl = body.image_url?.trim() ?? "";
     const imageMimeType =
@@ -139,10 +143,20 @@ Deno.serve(async (req) => {
       );
     }
     if (!response.ok) {
+      const upstreamError = extractUpstreamError(raw);
       console.error(
-        `[groq-assistant] user=${user.id} task=${body.task_type} status=${response.status}`,
+        `[groq-assistant] user=${user.id} task=${body.task_type} status=${response.status} upstream=${upstreamError}`,
       );
-      return json({ ok: false, error: "Error al consultar IA." }, 502);
+      return json(
+        {
+          ok: false,
+          code: "upstream_error",
+          error: "Error al consultar IA.",
+          upstream_status: response.status,
+          upstream_error: upstreamError,
+        },
+        502,
+      );
     }
 
     const data = JSON.parse(raw);
@@ -219,6 +233,28 @@ function isAllowedTask(task: string): task is TaskType {
     task === "extract_expense" ||
     task === "extract_investment"
   );
+}
+
+function extractUpstreamError(raw: string): string {
+  if (!raw.trim()) return "empty upstream body";
+  try {
+    const parsed = JSON.parse(raw);
+    if (isRecord(parsed)) {
+      const errorObj = isRecord(parsed.error) ? parsed.error : null;
+      if (errorObj) {
+        const message = readString(errorObj.message);
+        const code = readString(errorObj.code);
+        const type = readString(errorObj.type);
+        const parts = [type, code, message].filter(Boolean);
+        if (parts.length > 0) return parts.join(" | ");
+      }
+      const message = readString(parsed.message);
+      if (message) return message;
+    }
+  } catch (_) {
+    // ignore parse error and return raw snippet
+  }
+  return raw.slice(0, 400);
 }
 
 function normalizeExtractedExpense(input: unknown) {
@@ -793,6 +829,8 @@ function buildMessages({
       "Si falta una fecha concreta para crear o cambiar un bolo, devuelve accion=pregunta_aclaratoria y pregunta breve.",
       "Si hay ambigüedad importante, pregunta. No inventes clientes, emails, importes ni fechas.",
       "Para búsquedas usa filtros con fecha_desde y fecha_hasta cuando sea posible.",
+      "Para búsquedas de facturas usa filtros compatibles con la app: status (borrador|pendiente_de_cobro|cobrada), mes (1-12), cliente (nombre o alias), fecha (YYYY-MM-DD).",
+      "Mapea 'pendiente de cobro' a status='pendiente_de_cobro' y 'cobrada/pagada' a status='cobrada'.",
       "Para actualizar_bolo, crear_factura y enviar_factura_email, intenta rellenar objetivo con pistas estructuradas: cliente, cliente_nombre, nombre, gig_nombre, fecha, importe, numero_factura, selector, gig_id, invoice_id si existen.",
       "Si el usuario menciona varios bolos y no queda claro cuál modificar, usa accion=pregunta_aclaratoria con una pregunta breve.",
       "Para 'último bolo' usa objetivo {\"selector\":\"ultimo_bolo\"}. Para 'última factura' usa objetivo {\"selector\":\"ultima_factura\"}.",

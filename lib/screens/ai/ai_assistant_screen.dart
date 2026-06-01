@@ -122,7 +122,7 @@ class _AiAssistantScreenState extends ConsumerState<AiAssistantScreen> {
     return Scaffold(
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
-        title: const Text('Asistente IA'),
+        title: const Text('Bolín'),
         actions: [
           IconButton(
             tooltip: 'Chats anteriores',
@@ -200,7 +200,7 @@ class _EmptyChatState extends StatelessWidget {
             ),
             const SizedBox(height: 14),
             Text(
-              'Pregúntame o dime qué quieres apuntar.',
+              'Pregúntale a Bolín o dile qué quieres apuntar.',
               textAlign: TextAlign.center,
               style: Theme.of(
                 context,
@@ -511,7 +511,7 @@ class _Composer extends StatelessWidget {
               textInputAction: TextInputAction.newline,
               enabled: !sending,
               decoration: const InputDecoration(
-                hintText: 'Escribe una acción para MisBolos',
+                hintText: 'Escribe una acción para Bolín',
                 prefixIcon: Icon(Icons.auto_awesome_outlined),
               ),
               onSubmitted: (_) => onSend(),

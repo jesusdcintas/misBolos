@@ -601,19 +601,19 @@ class PdfService {
                     color: warning,
                   ),
                   _summaryRow(
-                    'Cobrado en B',
+                    'Cobrado privado',
                     _formatCurrency(summary.cobradoEnB),
                     color: purple,
                   ),
                   if (summary.pendienteEnB > 0)
                     _summaryRow(
-                      'Pendiente en B',
+                      'Pendiente privado',
                       _formatCurrency(summary.pendienteEnB),
                       color: purple,
                     ),
                   if (summary.previstoEnB > 0)
                     _summaryRow(
-                      'Previsto en B',
+                      'Previsto privado',
                       _formatCurrency(summary.previstoEnB),
                       color: purple,
                     ),
@@ -839,7 +839,7 @@ class PdfService {
                       _headerCell('Bolos'),
                       _headerCell('Cobrado'),
                       _headerCell('Pendiente'),
-                      _headerCell('En B'),
+                      _headerCell('Privado'),
                       _headerCell('T. Previsto'),
                     ],
                   ),

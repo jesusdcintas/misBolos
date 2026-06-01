@@ -381,7 +381,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
               const SizedBox(width: 8),
               const Expanded(
                 child: Text(
-                  'Todos los bolos importados, incluidos los en B, se sincronizan con Supabase. Solo tú puedes acceder a ellos.',
+                  'Todos los bolos importados, incluidos los eventos privados, se sincronizan con Supabase. Solo tú puedes acceder a ellos.',
                   style: TextStyle(fontSize: 12),
                 ),
               ),
@@ -422,7 +422,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
           ),
           const Divider(height: 24),
           _summaryRow('Bolos facturables', '${p.bolosFacturables}'),
-          _summaryRow('Bolos en B', '${p.bolosEnB}'),
+          _summaryRow('Eventos privados', '${p.bolosEnB}'),
           _summaryRow('Clientes nuevos', '${p.clientesNuevos}'),
           _summaryRow(
             'Total importe',

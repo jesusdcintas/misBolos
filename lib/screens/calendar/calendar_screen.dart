@@ -403,7 +403,7 @@ class CalendarScreen extends ConsumerWidget {
                   _LegendItem(color: AppColors.primary, label: 'Confirmado'),
                   _LegendItem(
                     color: AppColors.accentPurple,
-                    label: 'Confirmado/Realizado en B',
+                    label: 'Privado confirmado/realizado',
                   ),
                   _LegendItem(
                     color: AppColors.accentOrange,
@@ -782,7 +782,7 @@ class CalendarScreen extends ConsumerWidget {
                           ? 'Facturable'
                           : facturableFilter == true
                           ? 'Facturable'
-                          : 'En B',
+                          : 'Privado',
                       active: facturableFilter != null,
                       onTap: () => _showFacturableSheet(context, ref),
                     ),
@@ -1197,7 +1197,10 @@ class CalendarScreen extends ConsumerWidget {
                     title: Text('Solo facturables'),
                     value: true,
                   ),
-                  RadioListTile<bool?>(title: Text('Solo en B'), value: false),
+                  RadioListTile<bool?>(
+                    title: Text('Solo privados'),
+                    value: false,
+                  ),
                 ],
               ),
             ),
@@ -1778,7 +1781,7 @@ class _BulkGigsActionsBar extends ConsumerWidget {
             const SizedBox(width: 8),
             _BulkActionButton(
               icon: Icons.payments_outlined,
-              label: 'En B',
+              label: 'Privado',
               fgColor: AppColors.purple,
               bgColor: AppColors.purpleBg,
               onTap: () => setFacturable(false),

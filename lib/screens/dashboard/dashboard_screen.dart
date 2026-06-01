@@ -223,7 +223,7 @@ class DashboardScreen extends ConsumerWidget {
                 onInfoTap: () => _showMetricInfo(
                   context,
                   'Cobrado',
-                  'Dinero ya recibido.\n· Facturas marcadas como pagadas\n· Bolos históricos importados sin factura\n· Cobros en B confirmados',
+                  'Dinero ya recibido.\n· Facturas marcadas como pagadas\n· Bolos históricos importados sin factura\n· Cobros privados confirmados',
                 ),
               ),
             ),
@@ -256,16 +256,16 @@ class DashboardScreen extends ConsumerWidget {
         const SizedBox(height: 8),
 
         // CONFIRMADO (solo si > 0)
-        if (stats.previsto > 0) ...[
+        if (stats.previstoConfirmado > 0) ...[
           SummaryCard(
             title: 'Confirmado',
-            value: CurrencyFormatter.format(stats.previsto),
-            numericValue: stats.previsto,
+            value: CurrencyFormatter.format(stats.previstoConfirmado),
+            numericValue: stats.previstoConfirmado,
             color: AppColors.primary,
             icon: Icons.event_available,
             backgroundColor: const Color(0xFFEEF1F7),
             subtitle: Text(
-              '(${stats.previstoCount} bolo${stats.previstoCount == 1 ? '' : 's'} confirmado${stats.previstoCount == 1 ? '' : 's'} en agenda\n aún no realizado${stats.previstoCount == 1 ? '' : 's'} ni facturado${stats.previstoCount == 1 ? '' : 's'})',
+              '(${stats.previstoConfirmadoCount} bolo${stats.previstoConfirmadoCount == 1 ? '' : 's'} confirmado${stats.previstoConfirmadoCount == 1 ? '' : 's'} en agenda\n aún no realizado${stats.previstoConfirmadoCount == 1 ? '' : 's'} ni facturado${stats.previstoConfirmadoCount == 1 ? '' : 's'})',
               style: const TextStyle(fontSize: 11, color: Color(0xFF8C95A6)),
             ),
                 onInfoTap: () => _showMetricInfo(
@@ -313,7 +313,9 @@ class DashboardScreen extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '(acumulado ${CurrencyFormatter.format(stats.acumulado)} + previsto\n ${CurrencyFormatter.format(stats.previsto)})',
+                      '(acumulado ${CurrencyFormatter.format(stats.acumulado)}'
+                      '\n + confirmado ${CurrencyFormatter.format(stats.previstoConfirmado)}'
+                      '\n + borrador ${CurrencyFormatter.format(stats.previstoBorrador)})',
                       style: const TextStyle(
                         fontSize: 11,
                         color: Color(0xFF8C95A6),
@@ -369,7 +371,7 @@ class DashboardScreen extends ConsumerWidget {
 
         const SizedBox(height: 20),
 
-        // Ingresos en B
+        // Eventos privados
         Text(
           AppStrings.ingresosEnB,
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -382,7 +384,7 @@ class DashboardScreen extends ConsumerWidget {
           children: [
             Expanded(
               child: SummaryCard(
-                title: 'Cobrado en B',
+                title: 'Cobrado privado',
                 value: CurrencyFormatter.format(stats.cobradoEnB),
                 numericValue: stats.cobradoEnB,
                 color: AppColors.purple,
@@ -390,7 +392,7 @@ class DashboardScreen extends ConsumerWidget {
                 showChevron: true,
                 onTap: () => context.push('/financial'),
                 subtitle: Text(
-                  '(${stats.numBolosB} bolo${stats.numBolosB == 1 ? '' : 's'} en B)',
+                  '(${stats.numBolosB} evento${stats.numBolosB == 1 ? '' : 's'} privado${stats.numBolosB == 1 ? '' : 's'})',
                   style: const TextStyle(
                     fontSize: 11,
                     color: Color(0xFF8C95A6),
@@ -401,7 +403,7 @@ class DashboardScreen extends ConsumerWidget {
             const SizedBox(width: 12),
             Expanded(
               child: SummaryCard(
-                title: 'Pendiente de cobro en B',
+                title: 'Pendiente de cobro privado',
                 value: CurrencyFormatter.format(stats.pendienteEnB),
                 numericValue: stats.pendienteEnB,
                 color: AppColors.purple,
@@ -409,7 +411,7 @@ class DashboardScreen extends ConsumerWidget {
                 showChevron: true,
                 onTap: () => context.push('/financial'),
                 subtitle: Text(
-                  '(${stats.pendienteEnBCount} realizado${stats.pendienteEnBCount == 1 ? '' : 's'} en B sin cobrar)',
+                  '(${stats.pendienteEnBCount} evento${stats.pendienteEnBCount == 1 ? '' : 's'} privado${stats.pendienteEnBCount == 1 ? '' : 's'} realizado${stats.pendienteEnBCount == 1 ? '' : 's'} sin cobrar)',
                   style: const TextStyle(
                     fontSize: 11,
                     color: Color(0xFF8C95A6),
@@ -420,37 +422,17 @@ class DashboardScreen extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: 8),
-        if (stats.previstoEnB > 0) ...[
-          SummaryCard(
-            title: 'Confirmado en B',
-            value: CurrencyFormatter.format(stats.previstoEnB),
-            numericValue: stats.previstoEnB,
-            color: AppColors.purple,
-            icon: Icons.event_available,
-            backgroundColor: AppColors.purpleBg,
-            subtitle: Text(
-              '(${stats.previstoEnBCount} bolo${stats.previstoEnBCount == 1 ? '' : 's'} futuro${stats.previstoEnBCount == 1 ? '' : 's'} en B)',
-              style: const TextStyle(fontSize: 11, color: Color(0xFF8C95A6)),
-            ),
-            onInfoTap: () => _showMetricInfo(
-              context,
-              'Confirmado en B',
-              'Bolos en B ya cerrados en agenda pero aún no realizados. Es importe previsto, no cobrado.',
-            ),
-          ),
-          const SizedBox(height: 8),
-        ],
         Row(
           children: [
             Expanded(
               child: SummaryCard(
-                title: 'Confirmado en B',
+                title: 'Confirmado privado',
                 value: CurrencyFormatter.format(stats.previstoEnB),
                 numericValue: stats.previstoEnB,
                 color: AppColors.purple,
                 icon: Icons.account_balance,
                 subtitle: Text(
-                  '(${stats.previstoEnBCount} bolo${stats.previstoEnBCount == 1 ? '' : 's'} cerrado${stats.previstoEnBCount == 1 ? '' : 's'} en B)',
+                  '(${stats.previstoEnBCount} evento${stats.previstoEnBCount == 1 ? '' : 's'} privado${stats.previstoEnBCount == 1 ? '' : 's'} cerrado${stats.previstoEnBCount == 1 ? '' : 's'})',
                   style: const TextStyle(
                     fontSize: 11,
                     color: Color(0xFF8C95A6),
@@ -458,15 +440,15 @@ class DashboardScreen extends ConsumerWidget {
                 ),
                 onInfoTap: () => _showMetricInfo(
                   context,
-                  'Confirmado en B',
-                  'Importe de bolos en B cerrados en agenda y aún no realizados (estado confirmado_b).',
+                  'Confirmado privado',
+                  'Importe de eventos privados cerrados en agenda y aún no realizados.',
                 ),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: SummaryCard(
-                title: 'Proyección B',
+                title: 'Proyección privada',
                 value: CurrencyFormatter.format(stats.totalPrevistoEnB),
                 numericValue: stats.totalPrevistoEnB,
                 color: AppColors.purple,
@@ -480,8 +462,8 @@ class DashboardScreen extends ConsumerWidget {
                 ),
                 onInfoTap: () => _showMetricInfo(
                   context,
-                  'Proyección B',
-                  'Suma total proyectada en B del período:\n· Cobrado en B\n· Realizado en B pendiente de cobro\n· Confirmado en B',
+                  'Proyección privada',
+                  'Suma total proyectada de eventos privados del período:\n· Cobrado privado\n· Realizado privado pendiente de cobro\n· Confirmado privado',
                 ),
               ),
             ),
@@ -506,7 +488,7 @@ class DashboardScreen extends ConsumerWidget {
                 color: AppColors.success,
                 icon: Icons.check_circle_outline,
                 subtitle: Text(
-                  '(oficial ${CurrencyFormatter.format(stats.cobradoOficial)}\n + B ${CurrencyFormatter.format(stats.cobradoEnB)})',
+                  '(oficial ${CurrencyFormatter.format(stats.cobradoOficial)}\n + privado ${CurrencyFormatter.format(stats.cobradoEnB)})',
                   style: const TextStyle(
                     fontSize: 11,
                     color: Color(0xFF8C95A6),
@@ -528,7 +510,9 @@ class DashboardScreen extends ConsumerWidget {
                 color: AppColors.warning,
                 icon: Icons.schedule,
                 subtitle: Text(
-                  '(acumulado ${CurrencyFormatter.format(stats.acumuladoTotal)}\n + confirmado ${CurrencyFormatter.format(stats.previstoTotal)})',
+                  '(acumulado ${CurrencyFormatter.format(stats.acumuladoTotal)}'
+                  '\n + confirmado ${CurrencyFormatter.format(stats.previstoConfirmado + stats.previstoEnB)}'
+                  '\n + borrador ${CurrencyFormatter.format(stats.previstoBorrador)})',
                   style: const TextStyle(
                     fontSize: 11,
                     color: Color(0xFF8C95A6),
@@ -559,7 +543,7 @@ class DashboardScreen extends ConsumerWidget {
             onInfoTap: () => _showMetricInfo(
               context,
               'Confirmado total',
-              'Suma de bolos confirmados aún no realizados en oficial y en B.',
+                  'Suma de bolos confirmados aún no realizados en oficial y eventos privados.',
             ),
           ),
           const SizedBox(height: 8),

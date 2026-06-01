@@ -177,7 +177,7 @@ final dashboardPeriodProvider = StateProvider<DashboardPeriod>((ref) {
 // ==================== PERIOD-BASED DASHBOARD STATS ====================
 
 class PeriodDashboardStats {
-  // COBRADO = facturas pagadas + histórico sin factura + cobrado en B
+  // COBRADO = facturas pagadas + histórico sin factura + cobrado privado
   final double cobradoFacturas; // facturas pagadas (subtotal)
   final double
   cobradoHistorico; // gigs facturables cobrados sin factura (import Excel)
@@ -189,7 +189,11 @@ class PeriodDashboardStats {
   // PREVISTO = bolos futuros facturables sin factura emitida
   final double previsto; // cachet de gigs futuros
   final int previstoCount; // nº bolos futuros
-  // En B
+  final double previstoConfirmado;
+  final int previstoConfirmadoCount;
+  final double previstoBorrador;
+  final int previstoBorradorCount;
+  // Privado
   final double pendienteEnB;
   final int pendienteEnBCount;
   final double previstoEnB;
@@ -211,6 +215,10 @@ class PeriodDashboardStats {
     this.pendienteCount = 0,
     this.previsto = 0,
     this.previstoCount = 0,
+    this.previstoConfirmado = 0,
+    this.previstoConfirmadoCount = 0,
+    this.previstoBorrador = 0,
+    this.previstoBorradorCount = 0,
     this.pendienteEnB = 0,
     this.pendienteEnBCount = 0,
     this.previstoEnB = 0,
@@ -269,6 +277,7 @@ PeriodDashboardStats _calcPeriodStats(
   final invoicesInPeriod = allInvoices
       .where((i) => !i.fecha.isBefore(start) && !i.fecha.isAfter(end))
       .toList();
+  final invoiceByGigId = {for (final inv in invoicesInPeriod) inv.gigId: inv};
 
   // COBRADO (facturas pagadas)
   double cobradoFacturas = 0;
@@ -300,18 +309,30 @@ PeriodDashboardStats _calcPeriodStats(
   // PREVISTO = bolos facturables futuros sin factura emitida
   double previsto = 0;
   int previstoCount = 0;
+  double previstoConfirmado = 0;
+  int previstoConfirmadoCount = 0;
+  double previstoBorrador = 0;
+  int previstoBorradorCount = 0;
   for (final gig in gigsInPeriod) {
     final cachet = gig.cachet ?? 0;
     final gigDate = DateTime(gig.fecha.year, gig.fecha.month, gig.fecha.day);
-    if (gig.facturable &&
-        !gigDate.isBefore(today) &&
-        gig.status == GigStatus.confirmado) {
+    final linkedInvoice = invoiceByGigId[gig.id];
+    final hasDraftInvoice = linkedInvoice?.status == InvoiceStatus.borrador;
+    if (!gig.facturable || gigDate.isBefore(today)) continue;
+    if (gig.status == GigStatus.confirmado) {
       previsto += cachet;
       previstoCount++;
+      previstoConfirmado += cachet;
+      previstoConfirmadoCount++;
+    } else if (gig.status == GigStatus.facturado && hasDraftInvoice) {
+      previsto += cachet;
+      previstoCount++;
+      previstoBorrador += cachet;
+      previstoBorradorCount++;
     }
   }
 
-  // Cobrado en B + Pendiente de cobro en B + Previsto en B
+  // Cobrado privado + pendiente privado + previsto privado
   double cobradoEnB = 0;
   double pendienteEnB = 0;
   int pendienteEnBCount = 0;
@@ -358,6 +379,10 @@ PeriodDashboardStats _calcPeriodStats(
     pendienteCount: pendienteCount,
     previsto: previsto,
     previstoCount: previstoCount,
+    previstoConfirmado: previstoConfirmado,
+    previstoConfirmadoCount: previstoConfirmadoCount,
+    previstoBorrador: previstoBorrador,
+    previstoBorradorCount: previstoBorradorCount,
     pendienteEnB: pendienteEnB,
     pendienteEnBCount: pendienteEnBCount,
     previstoEnB: previstoEnB,
@@ -393,6 +418,10 @@ final periodDashboardStatsProvider =
         pendienteCount: stats.pendienteCount,
         previsto: stats.previsto,
         previstoCount: stats.previstoCount,
+        previstoConfirmado: stats.previstoConfirmado,
+        previstoConfirmadoCount: stats.previstoConfirmadoCount,
+        previstoBorrador: stats.previstoBorrador,
+        previstoBorradorCount: stats.previstoBorradorCount,
         pendienteEnB: stats.pendienteEnB,
         pendienteEnBCount: stats.pendienteEnBCount,
         previstoEnB: stats.previstoEnB,
@@ -468,7 +497,7 @@ final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
   for (final gig in gigs) {
     final cachet = gig.cachet ?? 0;
     if (!gig.facturable) {
-      // Ingresos en B - siguen basándose en el gig
+      // Ingresos privados - siguen basándose en el gig
       if (gig.status == GigStatus.cobradoB) {
         cobradoEnB += cachet;
       } else if (gig.status == GigStatus.realizadoB) {
@@ -941,7 +970,7 @@ class FinancialStats {
   final double pendienteCobrar; // Facturas enviadas no pagadas (histórico)
   final double cobrado; // Facturas pagadas
   final double estimado; // Cobrado + Pendiente + Bolos cerrados sin facturar
-  final double cobradoEnB; // Cobrado en B
+  final double cobradoEnB; // Cobrado privado
   final List<MonthlyFinancialStats> porMes;
 
   FinancialStats({
@@ -1007,7 +1036,7 @@ final financialStatsProvider = FutureProvider.family<FinancialStats, int>((
     }
   }
 
-  // Cobrado en B: gigs del año marcados como cobrado en B
+  // Cobrado privado: gigs del año marcados como cobrado privado
   double cobradoEnBTotal = 0;
   for (final gig in gigsYear) {
     if (!gig.facturable && gig.status == GigStatus.cobradoB) {

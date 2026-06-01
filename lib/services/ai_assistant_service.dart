@@ -57,14 +57,23 @@ class AiAssistantService {
       case 'resumen_agenda':
         final result = await _searchGigs(action);
         final facturableFilter = _resolveFacturableFilter(action);
+        final invoiceSearch = _isInvoiceSearch(action);
+        final chargeFilter = _resolveChargeFilter(action);
+        final title = action.accion == 'resumen_agenda'
+            ? 'Resumen de agenda'
+            : invoiceSearch
+            ? chargeFilter == _ChargeFilter.pending
+                  ? 'Facturas pendientes de cobro'
+                  : chargeFilter == _ChargeFilter.collected
+                  ? 'Facturas cobradas'
+                  : 'Facturas encontradas'
+            : (facturableFilter == true
+                  ? 'Bolos facturables encontrados'
+                  : facturableFilter == false
+                  ? 'Bolos no facturables encontrados'
+                  : 'Bolos encontrados');
         return AiActionPreview(
-          title: action.accion == 'resumen_agenda'
-              ? 'Resumen de agenda'
-              : (facturableFilter == true
-                    ? 'Bolos facturables encontrados'
-                    : facturableFilter == false
-                    ? 'Bolos no facturables encontrados'
-                    : 'Bolos encontrados'),
+          title: title,
           description: result.isEmpty
               ? 'No he encontrado bolos con esos filtros.'
               : 'He encontrado ${result.length} bolo(s).',
@@ -305,16 +314,19 @@ class AiAssistantService {
       'current_date': _date(now),
       'current_year': now.year,
       'locale': 'es-ES',
-      'clients': clients.take(80).map((client) {
+      'clients': clients.take(40).map((client) {
         return {
           'id': client.id,
-          'nombre': client.nombre,
-          'alias': client.alias,
-          'aliases': client.aliases,
-          'email': client.email,
+          'nombre': _clip(client.nombre, 80),
+          'alias': _clip(client.alias, 40),
+          'aliases': client.aliases
+              .take(3)
+              .map((alias) => _clip(alias, 40))
+              .toList(),
+          'email': _clip(client.email, 80),
         };
       }).toList(),
-      'recent_gigs': gigs.reversed.take(60).map((gig) {
+      'recent_gigs': gigs.reversed.take(30).map((gig) {
         return {
           'id': gig.id,
           'fecha': _date(gig.fecha),
@@ -325,7 +337,7 @@ class AiAssistantService {
           'invoice_id': gig.invoiceId,
         };
       }).toList(),
-      'recent_invoices': invoices.reversed.take(40).map((invoice) {
+      'recent_invoices': invoices.reversed.take(20).map((invoice) {
         return {
           'id': invoice.id,
           'numero': invoice.numero,
@@ -582,6 +594,10 @@ class AiAssistantService {
 
   Future<List<Gig>> _searchGigs(AiAssistantAction action) async {
     final gigs = await GigRepository.instance.getAll();
+    final invoices = await InvoiceRepository.instance.getAll();
+    final invoiceByGigId = {for (final invoice in invoices) invoice.gigId: invoice};
+    final sourceDate = _readString(action.filtros['fecha']);
+    final exactDate = DateTime.tryParse(sourceDate ?? '');
     final from = DateTime.tryParse(
       _readString(action.filtros['fecha_desde']) ?? '',
     );
@@ -590,11 +606,27 @@ class AiAssistantService {
     );
     final query = _readString(action.filtros['texto'])?.toLowerCase();
     final facturableFilter = _resolveFacturableFilter(action);
+    final chargeFilter = _resolveChargeFilter(action);
+    final invoiceOnly = _isInvoiceSearch(action);
+    final monthFilter = _resolveMonthFilter(action);
+    final statusFilter = _resolveInvoiceStatusFilter(action);
     final clients = await ClientRepository.instance.getAll();
     final clientById = {for (final client in clients) client.id: client};
+    final clientFilterId = _resolveClientFilterId(action, clients);
     return gigs.where((gig) {
-      if (from != null && gig.fecha.isBefore(from)) return false;
-      if (to != null && gig.fecha.isAfter(to.add(const Duration(days: 1)))) {
+      final invoice = invoiceByGigId[gig.id];
+      final effectiveDate = invoiceOnly && invoice != null ? invoice.fecha : gig.fecha;
+      if (from != null && effectiveDate.isBefore(from)) return false;
+      if (to != null && effectiveDate.isAfter(to.add(const Duration(days: 1)))) {
+        return false;
+      }
+      if (exactDate != null &&
+          (effectiveDate.year != exactDate.year ||
+              effectiveDate.month != exactDate.month ||
+              effectiveDate.day != exactDate.day)) {
+        return false;
+      }
+      if (monthFilter != null && effectiveDate.month != monthFilter) {
         return false;
       }
       if (query != null) {
@@ -602,8 +634,33 @@ class AiAssistantService {
         final name = client?.nombre.toLowerCase() ?? '';
         if (!name.contains(query)) return false;
       }
+      if (clientFilterId != null && gig.clientId != clientFilterId) return false;
       if (facturableFilter != null && gig.facturable != facturableFilter) {
         return false;
+      }
+      if (invoiceOnly && invoice == null) return false;
+      if (statusFilter != null) {
+        if (invoice == null || invoice.status != statusFilter) return false;
+      }
+      if (chargeFilter == _ChargeFilter.pending) {
+        if (invoiceOnly) {
+          if (invoice == null) return false;
+          if (invoice.status == InvoiceStatus.pagada) return false;
+        } else {
+          if (gig.status == GigStatus.cobrado || gig.status == GigStatus.cobradoB) {
+            return false;
+          }
+        }
+      }
+      if (chargeFilter == _ChargeFilter.collected) {
+        if (invoiceOnly) {
+          if (invoice == null) return false;
+          if (invoice.status != InvoiceStatus.pagada) return false;
+        } else {
+          if (gig.status != GigStatus.cobrado && gig.status != GigStatus.cobradoB) {
+            return false;
+          }
+        }
       }
       return true;
     }).toList();
@@ -822,6 +879,12 @@ class AiAssistantService {
 
   String _money(double value) => '${value.toStringAsFixed(2)} €';
 
+  String _clip(String? value, int max) {
+    final text = (value ?? '').trim();
+    if (text.length <= max) return text;
+    return text.substring(0, max);
+  }
+
   double? _readNumber(Object? value) {
     if (value is num) return value.toDouble();
     if (value is String) return double.tryParse(value.replaceAll(',', '.'));
@@ -862,6 +925,119 @@ class AiAssistantService {
       return true;
     }
     return null;
+  }
+
+  _ChargeFilter? _resolveChargeFilter(AiAssistantAction action) {
+    final estado = _readString(action.filtros['estado'])?.toLowerCase() ?? '';
+    if (estado.contains('cobrad') || estado == 'pagada') {
+      return _ChargeFilter.collected;
+    }
+    if (estado.contains('pendiente') ||
+        estado.contains('por cobrar') ||
+        estado == 'enviada') {
+      return _ChargeFilter.pending;
+    }
+    final source = (action.raw['_source_message']?.toString() ?? '').toLowerCase();
+    if (source.contains('por cobrar') ||
+        source.contains('pendiente de cobro') ||
+        source.contains('pendientes de cobro') ||
+        source.contains('sin cobrar') ||
+        source.contains('pendientes')) {
+      return _ChargeFilter.pending;
+    }
+    if (source.contains('cobradas') ||
+        source.contains('cobrados') ||
+        source.contains('pagadas') ||
+        source.contains('pagados')) {
+      return _ChargeFilter.collected;
+    }
+    return null;
+  }
+
+  InvoiceStatus? _resolveInvoiceStatusFilter(AiAssistantAction action) {
+    final status = _readString(action.filtros['status'])?.toLowerCase() ??
+        _readString(action.filtros['estado'])?.toLowerCase() ??
+        '';
+    if (status.contains('borrador')) return InvoiceStatus.borrador;
+    if (status.contains('enviada') ||
+        status.contains('pendiente') ||
+        status.contains('por cobrar')) {
+      return InvoiceStatus.enviada;
+    }
+    if (status.contains('pagada') || status.contains('cobrada')) {
+      return InvoiceStatus.pagada;
+    }
+    return null;
+  }
+
+  int? _resolveMonthFilter(AiAssistantAction action) {
+    final value = action.filtros['mes'];
+    if (value is num) {
+      final month = value.toInt();
+      if (month >= 1 && month <= 12) return month;
+    }
+    final text = _readString(value)?.toLowerCase();
+    if (text == null) return null;
+    const byName = {
+      'enero': 1,
+      'febrero': 2,
+      'marzo': 3,
+      'abril': 4,
+      'mayo': 5,
+      'junio': 6,
+      'julio': 7,
+      'agosto': 8,
+      'septiembre': 9,
+      'setiembre': 9,
+      'octubre': 10,
+      'noviembre': 11,
+      'diciembre': 12,
+    };
+    if (byName.containsKey(text)) return byName[text];
+    final parsed = int.tryParse(text);
+    if (parsed != null && parsed >= 1 && parsed <= 12) return parsed;
+    return null;
+  }
+
+  String? _resolveClientFilterId(
+    AiAssistantAction action,
+    List<Client> clients,
+  ) {
+    final rawClientId = _readString(action.filtros['cliente_id']);
+    if (rawClientId != null &&
+        clients.any((client) => client.id == rawClientId)) {
+      return rawClientId;
+    }
+    final clientText = _readString(action.filtros['cliente']) ??
+        _readString(action.filtros['cliente_nombre']) ??
+        _readString(action.objetivo['cliente']) ??
+        _readString(action.objetivo['cliente_nombre']);
+    if (clientText == null) return null;
+    final query = clientText.toLowerCase().trim();
+    for (final client in clients) {
+      if (client.nombre.toLowerCase() == query) return client.id;
+      if (client.alias.toLowerCase() == query) return client.id;
+      if (client.aliases.map((a) => a.toLowerCase()).contains(query)) {
+        return client.id;
+      }
+    }
+    for (final client in clients) {
+      if (client.nombre.toLowerCase().contains(query) ||
+          client.alias.toLowerCase().contains(query) ||
+          client.aliases.any((alias) => alias.toLowerCase().contains(query))) {
+        return client.id;
+      }
+    }
+    return null;
+  }
+
+  bool _isInvoiceSearch(AiAssistantAction action) {
+    final source = (action.raw['_source_message']?.toString() ?? '').toLowerCase();
+    return source.contains('factura') ||
+        action.filtros.containsKey('status') ||
+        action.filtros.containsKey('mes') ||
+        action.filtros.containsKey('cliente') ||
+        action.filtros.containsKey('cliente_id');
   }
 
   Future<List<String>> collectionGigIdsFor(AiAssistantAction action) async {
@@ -1191,6 +1367,8 @@ class AiAssistantService {
     return null;
   }
 }
+
+enum _ChargeFilter { pending, collected }
 
 class _BulkInvoicePlan {
   final List<Gig> eligible;

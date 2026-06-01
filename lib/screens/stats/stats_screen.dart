@@ -212,7 +212,7 @@ class _GlobalTab extends ConsumerWidget {
                           padding: const EdgeInsets.all(16),
                           child: Column(
                             children: [
-                              const Text('Total en B'),
+                              const Text('Total privado'),
                               Text(CurrencyFormatter.format(totalEnB),
                                   style: const TextStyle(
                                     fontWeight: FontWeight.bold,

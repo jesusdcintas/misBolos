@@ -29,13 +29,13 @@ class AppStrings {
   static const String facturaEnviada = 'Facturado';
   static const String pagado = 'Cobrado';
   static const String cancelado = 'Cancelado';
-  static const String cobradoEnB = 'Cobrado en B';
+  static const String cobradoEnB = 'Cobrado privado';
 
   // Acciones
   static const String generarFactura = 'Generar factura';
   static const String marcarEnviada = 'Marcar como facturado';
   static const String marcarPagado = 'Marcar como cobrado';
-  static const String marcarCobradoEnB = 'Marcar como cobrado en B';
+  static const String marcarCobradoEnB = 'Marcar como cobrado privado';
   static const String cancelarBolo = 'Cancelar bolo';
   static const String verPDF = 'Ver PDF';
   static const String compartirPDF = 'Compartir PDF';
@@ -68,19 +68,19 @@ class AppStrings {
 
   // Dashboard
   static const String ingresosOficiales = 'Ingresos oficiales';
-  static const String ingresosEnB = 'Ingresos en B';
+  static const String ingresosEnB = 'Eventos privados';
   static const String cobradoEsteMes = 'Cobrado este mes';
   static const String pendienteCobro = 'Pendiente de cobro';
   static const String facturasEnviadas = 'Facturas pendientes de cobro';
-  static const String cobradoEnBEsteMes = 'Cobrado en B este mes';
-  static const String pendienteCobroB = 'Pendiente de cobro en B';
+  static const String cobradoEnBEsteMes = 'Cobrado privado este mes';
+  static const String pendienteCobroB = 'Pendiente de cobro privado';
   static const String totalBolosMes = 'Bolos este mes';
   static const String proximoBolo = 'Próximo bolo';
   static const String ultimosBolos = 'Últimos bolos';
 
   // Estadísticas
   static const String oficial = 'Oficial';
-  static const String enB = 'En B';
+  static const String enB = 'Privado';
   static const String global = 'Global';
 
   // Ajustes
