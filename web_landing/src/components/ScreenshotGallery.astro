@@ -109,6 +109,12 @@ const screenshots = [
   },
   {
     category: "ajustes",
+    title: "Ajustes de facturación",
+    description: "Configuración detallada de tus datos fiscales de emisor y opciones por defecto.",
+    filename: "ajustesfacturacion.png"
+  },
+  {
+    category: "ajustes",
     title: "Configuración avanzada",
     description: "Ajustes detallados para adaptar la aplicación a tu flujo contable personal.",
     filename: "ajustesavanzados.png"
@@ -165,11 +171,18 @@ const screenshots = [
                 <div class="phone-speaker"></div>
                 <div class="phone-screen">
                   
+                  <div class="placeholder-fallback">
+                    <span class="placeholder-text">Captura pendiente:</span>
+                    <span class="placeholder-filename">{screen.filename}</span>
+                  </div>
+                  
                   <img 
                     src={`/screenshots/${screen.filename}`} 
                     alt={`Captura de pantalla de ${screen.title} en MisBolos`}
-                    class="mockup-img loaded"
+                    class="mockup-img"
                     loading="lazy"
+                    onload="this.classList.add('loaded')"
+                    onerror="this.style.display='none'"
                   />
                   
                 </div>
@@ -365,6 +378,36 @@ const screenshots = [
     overflow: hidden;
     position: relative;
     border: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .placeholder-fallback {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: #EEF1F7;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    text-align: center;
+    z-index: 1;
+  }
+
+  .placeholder-text {
+    font-size: 0.75rem;
+    color: #4A5568;
+    font-weight: 600;
+  }
+
+  .placeholder-filename {
+    font-size: 0.65rem;
+    font-family: monospace;
+    color: #718096;
+    word-break: break-all;
+    margin-top: 6px;
   }
 
   .phone-home-indicator {
