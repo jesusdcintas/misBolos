@@ -3,6 +3,7 @@
 <header class="main-header">
   <div class="header-container">
     <a href="#inicio" class="logo" aria-label="MisBolos - Volver al inicio">
+      <img src="/logo2.png" alt="Logo de MisBolos" class="logo-img" />
       <span class="logo-text">Mis<span class="text-accent">Bolos</span></span>
     </a>
     
@@ -15,10 +16,6 @@
         <li><a href="#faq" class="nav-link">FAQ</a></li>
       </ul>
     </nav>
-
-    <div class="header-cta">
-      <a href="#funciones" class="btn btn-outline btn-sm">Ver funciones</a>
-    </div>
 
     <!-- Botón móvil -->
     <button class="mobile-nav-toggle" aria-controls="primary-navigation" aria-expanded="false" aria-label="Abrir menú de navegación">
@@ -75,6 +72,13 @@
   .logo {
     display: flex;
     align-items: center;
+    gap: 8px;
+  }
+
+  .logo-img {
+    height: 28px;
+    width: auto;
+    object-fit: contain;
   }
 
   .logo-text {
