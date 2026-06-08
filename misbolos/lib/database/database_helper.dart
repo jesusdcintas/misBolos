@@ -410,19 +410,25 @@ class DatabaseHelper {
 
   Future<void> clearUserScopedData() async {
     final db = await database;
-    await db.transaction((txn) async {
-      await txn.delete('invoice_email_logs');
-      await txn.delete('invoice_number_changes');
-      await txn.delete('sync_queue');
-      await txn.delete('pending_deletions');
-      await txn.delete('drive_sync_queue');
-      await txn.delete('ai_chat_messages');
-      await txn.delete('ai_chats');
-      await txn.delete('expenses');
-      await txn.delete('assets');
-      await txn.delete('invoices');
-      await txn.delete('gigs');
-      await txn.delete('clients');
-    });
+    await db.execute('PRAGMA foreign_keys = OFF');
+    try {
+      await db.transaction((txn) async {
+        await txn.delete('invoice_fiscal_records');
+        await txn.delete('invoice_email_logs');
+        await txn.delete('invoice_number_changes');
+        await txn.delete('sync_queue');
+        await txn.delete('pending_deletions');
+        await txn.delete('drive_sync_queue');
+        await txn.delete('ai_chat_messages');
+        await txn.delete('ai_chats');
+        await txn.delete('invoices');
+        await txn.delete('gigs');
+        await txn.delete('clients');
+        await txn.delete('expenses');
+        await txn.delete('assets');
+      });
+    } finally {
+      await db.execute('PRAGMA foreign_keys = ON');
+    }
   }
 }

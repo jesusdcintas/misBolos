@@ -1,0 +1,141 @@
+---
+const faqs = [
+  {
+    question: "¿Puedo separar ingresos oficiales y privados?",
+    answer: "Sí. MisBolos te permite clasificar cada bolo que añadas a tu agenda como oficial o privado. En tu panel de control y resúmenes financieros verás el desglose por separado para llevar tu contabilidad oficial perfectamente aislada de otros eventos."
+  },
+  {
+    question: "¿Puedo crear facturas directamente desde un bolo?",
+    answer: "Sí. Cuando un bolo está confirmado y listo para facturarse, puedes pulsar un botón para generar automáticamente su factura. La app importará los datos del cliente, la fecha y el importe acordado, aplicando los porcentajes de IVA e IRPF preestablecidos sin que tengas que rellenar campos repetitivos."
+  },
+  {
+    question: "¿Puedo registrar gastos e inversiones de equipo?",
+    answer: "Sí, de forma completa. Puedes subir fotos de tickets o facturas en formato PDF o imagen. El asistente inteligente leerá los datos del ticket para registrar el importe de forma automática. Además, las compras grandes (como altavoces, controladoras o auriculares) se guardan como inversiones y la app calcula su amortización trimestral e IRPF."
+  },
+  {
+    question: "¿Puedo importar mis datos antiguos desde Excel o archivos de texto?",
+    answer: "Sí. Dispones de un importador que acepta archivos en formato CSV o Excel. Podrás asociar las columnas de tu antiguo archivo a los campos de la aplicación (nombre de cliente, fecha del bolo, importe) y ver una vista previa detallada antes de confirmar la importación definitiva."
+  }
+];
+---
+<section id="faq" class="faq-section">
+  <div class="container-narrow">
+    <div class="section-intro text-center">
+      <span class="tag">Dudas Frecuentes</span>
+      <h2>Preguntas Frecuentes</h2>
+      <p class="lead">
+        Resolvemos tus principales dudas acerca del funcionamiento y capacidades de MisBolos.
+      </p>
+    </div>
+
+    <div class="faq-accordion">
+      {faqs.map((faq) => (
+        <details class="faq-item">
+          <summary class="faq-question">
+            <span>{faq.question}</span>
+            <span class="faq-icon"></span>
+          </summary>
+          <div class="faq-answer">
+            <p>{faq.answer}</p>
+          </div>
+        </details>
+      ))}
+    </div>
+  </div>
+</section>
+
+<style>
+  .faq-section {
+    background-color: var(--color-surface);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .faq-accordion {
+    margin-top: 48px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .faq-item {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background-color: var(--color-bg);
+    overflow: hidden;
+    transition: border-color var(--transition-fast);
+  }
+
+  .faq-item[open] {
+    border-color: rgba(15, 92, 158, 0.3);
+    background-color: var(--color-surface);
+  }
+
+  .faq-question {
+    padding: 20px 24px;
+    font-weight: 600;
+    font-size: 1.05rem;
+    color: var(--color-primary-dark);
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    user-select: none;
+  }
+
+  /* Ocultar flecha nativa en Firefox y Safari */
+  .faq-question::-webkit-details-marker {
+    display: none;
+  }
+
+  .faq-icon {
+    width: 20px;
+    height: 20px;
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .faq-icon::before, .faq-icon::after {
+    content: '';
+    position: absolute;
+    background-color: var(--color-primary);
+    transition: transform var(--transition-normal);
+  }
+
+  /* Línea horizontal */
+  .faq-icon::before {
+    width: 12px;
+    height: 2px;
+    top: 9px;
+    left: 4px;
+  }
+
+  /* Línea vertical */
+  .faq-icon::after {
+    width: 2px;
+    height: 12px;
+    top: 4px;
+    left: 9px;
+  }
+
+  .faq-item[open] .faq-icon::after {
+    transform: rotate(90deg);
+    opacity: 0;
+  }
+  
+  .faq-item[open] .faq-icon::before {
+    transform: rotate(180deg);
+  }
+
+  .faq-answer {
+    padding: 0 24px 20px;
+    font-size: 0.95rem;
+    color: #4A5568;
+    line-height: 1.6;
+    border-top: 1px solid transparent;
+  }
+  
+  .faq-item[open] .faq-answer {
+    border-top-color: var(--color-border);
+  }
+</style>

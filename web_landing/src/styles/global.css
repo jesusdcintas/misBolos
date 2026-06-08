@@ -1,0 +1,200 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Manrope:wght@400;500;600;700;800&display=swap');
+
+/* Variables de diseño y paleta de colores */
+:root {
+  --color-bg: #F7F8FA;
+  --color-surface: #FFFFFF;
+  --color-primary: #1B2A4A;
+  --color-primary-dark: #0D1B2A;
+  --color-soft-blue: #EEF1F7;
+  --color-border: #EAEDF2;
+  --color-info: #0F5C9E;
+  --color-success: #1B8A56;
+  --color-warning: #B7680A;
+  
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  --font-display: 'Manrope', var(--font-sans);
+  
+  --container-width: 1200px;
+  --container-width-narrow: 800px;
+  
+  --shadow-sm: 0 1px 3px rgba(13, 27, 42, 0.03), 0 1px 2px rgba(13, 27, 42, 0.02);
+  --shadow-md: 0 4px 6px -1px rgba(13, 27, 42, 0.04), 0 2px 4px -1px rgba(13, 27, 42, 0.02);
+  --shadow-lg: 0 10px 15px -3px rgba(13, 27, 42, 0.05), 0 4px 6px -2px rgba(13, 27, 42, 0.03);
+  
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Reset básico */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-family: var(--font-sans);
+  background-color: var(--color-bg);
+  color: var(--color-primary-dark);
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.6;
+}
+
+img, video {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+button, input, textarea, select {
+  font: inherit;
+}
+
+/* Estructura editorial con "mucho aire" */
+section {
+  padding: 120px 24px;
+}
+
+@media (max-width: 768px) {
+  section {
+    padding: 80px 16px;
+  }
+}
+
+.container {
+  max-width: var(--container-width);
+  margin: 0 auto;
+  width: 100%;
+}
+
+.container-narrow {
+  max-width: var(--container-width-narrow);
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* Tipografía */
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--color-primary-dark);
+  line-height: 1.15;
+}
+
+h1 {
+  font-size: 3.5rem;
+  letter-spacing: -0.03em;
+}
+
+h2 {
+  font-size: 2.25rem;
+  letter-spacing: -0.02em;
+  margin-bottom: 16px;
+}
+
+h3 {
+  font-size: 1.5rem;
+  letter-spacing: -0.01em;
+}
+
+p {
+  color: #4A5568;
+  font-weight: 400;
+}
+
+.lead {
+  font-size: 1.15rem;
+  line-height: 1.7;
+}
+
+/* Botones Premium */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 24px;
+  font-weight: 500;
+  font-size: 0.95rem;
+  border-radius: var(--radius-md);
+  transition: all var(--transition-normal);
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.btn-primary {
+  background-color: var(--color-primary);
+  color: var(--color-surface);
+}
+
+.btn-primary:hover {
+  background-color: var(--color-primary-dark);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.btn-secondary {
+  background-color: var(--color-soft-blue);
+  color: var(--color-primary);
+}
+
+.btn-secondary:hover {
+  background-color: var(--color-border);
+  transform: translateY(-1px);
+}
+
+.btn-outline {
+  background-color: transparent;
+  border-color: var(--color-border);
+  color: var(--color-primary);
+}
+
+.btn-outline:hover {
+  background-color: var(--color-bg);
+  border-color: var(--color-primary);
+}
+
+/* Utilidades de diseño */
+.text-center { text-align: center; }
+.text-accent { color: var(--color-info); }
+
+.tag {
+  display: inline-block;
+  padding: 6px 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-info);
+  background-color: var(--color-soft-blue);
+  border-radius: 9999px;
+  margin-bottom: 16px;
+}
+
+/* Micro-interacciones globales */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

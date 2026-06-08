@@ -2,6 +2,9 @@
   "java.import.gradle.enabled": false,
   "java.import.maven.enabled": false,
   "java.project.importOnFirstTimeStartup": "disabled",
+  "files.exclude": {
+    "**/.pub-cache": true
+  },
   "search.exclude": {
     "**/.pub-cache": true,
     "**/build": true,
