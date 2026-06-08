@@ -9,11 +9,13 @@ import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/services/drive_document_sync_service.dart';
 import '../../core/services/google_drive_service.dart';
+import '../../database/database_helper.dart';
 import '../../models/app_settings.dart';
 import '../../providers/assets_provider.dart';
 import '../../providers/auth_controller.dart';
 import '../../providers/expenses_provider.dart';
 import '../../providers/invoice_provider.dart';
+import '../../providers/gig_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/sync_provider.dart';
 import '../../services/google_auth_service.dart';
@@ -113,6 +115,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             ],
                             const SizedBox(height: 12),
                             _buildAccountSecurityCard(),
+                            const SizedBox(height: 12),
+                            _buildLocalDataCard(),
                             const SizedBox(height: 12),
                             _BillingFormCard(
                               settings: settings,
@@ -766,6 +770,37 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
+  Widget _buildLocalDataCard() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Datos locales',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Borra la base local de esta cuenta en este dispositivo. Útil para empezar de cero sin tocar Supabase.',
+            ),
+            const SizedBox(height: 12),
+            FilledButton.tonal(
+              style: FilledButton.styleFrom(
+                foregroundColor: AppColors.error,
+              ),
+              onPressed: _confirmClearLocalData,
+              child: const Text('Limpiar datos locales'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _sendPasswordSetupOrReset() async {
     try {
       await SupabaseService.instance.requestCreateOrResetPassword();
@@ -834,6 +869,51 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             'No se pudo eliminar la cuenta. Verifica la Edge Function delete-user-account. Error: $e',
           ),
         ),
+      );
+    }
+  }
+
+  Future<void> _confirmClearLocalData() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Limpiar datos locales'),
+        content: const Text(
+          'Se borrarán del dispositivo las facturas, bolos, clientes, gastos, inversiones, cola de sincronización y otros datos locales de esta cuenta. No se borrará nada en Supabase. Esta acción no se puede deshacer.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Limpiar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await DatabaseHelper.instance.clearUserScopedData();
+      await DatabaseHelper.instance.close();
+      ref.invalidate(invoicesProvider);
+      ref.invalidate(gigsProvider);
+      ref.invalidate(expensesProvider);
+      ref.invalidate(assetsProvider);
+      ref.invalidate(settingsProvider);
+      await ref.read(invoicesProvider.notifier).reloadLocal(force: true);
+      await ref.read(expensesProvider.notifier).reloadLocal();
+      await ref.read(assetsProvider.notifier).reloadLocal();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Datos locales limpiados')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudieron limpiar los datos locales: $e')),
       );
     }
   }

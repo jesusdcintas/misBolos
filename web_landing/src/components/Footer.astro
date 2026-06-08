@@ -1,0 +1,160 @@
+---
+const currentYear = new Date().getFullYear();
+---
+<footer class="main-footer">
+  <div class="footer-grid container">
+    <div class="footer-brand">
+      <a href="#inicio" class="logo">
+        <span class="logo-text">Mis<span class="text-accent">Bolos</span></span>
+      </a>
+      <p class="brand-desc">Gestión clara para DJs autónomos. Controla tu agenda, facturas y finanzas en una sola herramienta.</p>
+    </div>
+    
+    <div class="footer-links-group">
+      <h4 class="links-title">Enlaces</h4>
+      <ul class="links-list">
+        <li><a href="#inicio">Inicio</a></li>
+        <li><a href="#funciones">Funciones</a></li>
+        <li><a href="#capturas">Capturas</a></li>
+        <li><a href="#finanzas">Finanzas</a></li>
+        <li><a href="#faq">Preguntas frecuentes</a></li>
+      </ul>
+    </div>
+    
+    <div class="footer-links-group">
+      <h4 class="links-title">Declaraciones</h4>
+      <ul class="links-list">
+        <li><span class="info-item">Declaración trimestral de IVA</span></li>
+        <li><span class="info-item">Cálculo de IRPF y retenciones</span></li>
+        <li><span class="info-item">Modo Fiscal Avanzado</span></li>
+        <li><span class="info-item">Trazabilidad VeriFactu</span></li>
+      </ul>
+    </div>
+
+    <div class="footer-links-group">
+      <h4 class="links-title">Legal</h4>
+      <ul class="links-list font-small">
+        <li><a href="#inicio">Política de Privacidad</a></li>
+        <li><a href="#inicio">Términos de Servicio</a></li>
+        <li><a href="#inicio">Política de Cookies</a></li>
+      </ul>
+    </div>
+  </div>
+  
+  <div class="footer-bottom">
+    <div class="bottom-container container">
+      <p>&copy; {currentYear} MisBolos. Todos los derechos reservados. Diseñado para simplificar tu negocio.</p>
+      <p class="bottom-sub">Desplegado listo en Vercel.</p>
+    </div>
+  </div>
+</footer>
+
+<style>
+  .main-footer {
+    background-color: var(--color-primary-dark);
+    color: #E2E8F0;
+    padding: 80px 24px 30px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    margin-top: auto;
+  }
+
+  .footer-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1.2fr 1fr;
+    gap: 48px;
+    margin-bottom: 60px;
+  }
+
+  @media (max-width: 900px) {
+    .footer-grid {
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
+    }
+  }
+
+  @media (max-width: 600px) {
+    .footer-grid {
+      grid-template-columns: 1fr;
+      gap: 32px;
+    }
+  }
+
+  .logo-text {
+    font-family: var(--font-display);
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--color-surface);
+    letter-spacing: -0.02em;
+    display: inline-block;
+    margin-bottom: 16px;
+  }
+
+  .brand-desc {
+    color: #A0AEC0;
+    font-size: 0.95rem;
+    line-height: 1.6;
+    max-width: 300px;
+  }
+
+  .links-title {
+    color: var(--color-surface);
+    font-size: 0.95rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 20px;
+  }
+
+  .links-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .links-list a {
+    color: #A0AEC0;
+    font-size: 0.9rem;
+    transition: color var(--transition-fast);
+  }
+
+  .links-list a:hover {
+    color: var(--color-surface);
+  }
+
+  .info-item {
+    color: #A0AEC0;
+    font-size: 0.9rem;
+  }
+
+  .font-small a {
+    font-size: 0.85rem;
+  }
+
+  .footer-bottom {
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    padding-top: 30px;
+  }
+
+  .bottom-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.85rem;
+    color: #718096;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .bottom-sub {
+    font-size: 0.8rem;
+    font-style: italic;
+  }
+
+  @media (max-width: 600px) {
+    .bottom-container {
+      flex-direction: column;
+      text-align: center;
+    }
+  }
+</style>

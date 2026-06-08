@@ -1,0 +1,235 @@
+---
+---
+<section id="finanzas" class="fiscal-control-section">
+  <div class="container">
+    <div class="fiscal-grid">
+      <div class="fiscal-info">
+        <span class="tag">Cumplimiento Fiscal</span>
+        <h2>Control fiscal sin líos ni tecnicismos</h2>
+        <p class="lead">
+          Sabemos que lo tuyo es la música, no el papeleo. Por eso, MisBolos gestiona tu fiscalidad en segundo plano y te lo explica de forma sencilla.
+        </p>
+        
+        <div class="fiscal-points">
+          <div class="fiscal-point">
+            <h4>Tus impuestos calculados al día</h4>
+            <p>La aplicación suma automáticamente el IVA soportado de tus gastos y el IVA repercutido de tus facturas. Sabrás en tiempo real qué saldo tienes de cara al cierre de cada trimestre.</p>
+          </div>
+          
+          <div class="fiscal-point">
+            <h4>IRPF y retenciones bajo control</h4>
+            <p>Aplica retenciones de IRPF en tus facturas si trabajas para empresas o promotores. La app desglosa y suma las retenciones para que tu contabilidad encaje a la perfección.</p>
+          </div>
+
+          <div class="fiscal-point">
+            <h4>Facturas rectificativas sencillas</h4>
+            <p>Si necesitas anular o corregir una factura ya emitida, puedes crear una rectificativa vinculada en un instante, manteniendo la serie numérica y la coherencia legal.</p>
+          </div>
+        </div>
+      </div>
+      
+      <div class="fiscal-visual">
+        <div class="fiscal-card-visual shadow-box">
+          <div class="fiscal-card-header">
+            <h4>Modo Fiscal Avanzado</h4>
+            <span class="fiscal-badge-status">Activo</span>
+          </div>
+          
+          <div class="fiscal-card-body">
+            <p class="fiscal-description-text">
+              Diseñado para aportarte la máxima tranquilidad. Al activar el modo fiscal avanzado en tus ajustes:
+            </p>
+            
+            <ul class="fiscal-benefits-list">
+              <li>
+                <div class="benefit-icon success"></div>
+                <div>
+                  <strong>Bloqueo y trazabilidad:</strong>
+                  <span>Las facturas emitidas quedan aseguradas para impedir modificaciones accidentales y garantizar la integridad ante cualquier revisión.</span>
+                </div>
+              </li>
+              <li>
+                <div class="benefit-icon success"></div>
+                <div>
+                  <strong>Registro ordenado:</strong>
+                  <span>Toda la numeración se bloquea consecutivamente, evitando saltos de fechas y errores en tus declaraciones.</span>
+                </div>
+              </li>
+              <li>
+                <div class="benefit-icon success"></div>
+                <div>
+                  <strong>Amortización automática:</strong>
+                  <span>Tus compras de equipo (altavoces, cabinas, ordenadores) se registran como inversiones amortizables y su coste se deduce de forma limpia a lo largo de los años.</span>
+                </div>
+              </li>
+            </ul>
+            
+            <div class="fiscal-alert-box">
+              <span class="alert-marker"></span>
+              <p>Seguridad y cumplimiento fiscal continuo sin necesidad de ser un experto en contabilidad.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .fiscal-control-section {
+    background-color: #F7F8FA;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .fiscal-grid {
+    display: grid;
+    grid-template-columns: 1.1fr 0.9fr;
+    gap: 64px;
+    align-items: center;
+  }
+
+  @media (max-width: 992px) {
+    .fiscal-grid {
+      grid-template-columns: 1fr;
+      gap: 48px;
+    }
+  }
+
+  .fiscal-info h2 {
+    margin-top: 12px;
+    margin-bottom: 20px;
+  }
+
+  .fiscal-info .lead {
+    color: #4A5568;
+    margin-bottom: 40px;
+  }
+
+  .fiscal-points {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+  }
+
+  .fiscal-point h4 {
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: var(--color-primary-dark);
+    margin-bottom: 8px;
+  }
+
+  .fiscal-point p {
+    font-size: 0.9rem;
+    color: #718096;
+    line-height: 1.6;
+  }
+
+  /* Tarjeta visual de modo fiscal */
+  .fiscal-card-visual {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: 36px;
+  }
+
+  @media (max-width: 480px) {
+    .fiscal-card-visual {
+      padding: 24px;
+    }
+  }
+
+  .fiscal-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--color-border);
+    padding-bottom: 18px;
+    margin-bottom: 24px;
+  }
+
+  .fiscal-card-header h4 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--color-primary-dark);
+  }
+
+  .fiscal-badge-status {
+    background-color: #E6F4EA;
+    color: var(--color-success);
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 4px 12px;
+    border-radius: 9999px;
+    text-transform: uppercase;
+  }
+
+  .fiscal-description-text {
+    font-size: 0.95rem;
+    color: #4A5568;
+    margin-bottom: 24px;
+  }
+
+  .fiscal-benefits-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    margin-bottom: 30px;
+  }
+
+  .fiscal-benefits-list li {
+    display: flex;
+    gap: 16px;
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+
+  .benefit-icon {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-top: 8px;
+    flex-shrink: 0;
+  }
+
+  .benefit-icon.success {
+    background-color: var(--color-success);
+    box-shadow: 0 0 0 3px rgba(27, 138, 86, 0.15);
+  }
+
+  .fiscal-benefits-list strong {
+    display: block;
+    color: var(--color-primary-dark);
+    margin-bottom: 2px;
+  }
+
+  .fiscal-benefits-list span {
+    color: #718096;
+  }
+
+  .fiscal-alert-box {
+    background-color: var(--color-soft-blue);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .alert-marker {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: var(--color-info);
+    margin-top: 8px;
+    flex-shrink: 0;
+  }
+
+  .fiscal-alert-box p {
+    font-size: 0.8rem;
+    color: var(--color-primary);
+    font-weight: 500;
+    line-height: 1.4;
+  }
+</style>

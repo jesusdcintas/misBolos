@@ -1,0 +1,623 @@
+---
+const screenshots = [
+  {
+    id: "dashboard",
+    title: "Panel de control",
+    description: "Una perspectiva clara de tus ingresos cobrados, cobros pendientes y alertas fiscales automáticas.",
+    filename: "dashboard.png",
+    type: "mobile",
+    fallbackClass: "sb-dashboard"
+  },
+  {
+    id: "calendario",
+    title: "Agenda y calendario",
+    description: "Tus bolos organizados por fechas y clientes, clasificados por estados y tipo de evento (oficial o privado).",
+    filename: "calendario.png",
+    type: "mobile",
+    fallbackClass: "sb-calendario"
+  },
+  {
+    id: "facturas",
+    title: "Facturación integrada",
+    description: "Generación de facturas PDF en segundos desde tus bolos, aplicando IVA/IRPF y con el modo fiscal activado.",
+    filename: "facturas.png",
+    type: "mobile",
+    fallbackClass: "sb-facturas"
+  },
+  {
+    id: "gastos",
+    title: "Control de gastos",
+    description: "Sube tus tickets y facturas. La app lee el importe de forma inteligente y calcula la deducibilidad.",
+    filename: "gastos.png",
+    type: "mobile",
+    fallbackClass: "sb-gastos"
+  },
+  {
+    id: "finanzas",
+    title: "Resumen contable",
+    description: "Estimación y preparación de tus obligaciones de IVA e IRPF por trimestres para evitar sorpresas.",
+    filename: "finanzas.png",
+    type: "mobile",
+    fallbackClass: "sb-finanzas"
+  },
+  {
+    id: "asistente",
+    title: "Asistente inteligente",
+    description: "Registra gastos y haz consultas contables a través de chat con confirmación previa a cualquier cambio.",
+    filename: "asistente.png",
+    type: "mobile",
+    fallbackClass: "sb-asistente"
+  },
+  {
+    id: "ajustes",
+    title: "Seguridad y ajustes",
+    description: "Configura tus datos fiscales, apariencia del PDF, recordatorios y bloqueo seguro por PIN o biometría.",
+    filename: "ajustes.png",
+    type: "mobile",
+    fallbackClass: "sb-ajustes"
+  }
+];
+---
+<section id="capturas" class="gallery-section">
+  <div class="container">
+    <div class="section-intro text-center">
+      <span class="tag">Capturas de Producto</span>
+      <h2>Explora la interfaz de MisBolos</h2>
+      <p class="lead container-narrow">
+        Diseñada para ser ágil, limpia y funcional. Conoce de cerca cómo se ven las secciones clave de la aplicación.
+      </p>
+    </div>
+
+    <div class="gallery-grid">
+      {screenshots.map((screen) => (
+        <div class="gallery-card">
+          <div class="mockup-container">
+            <div class="phone-frame">
+              <div class="phone-speaker"></div>
+              <div class="phone-screen">
+                
+                <!-- Imagen real (si existe, se superpone al cargar) -->
+                <img 
+                  src={`/screenshots/${screen.filename}`} 
+                  alt={`Captura de pantalla de la sección ${screen.title} de MisBolos`}
+                  class="mockup-img"
+                  loading="lazy"
+                  onload="this.classList.add('loaded')"
+                />
+                
+                <!-- Fallback de UI estilizado por CSS (sobrio y elegante) -->
+                <div class={`mockup-ui-fallback ${screen.fallbackClass}`}>
+                  <div class="app-mini-header">
+                    <span class="app-dot"></span>
+                    <span class="app-title-text">MisBolos</span>
+                  </div>
+                  
+                  <!-- Fallback: Panel -->
+                  {screen.id === "dashboard" && (
+                    <div class="fb-content">
+                      <div class="fb-card-small">
+                        <div class="fb-line sm"></div>
+                        <div class="fb-line lg success"></div>
+                      </div>
+                      <div class="fb-card-small">
+                        <div class="fb-line sm"></div>
+                        <div class="fb-line lg warning"></div>
+                      </div>
+                      <div class="fb-card-large">
+                        <div class="fb-line md"></div>
+                        <div class="fb-line sm"></div>
+                        <div class="fb-line sm"></div>
+                      </div>
+                    </div>
+                  )}
+
+                  <!-- Fallback: Calendario -->
+                  {screen.id === "calendario" && (
+                    <div class="fb-content">
+                      <div class="fb-calendar-grid">
+                        {Array.from({ length: 15 }).map(() => (
+                          <span class="cal-day-dot"></span>
+                        ))}
+                      </div>
+                      <div class="fb-agenda-list">
+                        <div class="fb-agenda-row">
+                          <span class="row-indicator green"></span>
+                          <div class="fb-line md"></div>
+                        </div>
+                        <div class="fb-agenda-row">
+                          <span class="row-indicator blue"></span>
+                          <div class="fb-line lg"></div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <!-- Fallback: Facturas -->
+                  {screen.id === "facturas" && (
+                    <div class="fb-content">
+                      <div class="fb-invoice-form">
+                        <div class="fb-form-field"></div>
+                        <div class="fb-form-field"></div>
+                        <div class="fb-form-field half"></div>
+                        <div class="fb-form-field half"></div>
+                        <div class="fb-button-primary"></div>
+                      </div>
+                    </div>
+                  )}
+
+                  <!-- Fallback: Gastos -->
+                  {screen.id === "gastos" && (
+                    <div class="fb-content">
+                      <div class="fb-receipt-upload">
+                        <div class="fb-upload-icon"></div>
+                        <div class="fb-line sm"></div>
+                      </div>
+                      <div class="fb-line md"></div>
+                      <div class="fb-line lg"></div>
+                    </div>
+                  )}
+
+                  <!-- Fallback: Finanzas -->
+                  {screen.id === "finanzas" && (
+                    <div class="fb-content">
+                      <div class="fb-chart-box">
+                        <div class="fb-bar-chart">
+                          <div class="fb-bar" style="height: 60%"></div>
+                          <div class="fb-bar" style="height: 80%"></div>
+                          <div class="fb-bar" style="height: 40%"></div>
+                          <div class="fb-bar" style="height: 95%"></div>
+                        </div>
+                      </div>
+                      <div class="fb-line md"></div>
+                      <div class="fb-line sm"></div>
+                    </div>
+                  )}
+
+                  <!-- Fallback: Asistente -->
+                  {screen.id === "asistente" && (
+                    <div class="fb-content justify-bottom">
+                      <div class="fb-bubble left"></div>
+                      <div class="fb-bubble right"></div>
+                      <div class="fb-bubble left large"></div>
+                      <div class="fb-input-bar"></div>
+                    </div>
+                  )}
+
+                  <!-- Fallback: Ajustes -->
+                  {screen.id === "ajustes" && (
+                    <div class="fb-content">
+                      <div class="fb-settings-item">
+                        <span class="settings-icon"></span>
+                        <div class="fb-line md"></div>
+                      </div>
+                      <div class="fb-settings-item">
+                        <span class="settings-icon"></span>
+                        <div class="fb-line lg"></div>
+                      </div>
+                      <div class="fb-settings-item">
+                        <span class="settings-icon"></span>
+                        <div class="fb-line sm"></div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  <span class="fb-watermark">{screen.title}</span>
+                </div>
+                
+              </div>
+              <div class="phone-home-indicator"></div>
+            </div>
+          </div>
+          <div class="card-info">
+            <h4>{screen.title}</h4>
+            <p>{screen.description}</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>
+
+<script>
+  // Script para manejar cargas y errores
+  document.querySelectorAll('.mockup-img').forEach((img: any) => {
+    // Si la imagen ya se cargó antes de que corra el script
+    if (img.complete && img.naturalWidth !== 0) {
+      img.classList.add('loaded');
+    }
+    img.addEventListener('error', () => {
+      // Ocultar la imagen y dejar el fallback visible
+      img.style.display = 'none';
+    });
+  });
+</script>
+
+<style>
+  .gallery-section {
+    background-color: var(--color-bg);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 32px;
+    margin-top: 60px;
+  }
+
+  @media (max-width: 992px) {
+    .gallery-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  @media (max-width: 640px) {
+    .gallery-grid {
+      grid-template-columns: 1fr;
+      gap: 24px;
+    }
+  }
+
+  .gallery-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: 32px 24px 24px;
+    box-shadow: var(--shadow-sm);
+    transition: transform var(--transition-normal);
+  }
+
+  .gallery-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+  }
+
+  /* Mockup de Teléfono Móvil Sobrio */
+  .mockup-container {
+    width: 100%;
+    max-width: 220px;
+    margin-bottom: 24px;
+  }
+
+  .phone-frame {
+    background-color: #1E293B;
+    border: 8px solid #0F172A;
+    border-radius: 36px;
+    padding: 6px;
+    position: relative;
+    box-shadow: var(--shadow-lg);
+    aspect-ratio: 9 / 19;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .phone-speaker {
+    width: 50px;
+    height: 4px;
+    background-color: #334155;
+    border-radius: 99px;
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+  }
+
+  .phone-screen {
+    flex: 1;
+    background-color: var(--color-bg);
+    border-radius: 26px;
+    overflow: hidden;
+    position: relative;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .phone-home-indicator {
+    width: 70px;
+    height: 3px;
+    background-color: #475569;
+    border-radius: 99px;
+    position: absolute;
+    bottom: 6px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+  }
+
+  /* Imagen Real */
+  .mockup-img {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    z-index: 5;
+    opacity: 0;
+    transition: opacity var(--transition-normal);
+  }
+
+  .mockup-img.loaded {
+    opacity: 1;
+  }
+
+  /* Fallback de UI por CSS */
+  .mockup-ui-fallback {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 2;
+    padding: 30px 12px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    background-color: #F8FAFC;
+  }
+
+  .app-mini-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border-bottom: 1px solid var(--color-border);
+    padding-bottom: 6px;
+  }
+
+  .app-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: var(--color-info);
+  }
+
+  .app-title-text {
+    font-size: 0.6rem;
+    font-weight: 800;
+    color: var(--color-primary-dark);
+  }
+
+  .fb-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .fb-content.justify-bottom {
+    justify-content: flex-end;
+  }
+
+  /* Elementos de línea simulados */
+  .fb-line {
+    height: 4px;
+    background-color: #E2E8F0;
+    border-radius: 2px;
+  }
+
+  .fb-line.sm { width: 40%; }
+  .fb-line.md { width: 70%; }
+  .fb-line.lg { width: 90%; }
+  .fb-line.success { background-color: var(--color-success); opacity: 0.5; }
+  .fb-line.warning { background-color: var(--color-warning); opacity: 0.5; }
+
+  .fb-card-small {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .fb-card-large {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+  }
+
+  /* Calendario Fallback */
+  .fb-calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 4px;
+  }
+
+  .cal-day-dot {
+    aspect-ratio: 1;
+    background-color: #E2E8F0;
+    border-radius: 3px;
+  }
+
+  .cal-day-dot:nth-child(3) { background-color: var(--color-success); opacity: 0.7; }
+  .cal-day-dot:nth-child(8) { background-color: var(--color-info); opacity: 0.7; }
+
+  .fb-agenda-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .fb-agenda-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .row-indicator {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+  }
+
+  .row-indicator.green { background-color: var(--color-success); }
+  .row-indicator.blue { background-color: var(--color-info); }
+
+  /* Facturas Fallback */
+  .fb-invoice-form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .fb-form-field {
+    height: 14px;
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 3px;
+  }
+
+  .fb-form-field.half {
+    width: 48%;
+    display: inline-block;
+  }
+
+  .fb-button-primary {
+    height: 16px;
+    background-color: var(--color-primary);
+    border-radius: 3px;
+    margin-top: 4px;
+  }
+
+  /* Gastos Fallback */
+  .fb-receipt-upload {
+    background-color: var(--color-surface);
+    border: 1px dashed #CBD5E1;
+    border-radius: var(--radius-sm);
+    padding: 16px 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .fb-upload-icon {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background-color: var(--color-soft-blue);
+  }
+
+  /* Finanzas Fallback */
+  .fb-chart-box {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: 8px;
+    height: 70px;
+    display: flex;
+    align-items: flex-end;
+  }
+
+  .fb-bar-chart {
+    display: flex;
+    justify-content: space-around;
+    align-items: flex-end;
+    width: 100%;
+    height: 100%;
+    gap: 4px;
+  }
+
+  .fb-bar {
+    width: 12px;
+    background-color: var(--color-soft-blue);
+    border-radius: 2px;
+  }
+
+  .fb-bar:nth-child(2) { background-color: var(--color-info); }
+  .fb-bar:nth-child(4) { background-color: var(--color-success); }
+
+  /* Asistente Fallback */
+  .fb-bubble {
+    padding: 4px 8px;
+    border-radius: 6px;
+    height: 10px;
+    background-color: #E2E8F0;
+    max-width: 70%;
+  }
+
+  .fb-bubble.right {
+    align-self: flex-end;
+    background-color: var(--color-primary);
+    opacity: 0.7;
+    width: 50%;
+  }
+
+  .fb-bubble.left {
+    align-self: flex-start;
+    width: 60%;
+  }
+
+  .fb-bubble.left.large {
+    height: 20px;
+    width: 75%;
+  }
+
+  .fb-input-bar {
+    height: 14px;
+    border: 1px solid var(--color-border);
+    background-color: var(--color-surface);
+    border-radius: 9999px;
+  }
+
+  /* Ajustes Fallback */
+  .fb-settings-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background-color: var(--color-surface);
+    padding: 6px;
+    border-radius: 4px;
+    border: 1px solid var(--color-border);
+  }
+
+  .settings-icon {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: var(--color-soft-blue);
+  }
+
+  /* Texto de fondo */
+  .fb-watermark {
+    position: absolute;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.5rem;
+    font-weight: 700;
+    color: #94A3B8;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    pointer-events: none;
+    opacity: 0.4;
+  }
+
+  /* Info de tarjeta */
+  .card-info {
+    text-align: center;
+  }
+
+  .card-info h4 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--color-primary-dark);
+  }
+
+  .card-info p {
+    font-size: 0.85rem;
+    color: #718096;
+    line-height: 1.5;
+  }
+</style>

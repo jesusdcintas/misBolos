@@ -1,0 +1,188 @@
+---
+const steps = [
+  {
+    step: "01",
+    title: "Crear el bolo",
+    description: "Introduce la fecha de tu actuación, la sala o local, el importe acordado y si es oficial o privado."
+  },
+  {
+    step: "02",
+    title: "Asociar cliente",
+    description: "Vincula el organizador o promotor de tu base de datos o crea una nueva ficha fiscal en segundos."
+  },
+  {
+    step: "03",
+    title: "Generar factura",
+    description: "Una vez confirmado el evento, genera la factura con IVA e IRPF desglosados automáticamente."
+  },
+  {
+    step: "04",
+    title: "Compartir PDF",
+    description: "Envía el archivo por correo electrónico o compártelo directamente por WhatsApp desde la aplicación."
+  },
+  {
+    step: "05",
+    title: "Marcar cobro",
+    description: "Indica en la app cuando el cliente te pague para mantener al día el estado de tus facturas."
+  },
+  {
+    step: "06",
+    title: "Ver impacto financiero",
+    description: "Tu panel y tus estimaciones de impuestos se actualizan al instante para el cierre del trimestre."
+  }
+];
+---
+<section class="workflow-section">
+  <div class="container">
+    <div class="section-intro text-center">
+      <span class="tag">Flujo de Trabajo</span>
+      <h2>Pensada para el flujo real de un DJ</h2>
+      <p class="lead container-narrow">
+        Desde que cierras la fecha hasta que cobras y declaras tus impuestos. Todo fluye de manera natural.
+      </p>
+    </div>
+
+    <div class="workflow-timeline">
+      {steps.map((step, index) => (
+        <div class="workflow-step">
+          <div class="step-marker-container">
+            <span class="step-num">{step.step}</span>
+            {index < steps.length - 1 && <span class="step-line"></span>}
+          </div>
+          <div class="step-content">
+            <h4>{step.title}</h4>
+            <p>{step.description}</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>
+
+<style>
+  .workflow-section {
+    background-color: var(--color-surface);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .workflow-timeline {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 24px;
+    margin-top: 60px;
+    position: relative;
+  }
+
+  @media (max-width: 1024px) {
+    .workflow-timeline {
+      grid-template-columns: repeat(3, 1fr);
+      row-gap: 48px;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .workflow-timeline {
+      grid-template-columns: 1fr;
+      row-gap: 32px;
+    }
+  }
+
+  .workflow-step {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  @media (max-width: 768px) {
+    .workflow-step {
+      flex-direction: row;
+      gap: 16px;
+    }
+  }
+
+  .step-marker-container {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    margin-bottom: 16px;
+    position: relative;
+  }
+
+  @media (max-width: 768px) {
+    .step-marker-container {
+      width: auto;
+      flex-direction: column;
+      margin-bottom: 0;
+      height: 100%;
+      min-height: 80px;
+    }
+  }
+
+  .step-num {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background-color: var(--color-soft-blue);
+    color: var(--color-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.9rem;
+    border: 1px solid var(--color-border);
+    z-index: 2;
+    flex-shrink: 0;
+  }
+
+  .step-line {
+    height: 2px;
+    background-color: var(--color-border);
+    flex-grow: 1;
+    margin-left: 12px;
+    z-index: 1;
+  }
+
+  @media (max-width: 1024px) {
+    /* Ocultar las líneas horizontales en tablets ya que se rompe la cuadrícula */
+    .step-line {
+      display: none;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .step-line {
+      display: block;
+      width: 2px;
+      height: 100%;
+      background-color: var(--color-border);
+      margin-left: 0;
+      margin-top: 8px;
+      position: absolute;
+      top: 36px;
+      left: 17px;
+    }
+  }
+
+  .step-content {
+    padding-right: 12px;
+  }
+
+  @media (max-width: 768px) {
+    .step-content {
+      padding-top: 4px;
+    }
+  }
+
+  .step-content h4 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--color-primary-dark);
+  }
+
+  .step-content p {
+    font-size: 0.85rem;
+    color: #718096;
+    line-height: 1.5;
+  }
+</style>

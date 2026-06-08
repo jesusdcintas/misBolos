@@ -1,0 +1,450 @@
+---
+---
+<section id="inicio" class="hero-section">
+  <div class="container text-center">
+    <span class="tag">Nueva Versión</span>
+    <h1 class="hero-title">MisBolos</h1>
+    <p class="hero-subtitle">Agenda, facturas y finanzas para DJs autónomos.</p>
+    <p class="hero-description container-narrow">
+      Controla bolos, clientes, cobros, gastos e impuestos desde una sola herramienta. Diseñada para adaptarse al ritmo real de la cabina y de tu negocio.
+    </p>
+    
+    <div class="hero-actions">
+      <a href="#funciones" class="btn btn-primary">Explorar funciones</a>
+      <a href="#capturas" class="btn btn-secondary">Ver capturas</a>
+    </div>
+
+    <!-- Contenedor del Vídeo / Mockup Fallback -->
+    <div class="hero-media-wrapper">
+      <div class="device-mockup">
+        <div class="mockup-header">
+          <div class="mockup-dots">
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+          </div>
+          <div class="mockup-address">misbolos.app/dashboard</div>
+        </div>
+        
+        <div class="mockup-content">
+          <!-- El vídeo se renderiza encima si existe -->
+          <video 
+            src="/video/promo.mp4" 
+            class="promo-video" 
+            autoplay 
+            muted 
+            loop 
+            playsinline 
+            aria-label="Vídeo de demostración de la aplicación MisBolos"
+          >
+            <!-- Si el navegador no soporta vídeo, o el vídeo no carga, se ve la interfaz de abajo -->
+          </video>
+
+          <!-- Interfaz Simulada (Fallback elegante y sobrio inspirado en el Dashboard real) -->
+          <div class="dashboard-fallback">
+            <div class="fallback-sidebar">
+              <div class="sidebar-logo">MisBolos</div>
+              <div class="sidebar-item active">Panel</div>
+              <div class="sidebar-item">Agenda</div>
+              <div class="sidebar-item">Facturas</div>
+              <div class="sidebar-item">Gastos</div>
+              <div class="sidebar-item">Finanzas</div>
+            </div>
+            
+            <div class="fallback-body">
+              <div class="fallback-navbar">
+                <div class="navbar-title">Panel de Control</div>
+                <div class="navbar-date">Junio 2026</div>
+              </div>
+              
+              <div class="fallback-grid">
+                <div class="fallback-card">
+                  <span class="card-label">Ingresos cobrados</span>
+                  <span class="card-val text-success">3.240,00 €</span>
+                  <span class="card-sub text-success">12 eventos oficiales</span>
+                </div>
+                <div class="fallback-card">
+                  <span class="card-label">Pendiente de cobro</span>
+                  <span class="card-val text-warning">850,00 €</span>
+                  <span class="card-sub text-warning">2 facturas pendientes</span>
+                </div>
+                <div class="fallback-card">
+                  <span class="card-label">Eventos privados</span>
+                  <span class="card-val">1.400,00 €</span>
+                  <span class="card-sub text-muted">4 bolos privados</span>
+                </div>
+                <div class="fallback-card">
+                  <span class="card-label">Previsión Trimestre</span>
+                  <span class="card-val text-info">5.490,00 €</span>
+                  <span class="card-sub text-info">IVA/IRPF calculado</span>
+                </div>
+              </div>
+
+              <div class="fallback-table-card">
+                <div class="table-header">Próximos Bolos en Agenda</div>
+                <div class="table-row">
+                  <span class="col-main">Club Nocturno - Set Principal</span>
+                  <span class="col-tag confirmed">Confirmado</span>
+                  <span class="col-price">450,00 €</span>
+                </div>
+                <div class="table-row">
+                  <span class="col-main">Boda Evento Privado</span>
+                  <span class="col-tag private">Privado</span>
+                  <span class="col-price">600,00 €</span>
+                </div>
+                <div class="table-row">
+                  <span class="col-main">Festival de Verano - Tarde</span>
+                  <span class="col-tag pending">Pendiente</span>
+                  <span class="col-price">800,00 €</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="fallback-badge">Video promo</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .hero-section {
+    background-color: var(--color-bg);
+    padding: 100px 24px 120px;
+    overflow: hidden;
+  }
+
+  .hero-title {
+    font-size: 4.5rem;
+    font-weight: 800;
+    color: var(--color-primary-dark);
+    margin-bottom: 16px;
+    letter-spacing: -0.04em;
+  }
+
+  .hero-subtitle {
+    font-family: var(--font-display);
+    font-size: 2rem;
+    font-weight: 600;
+    color: var(--color-primary);
+    margin-bottom: 24px;
+    letter-spacing: -0.02em;
+  }
+
+  .hero-description {
+    font-size: 1.15rem;
+    color: #4A5568;
+    margin-bottom: 40px;
+    line-height: 1.7;
+  }
+
+  .hero-actions {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    margin-bottom: 70px;
+  }
+
+  @media (max-width: 600px) {
+    .hero-title {
+      font-size: 3.25rem;
+    }
+    .hero-subtitle {
+      font-size: 1.5rem;
+    }
+    .hero-actions {
+      flex-direction: column;
+      gap: 12px;
+      padding: 0 16px;
+    }
+  }
+
+  /* Contenedor del dispositivo */
+  .hero-media-wrapper {
+    max-width: 960px;
+    margin: 0 auto;
+    perspective: 1000px;
+  }
+
+  .device-mockup {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    aspect-ratio: 16 / 10;
+    width: 100%;
+    position: relative;
+  }
+
+  .mockup-header {
+    height: 40px;
+    background-color: #F1F3F5;
+    border-bottom: 1px solid var(--color-border);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    position: relative;
+  }
+
+  .mockup-dots {
+    display: flex;
+    gap: 6px;
+    position: absolute;
+    left: 16px;
+  }
+
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #D1D5DB;
+  }
+
+  .dot:nth-child(1) { background-color: #FF5F56; }
+  .dot:nth-child(2) { background-color: #FFBD2E; }
+  .dot:nth-child(3) { background-color: #27C93F; }
+
+  .mockup-address {
+    margin: 0 auto;
+    font-size: 0.75rem;
+    color: #9CA3AF;
+    background-color: var(--color-surface);
+    padding: 4px 32px;
+    border-radius: var(--radius-sm);
+    border: 1px solid #E5E7EB;
+    font-family: monospace;
+  }
+
+  .mockup-content {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    background-color: var(--color-bg);
+  }
+
+  /* Vídeo */
+  .promo-video {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    z-index: 2;
+    background: transparent;
+  }
+
+  /* Fallback Mockup CSS */
+  .dashboard-fallback {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    display: flex;
+    background-color: #F7F8FA;
+    font-family: var(--font-sans);
+    text-align: left;
+  }
+
+  .fallback-sidebar {
+    width: 180px;
+    background-color: var(--color-primary-dark);
+    padding: 24px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  @media (max-width: 768px) {
+    .fallback-sidebar {
+      display: none;
+    }
+  }
+
+  .sidebar-logo {
+    color: var(--color-surface);
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 1.1rem;
+    margin-bottom: 20px;
+    letter-spacing: -0.01em;
+  }
+
+  .sidebar-item {
+    color: #94A3B8;
+    font-size: 0.8rem;
+    font-weight: 500;
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+  }
+
+  .sidebar-item.active {
+    background-color: rgba(255, 255, 255, 0.08);
+    color: var(--color-surface);
+  }
+
+  .fallback-body {
+    flex: 1;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    overflow: hidden;
+  }
+
+  .fallback-navbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--color-border);
+    padding-bottom: 12px;
+  }
+
+  .navbar-title {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1.15rem;
+    color: var(--color-primary-dark);
+  }
+
+  .navbar-date {
+    font-size: 0.8rem;
+    color: #718096;
+  }
+
+  .fallback-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+  }
+
+  @media (max-width: 600px) {
+    .fallback-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  .fallback-card {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .card-label {
+    font-size: 0.7rem;
+    color: #718096;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+
+  .card-val {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--color-primary-dark);
+    font-family: var(--font-display);
+  }
+
+  .card-val.text-success { color: var(--color-success); }
+  .card-val.text-warning { color: var(--color-warning); }
+  .card-val.text-info { color: var(--color-info); }
+
+  .card-sub {
+    font-size: 0.65rem;
+    font-weight: 500;
+  }
+  .card-sub.text-success { color: var(--color-success); }
+  .card-sub.text-warning { color: var(--color-warning); }
+  .card-sub.text-info { color: var(--color-info); }
+  .card-sub.text-muted { color: #A0AEC0; }
+
+  .fallback-table-card {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 120px;
+  }
+
+  .table-header {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--color-primary-dark);
+    margin-bottom: 4px;
+  }
+
+  .table-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid #F3F4F6;
+    font-size: 0.75rem;
+  }
+
+  .table-row:last-child {
+    border-bottom: none;
+  }
+
+  .col-main {
+    font-weight: 500;
+    color: var(--color-primary-dark);
+  }
+
+  .col-tag {
+    padding: 2px 8px;
+    border-radius: 9999px;
+    font-size: 0.65rem;
+    font-weight: 600;
+  }
+
+  .col-tag.confirmed {
+    background-color: #E6F4EA;
+    color: var(--color-success);
+  }
+
+  .col-tag.private {
+    background-color: var(--color-soft-blue);
+    color: var(--color-primary);
+  }
+
+  .col-tag.pending {
+    background-color: #FFF3CD;
+    color: var(--color-warning);
+  }
+
+  .col-price {
+    font-family: var(--font-display);
+    font-weight: 700;
+    color: var(--color-primary-dark);
+  }
+
+  /* Etiqueta del vídeo */
+  .fallback-badge {
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    background-color: rgba(13, 27, 42, 0.7);
+    color: var(--color-surface);
+    padding: 4px 8px;
+    font-size: 0.65rem;
+    border-radius: var(--radius-sm);
+    text-transform: uppercase;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    backdrop-filter: blur(4px);
+  }
+</style>

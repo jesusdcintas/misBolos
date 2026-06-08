@@ -1,0 +1,81 @@
+---
+import Header from '../components/Header.astro';
+import Hero from '../components/Hero.astro';
+import FeatureSection from '../components/FeatureSection.astro';
+import ScreenshotGallery from '../components/ScreenshotGallery.astro';
+import Workflow from '../components/Workflow.astro';
+import FiscalControl from '../components/FiscalControl.astro';
+import FAQ from '../components/FAQ.astro';
+import Footer from '../components/Footer.astro';
+import '../styles/global.css';
+---
+
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="generator" content={Astro.generator} />
+    
+    <!-- SEO Básico -->
+    <title>MisBolos - Gestión de bolos, facturas y finanzas para DJs autónomos</title>
+    <meta name="description" content="Centraliza tu agenda de bolos, fichas de clientes, facturación con cumplimiento fiscal (VeriFactu), registro de gastos con lectura inteligente e impuestos en un solo lugar. Diseñado para DJs autónomos." />
+    <link rel="canonical" href="https://misbolos.app" />
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://misbolos.app/" />
+    <meta property="og:title" content="MisBolos - Gestión de bolos, facturas y finanzas para DJs autónomos" />
+    <meta property="og:description" content="Centraliza tu agenda de bolos, clientes, facturas, lectura inteligente de gastos e impuestos en un solo lugar. Diseñado para DJs autónomos en España." />
+    <meta property="og:image" content="https://misbolos.app/og-image.png" />
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://misbolos.app/" />
+    <meta property="twitter:title" content="MisBolos - Gestión de bolos, facturas y finanzas para DJs autónomos" />
+    <meta property="twitter:description" content="Centraliza tu agenda de bolos, clientes, facturas, lectura inteligente de gastos e impuestos en un solo lugar." />
+    <meta property="twitter:image" content="https://misbolos.app/og-image.png" />
+    
+    <!-- Tema de Color en Navegadores Móviles -->
+    <meta name="theme-color" content="#1B2A4A" />
+  </head>
+  <body>
+    <!-- Cabecera de Navegación -->
+    <Header />
+
+    <!-- Área Principal -->
+    <main>
+      <!-- Hero con Vídeo / Fallback Mockup -->
+      <Hero />
+
+      <!-- Sección de Funcionalidades (Dashboard + 12 Módulos) -->
+      <FeatureSection />
+
+      <!-- Galería de Capturas de Producto con Fallbacks CSS -->
+      <ScreenshotGallery />
+
+      <!-- Flujo del DJ (Secuencia paso a paso) -->
+      <Workflow />
+
+      <!-- Control Fiscal Sin Líos -->
+      <FiscalControl />
+
+      <!-- Preguntas Frecuentes (FAQ) Accordion -->
+      <FAQ />
+    </main>
+
+    <!-- Pie de Página -->
+    <Footer />
+  </body>
+</html>
+
+<style>
+  /* Estilos específicos de layout para index si se requiriese */
+  body {
+    background-color: var(--color-bg);
+  }
+</style>
