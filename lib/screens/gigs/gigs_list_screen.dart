@@ -254,7 +254,7 @@ class _GigsListScreenState extends ConsumerState<GigsListScreen> {
           // Nombre del cliente filtrado
           String? clientFilterName;
           if (clientFilter != null && clientMap.containsKey(clientFilter)) {
-            clientFilterName = clientMap[clientFilter]!.nombre;
+            clientFilterName = clientMap[clientFilter]!.displayName;
           }
 
           // Label de mes filtrado
@@ -396,10 +396,41 @@ class _GigsListScreenState extends ConsumerState<GigsListScreen> {
                       children: [
                         _StatusChip(
                           label: 'Todos',
-                          selected: statusFilter == null,
+                          selected:
+                              statusFilter == null &&
+                              facturableFilter == null,
+                          onTap: () {
+                            ref.read(gigStatusFilterProvider.notifier).state =
+                                null;
+                            ref
+                                    .read(
+                                      gigFacturableFilterProvider.notifier,
+                                    )
+                                    .state =
+                                null;
+                          },
+                        ),
+                        _StatusChip(
+                          label: 'Facturables',
+                          selected: facturableFilter == true,
                           onTap: () =>
-                              ref.read(gigStatusFilterProvider.notifier).state =
-                                  null,
+                              ref
+                                      .read(
+                                        gigFacturableFilterProvider.notifier,
+                                      )
+                                      .state =
+                                  facturableFilter == true ? null : true,
+                        ),
+                        _StatusChip(
+                          label: 'Privados',
+                          selected: facturableFilter == false,
+                          onTap: () =>
+                              ref
+                                      .read(
+                                        gigFacturableFilterProvider.notifier,
+                                      )
+                                      .state =
+                                  facturableFilter == false ? null : false,
                         ),
                         _StatusChip(
                           label: GigStatus.confirmado.label,
@@ -1207,8 +1238,12 @@ class _ClientSheetContentState extends State<_ClientSheetContent> {
                 final client = filtered[index - 1];
                 final count = widget.gigCounts[client.id] ?? 0;
                 return RadioListTile<String?>(
-                  title: Text(client.nombre),
-                  subtitle: Text('$count bolos'),
+                  title: Text(client.displayName),
+                  subtitle: Text(
+                    client.alias.trim().isNotEmpty
+                        ? '${client.nombre} · $count bolos'
+                        : '$count bolos',
+                  ),
                   value: client.id,
                 );
               },
@@ -1335,7 +1370,7 @@ class _GigListTile extends ConsumerWidget {
             ),
             title: clientAsync.when(
               data: (client) => Text(
-                client?.nombre ?? 'Cliente desconocido',
+                client?.displayName ?? 'Cliente desconocido',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontWeight: FontWeight.w600),

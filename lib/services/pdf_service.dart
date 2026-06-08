@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -47,6 +48,12 @@ class PdfService {
     final primaryColor = theme.primaryColor;
     final headerBg = theme.headerBg;
     final rowAlt = theme.rowAlt;
+    final isRectifying = invoice.isRectifying;
+    final hasFiscalData =
+        invoice.isFiscallyIssued ||
+        (invoice.fiscalHash?.trim().isNotEmpty ?? false);
+    final titleText = isRectifying ? 'FACTURA RECTIFICATIVA' : 'FACTURA';
+    final dateFormat = DateFormat('dd/MM/yyyy');
 
     pw.ImageProvider? logoImage;
     if (settings.logoPath.isNotEmpty) {
@@ -83,7 +90,7 @@ class PdfService {
                     ),
                   ),
                   pw.Text(
-                    'FACTURA',
+                    titleText,
                     style: pw.TextStyle(
                       fontSize: 36,
                       fontWeight: pw.FontWeight.bold,
@@ -210,6 +217,52 @@ class PdfService {
               ),
               pw.SizedBox(height: 8),
 
+              if (isRectifying) ...[
+                pw.Container(
+                  width: double.infinity,
+                  padding: const pw.EdgeInsets.all(12),
+                  decoration: pw.BoxDecoration(
+                    color: PdfColors.amber50,
+                    border: pw.Border.all(color: PdfColors.amber200, width: 1),
+                    borderRadius: pw.BorderRadius.circular(8),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        'Factura rectificativa',
+                        style: pw.TextStyle(
+                          fontSize: 11,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.orange800,
+                        ),
+                      ),
+                      pw.SizedBox(height: 4),
+                      pw.Text(
+                        'Rectifica la factura nº ${invoice.originalInvoiceNumber ?? '-'}'
+                        '${invoice.originalInvoiceDate != null ? ' de ${dateFormat.format(invoice.originalInvoiceDate!)}' : ''}.',
+                        style: const pw.TextStyle(fontSize: 10),
+                      ),
+                      if ((invoice.rectificationReason ?? '')
+                          .trim()
+                          .isNotEmpty) ...[
+                        pw.SizedBox(height: 4),
+                        pw.Text(
+                          'Motivo: ${invoice.rectificationReason!.trim()}',
+                          style: const pw.TextStyle(fontSize: 10),
+                        ),
+                      ],
+                      pw.SizedBox(height: 4),
+                      pw.Text(
+                        'Tipo de rectificación: ${invoice.rectificationType == RectificationType.difference ? 'Por diferencia' : 'Por sustitución'}',
+                        style: const pw.TextStyle(fontSize: 10),
+                      ),
+                    ],
+                  ),
+                ),
+                pw.SizedBox(height: 12),
+              ],
+
               // Fecha, nº factura, IBAN
               pw.Row(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -223,7 +276,7 @@ class PdfService {
                           style: const pw.TextStyle(fontSize: 10),
                         ),
                         pw.Text(
-                          '${invoice.fecha.day}/${invoice.fecha.month}/${invoice.fecha.year}',
+                          dateFormat.format(invoice.fecha),
                           style: pw.TextStyle(
                             fontSize: 10,
                             fontWeight: pw.FontWeight.bold,
@@ -238,12 +291,12 @@ class PdfService {
                     child: pw.Row(
                       children: [
                         pw.Text(
-                          'N.º de factura',
+                          isRectifying ? 'N.º rectificativa' : 'N.º de factura',
                           style: const pw.TextStyle(fontSize: 10),
                         ),
                         pw.SizedBox(width: 30),
                         pw.Text(
-                          '${invoice.numero}',
+                          invoice.visualNumber,
                           style: pw.TextStyle(
                             fontSize: 10,
                             fontWeight: pw.FontWeight.bold,
@@ -396,6 +449,105 @@ class PdfService {
                   ],
                 ),
               ),
+              if (hasFiscalData) ...[
+                pw.SizedBox(height: 16),
+                pw.Container(
+                  width: double.infinity,
+                  padding: const pw.EdgeInsets.all(14),
+                  decoration: pw.BoxDecoration(
+                    color: PdfColors.grey100,
+                    borderRadius: pw.BorderRadius.circular(10),
+                    border: pw.Border.all(color: PdfColors.grey300, width: 0.8),
+                  ),
+                  child: pw.Row(
+                    crossAxisAlignment: pw.CrossAxisAlignment.center,
+                    children: [
+                      pw.Expanded(
+                        child: pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            pw.Text(
+                              'INFORMACIÓN FISCAL',
+                              style: pw.TextStyle(
+                                fontSize: 11,
+                                fontWeight: pw.FontWeight.bold,
+                                color: primaryColor,
+                              ),
+                            ),
+                            pw.SizedBox(height: 6),
+                            pw.Text(
+                              'Factura generada por sistema preparado para VeriFactu',
+                              style: const pw.TextStyle(fontSize: 9),
+                            ),
+                            pw.SizedBox(height: 8),
+                            pw.Text(
+                              'Hash fiscal:',
+                              style: pw.TextStyle(
+                                fontSize: 9,
+                                fontWeight: pw.FontWeight.bold,
+                                color: primaryColor,
+                              ),
+                            ),
+                            pw.Text(
+                              invoice.fiscalHash == null
+                                  ? '-'
+                                  : invoice.fiscalHash!.substring(
+                                      0,
+                                      invoice.fiscalHash!.length < 12
+                                          ? invoice.fiscalHash!.length
+                                          : 12,
+                                    ),
+                              style: const pw.TextStyle(fontSize: 8),
+                            ),
+                            if (invoice.isFiscallyIssued) ...[
+                              pw.SizedBox(height: 8),
+                              pw.Text(
+                                'Factura emitida y bloqueada por VeriFactu.',
+                                style: pw.TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: pw.FontWeight.bold,
+                                  color: PdfColors.orange800,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      pw.SizedBox(width: 16),
+                      pw.Container(
+                        padding: const pw.EdgeInsets.all(8),
+                        decoration: pw.BoxDecoration(
+                          color: _white,
+                          borderRadius: pw.BorderRadius.circular(8),
+                          border: pw.Border.all(
+                            color: PdfColors.grey300,
+                            width: 0.8,
+                          ),
+                        ),
+                        child: pw.Column(
+                          children: [
+                            pw.Text(
+                              'QR fiscal',
+                              style: pw.TextStyle(
+                                fontSize: 9,
+                                fontWeight: pw.FontWeight.bold,
+                                color: primaryColor,
+                              ),
+                            ),
+                            pw.SizedBox(height: 6),
+                            pw.BarcodeWidget(
+                              barcode: pw.Barcode.qrCode(),
+                              data: _buildFiscalQrData(invoice),
+                              width: 78,
+                              height: 78,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           );
         },
@@ -498,8 +650,28 @@ class PdfService {
   }
 
   static String _formatCurrency(double amount) {
-    final formatted = amount.toStringAsFixed(2).replaceAll('.', ',');
-    return '$formatted €';
+    return NumberFormat.currency(
+      locale: 'es_ES',
+      symbol: '€',
+      decimalDigits: 2,
+    ).format(amount);
+  }
+
+  static String _buildFiscalQrData(Invoice invoice) {
+    final payload = <String, dynamic>{
+      'app': 'MisBolos',
+      'invoice_id': invoice.id,
+      'invoice_series': invoice.visualSeries,
+      'invoice_number': invoice.numero,
+      'invoice_type': invoice.invoiceType.dbValue,
+      'issued_at': invoice.fecha.toIso8601String(),
+      'invoice_date': DateFormat('yyyy-MM-dd').format(invoice.fecha),
+      'total': invoice.total,
+      'fiscal_hash': invoice.fiscalHash,
+      'original_invoice_number': invoice.originalInvoiceNumber,
+      'rectifies_invoice_id': invoice.rectifiesInvoiceId,
+    };
+    return jsonEncode(payload);
   }
 
   // ================== RESUMEN FINANCIERO ==================

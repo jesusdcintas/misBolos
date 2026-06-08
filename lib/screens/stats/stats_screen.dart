@@ -76,18 +76,44 @@ class _OfficialTab extends ConsumerWidget {
         const SizedBox(height: 16),
 
         // Gráfico de barras
-        if (mode == ChartMode.mensual)
-          statsAsync.when(
-            data: (months) => _buildMonthlyChart(ref, months, year, AppColors.accentGreen, (m) => m.oficial),
-            loading: () => const SizedBox(height: 250, child: Center(child: CircularProgressIndicator())),
-            error: (e, _) => Text('Error: $e'),
-          )
-        else
-          quarterlyAsync.when(
-            data: (quarters) => _buildQuarterlyChart(ref, quarters, year, (q) => q.oficial),
-            loading: () => const SizedBox(height: 250, child: Center(child: CircularProgressIndicator())),
-            error: (e, _) => Text('Error: $e'),
+        statsAsync.when(
+          data: (months) {
+            final total = months.fold<double>(0, (sum, m) => sum + m.oficial);
+            return Column(
+              children: [
+                _TotalSummaryBand(
+                  title: 'TOTAL OFICIAL',
+                  amount: total,
+                  amountColor: AppColors.accentGreen,
+                ),
+                const SizedBox(height: 16),
+                if (mode == ChartMode.mensual)
+                  _buildMonthlyChart(
+                    ref,
+                    months,
+                    year,
+                    AppColors.accentGreen,
+                    (m) => m.oficial,
+                  )
+                else
+                  quarterlyAsync.when(
+                    data: (quarters) =>
+                        _buildQuarterlyChart(ref, quarters, year, (q) => q.oficial),
+                    loading: () => const SizedBox(
+                      height: 250,
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+                    error: (e, _) => Text('Error: $e'),
+                  ),
+              ],
+            );
+          },
+          loading: () => const SizedBox(
+            height: 250,
+            child: Center(child: CircularProgressIndicator()),
           ),
+          error: (e, _) => Text('Error: $e'),
+        ),
 
         // Tooltip
         const _TooltipCard(),
@@ -129,18 +155,44 @@ class _EnBTab extends ConsumerWidget {
         const Center(child: _ChartModeToggle()),
         const SizedBox(height: 16),
 
-        if (mode == ChartMode.mensual)
-          statsAsync.when(
-            data: (months) => _buildMonthlyChart(ref, months, year, AppColors.accentPurple, (m) => m.enB),
-            loading: () => const SizedBox(height: 250, child: Center(child: CircularProgressIndicator())),
-            error: (e, _) => Text('Error: $e'),
-          )
-        else
-          quarterlyAsync.when(
-            data: (quarters) => _buildQuarterlyChart(ref, quarters, year, (q) => q.enB),
-            loading: () => const SizedBox(height: 250, child: Center(child: CircularProgressIndicator())),
-            error: (e, _) => Text('Error: $e'),
+        statsAsync.when(
+          data: (months) {
+            final total = months.fold<double>(0, (sum, m) => sum + m.enB);
+            return Column(
+              children: [
+                _TotalSummaryBand(
+                  title: 'TOTAL PRIVADO',
+                  amount: total,
+                  amountColor: AppColors.accentPurple,
+                ),
+                const SizedBox(height: 16),
+                if (mode == ChartMode.mensual)
+                  _buildMonthlyChart(
+                    ref,
+                    months,
+                    year,
+                    AppColors.accentPurple,
+                    (m) => m.enB,
+                  )
+                else
+                  quarterlyAsync.when(
+                    data: (quarters) =>
+                        _buildQuarterlyChart(ref, quarters, year, (q) => q.enB),
+                    loading: () => const SizedBox(
+                      height: 250,
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+                    error: (e, _) => Text('Error: $e'),
+                  ),
+              ],
+            );
+          },
+          loading: () => const SizedBox(
+            height: 250,
+            child: Center(child: CircularProgressIndicator()),
           ),
+          error: (e, _) => Text('Error: $e'),
+        ),
 
         const _TooltipCard(),
         const SizedBox(height: 16),
@@ -186,66 +238,10 @@ class _GlobalTab extends ConsumerWidget {
             }
             return Column(
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            children: [
-                              const Text('Total oficial'),
-                              Text(CurrencyFormatter.format(totalOficial),
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 18,
-                                    color: AppColors.accentGreen,
-                                  )),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      child: Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            children: [
-                              const Text('Total privado'),
-                              Text(CurrencyFormatter.format(totalEnB),
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 18,
-                                    color: AppColors.accentPurple,
-                                  )),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                Card(
-                  color: AppColors.primary.withValues(alpha: 0.1),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('TOTAL GLOBAL',
-                            style: TextStyle(fontWeight: FontWeight.bold)),
-                        Text(
-                          CurrencyFormatter.format(totalOficial + totalEnB),
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 20,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                _TotalSummaryBand(
+                  title: 'TOTAL GLOBAL',
+                  amount: totalOficial + totalEnB,
+                  amountColor: AppColors.primary,
                 ),
                 const SizedBox(height: 16),
 
@@ -260,6 +256,9 @@ class _GlobalTab extends ConsumerWidget {
                     child: BarChart(
                       BarChartData(
                         barTouchData: BarTouchData(
+                          touchTooltipData: _chartCurrencyTooltipData(
+                            (groupIndex) => months[groupIndex].total,
+                          ),
                           touchCallback: (event, response) {
                             if (event.isInterestedForInteractions &&
                                 response?.spot != null) {
@@ -270,6 +269,8 @@ class _GlobalTab extends ConsumerWidget {
                                 totalCobrado: m.total,
                                 totalIva: 0,
                                 numFacturas: 0,
+                                totalOficial: m.oficial,
+                                totalPrivado: m.enB,
                               );
                             }
                           },
@@ -428,6 +429,90 @@ class _ToggleButton extends StatelessWidget {
   }
 }
 
+class _TotalSummaryBand extends StatelessWidget {
+  final String title;
+  final double amount;
+  final Color amountColor;
+
+  const _TotalSummaryBand({
+    required this.title,
+    required this.amount,
+    required this.amountColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final background = isDark
+        ? colorScheme.surfaceContainerHighest.withValues(alpha: 0.45)
+        : const Color(0xFFE3E6EB);
+    final border = isDark
+        ? colorScheme.outlineVariant.withValues(alpha: 0.45)
+        : AppColors.cardBorder.withValues(alpha: 0.55);
+
+    return Container(
+      width: double.infinity,
+      constraints: const BoxConstraints(minHeight: 64),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: border, width: 0.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.18 : 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 360;
+          final titleWidget = Text(
+            title,
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 14,
+              letterSpacing: 0.2,
+              color: colorScheme.onSurface,
+            ),
+          );
+          final amountWidget = Text(
+            CurrencyFormatter.format(amount),
+            textAlign: compact ? TextAlign.left : TextAlign.right,
+            style: TextStyle(
+              fontWeight: FontWeight.w900,
+              fontSize: compact ? 20 : 22,
+              color: amountColor,
+            ),
+          );
+          if (compact) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                titleWidget,
+                const SizedBox(height: 6),
+                amountWidget,
+              ],
+            );
+          }
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(child: titleWidget),
+              const SizedBox(width: 16),
+              Flexible(child: amountWidget),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
 // ==================== TOOLTIP CARD ====================
 
 class _TooltipCard extends ConsumerWidget {
@@ -480,9 +565,27 @@ class _TooltipCard extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 8),
-            _tooltipRow('Cobrado', CurrencyFormatter.format(data.totalCobrado), AppColors.success),
-            _tooltipRow('IVA', CurrencyFormatter.format(data.totalIva), AppColors.warning),
-            _tooltipRow('Facturas cobradas', '${data.numFacturas}', AppColors.primary),
+            if (data.hasGlobalBreakdown) ...[
+              _tooltipRow(
+                'Oficial',
+                CurrencyFormatter.format(data.totalOficial ?? 0),
+                AppColors.accentGreen,
+              ),
+              _tooltipRow(
+                'Privado',
+                CurrencyFormatter.format(data.totalPrivado ?? 0),
+                AppColors.accentPurple,
+              ),
+              _tooltipRow(
+                'Total tramo',
+                CurrencyFormatter.format(data.totalCobrado),
+                AppColors.primary,
+              ),
+            ] else ...[
+              _tooltipRow('Cobrado', CurrencyFormatter.format(data.totalCobrado), AppColors.success),
+              _tooltipRow('IVA', CurrencyFormatter.format(data.totalIva), AppColors.warning),
+              _tooltipRow('Facturas cobradas', '${data.numFacturas}', AppColors.primary),
+            ],
           ],
         ),
       ),
@@ -505,6 +608,30 @@ class _TooltipCard extends ConsumerWidget {
 
 // ==================== CHART BUILDERS ====================
 
+BarTouchTooltipData _chartCurrencyTooltipData(
+  double Function(int groupIndex) valueAt,
+) {
+  return BarTouchTooltipData(
+    maxContentWidth: 180,
+    tooltipPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+    tooltipRoundedRadius: 8,
+    fitInsideHorizontally: true,
+    fitInsideVertically: true,
+    getTooltipColor: (_) => AppColors.primary,
+    getTooltipItem: (group, groupIndex, rod, rodIndex) {
+      final value = valueAt(groupIndex);
+      return BarTooltipItem(
+        CurrencyFormatter.format(value),
+        const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w800,
+          fontSize: 14,
+        ),
+      );
+    },
+  );
+}
+
 Widget _buildMonthlyChart(
   WidgetRef ref,
   List<MonthlyIncome> months,
@@ -521,6 +648,9 @@ Widget _buildMonthlyChart(
     child: BarChart(
       BarChartData(
         barTouchData: BarTouchData(
+          touchTooltipData: _chartCurrencyTooltipData(
+            (groupIndex) => getValue(months[groupIndex]),
+          ),
           touchCallback: (event, response) async {
             if (event.isInterestedForInteractions && response?.spot != null) {
               final idx = response!.spot!.touchedBarGroupIndex;
@@ -594,6 +724,9 @@ Widget _buildQuarterlyChart(
     child: BarChart(
       BarChartData(
         barTouchData: BarTouchData(
+          touchTooltipData: _chartCurrencyTooltipData(
+            (groupIndex) => getValue(quarters[groupIndex]),
+          ),
           touchCallback: (event, response) async {
             if (event.isInterestedForInteractions && response?.spot != null) {
               final idx = response!.spot!.touchedBarGroupIndex;
@@ -670,6 +803,9 @@ Widget _buildQuarterlyStackedChart(
     child: BarChart(
       BarChartData(
         barTouchData: BarTouchData(
+          touchTooltipData: _chartCurrencyTooltipData(
+            (groupIndex) => quarters[groupIndex].total,
+          ),
           touchCallback: (event, response) {
             if (event.isInterestedForInteractions && response?.spot != null) {
               final idx = response!.spot!.touchedBarGroupIndex;
@@ -679,6 +815,8 @@ Widget _buildQuarterlyStackedChart(
                 totalCobrado: q.total,
                 totalIva: 0,
                 numFacturas: 0,
+                totalOficial: q.oficial,
+                totalPrivado: q.enB,
               );
             }
           },

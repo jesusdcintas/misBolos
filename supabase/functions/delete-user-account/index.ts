@@ -1,3 +1,5 @@
+/// <reference lib="deno.ns" />
+// @deno-types="https://esm.sh/@supabase/supabase-js@2?dts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -6,7 +8,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-Deno.serve(async (req) => {
+Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -55,6 +57,8 @@ Deno.serve(async (req) => {
     // Orden defensivo: primero dependientes, luego principales.
     // Si una tabla no existe en este proyecto, se ignora.
     const tables = [
+      "invoice_reminder_email_logs",
+      "invoice_fiscal_records",
       "invoice_email_logs",
       "invoice_number_changes",
       "sync_queue",
@@ -99,9 +103,10 @@ Deno.serve(async (req) => {
     }
 
     return json({ ok: true, success: true });
-  } catch (error) {
+  } catch (error: unknown) {
+    const details = error instanceof Error ? error.message : String(error);
     return json(
-      { ok: false, error: "Unexpected error", details: String(error) },
+      { ok: false, error: "Unexpected error", details },
       500,
     );
   }

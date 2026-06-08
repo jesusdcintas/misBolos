@@ -168,11 +168,12 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
   @override
   Widget build(BuildContext context) {
     final isEditing = _existingInvoice != null;
+    final isLocked = _existingInvoice?.isFiscallyLocked == true;
     return Scaffold(
       appBar: AppBar(
         title: Text(isEditing ? 'Editar Factura' : 'Nueva Factura'),
         actions: [
-          if (!_isLoading && !_isSaving)
+          if (!_isLoading && !_isSaving && !isLocked)
             IconButton(
               onPressed: _save,
               icon: const Icon(Icons.check),
@@ -182,6 +183,29 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
+          : isLocked
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.lock_outline, size: 42),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Factura bloqueada por modo VeriFactu',
+                      style: Theme.of(context).textTheme.titleMedium,
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Para corregirla, crea una factura rectificativa desde el detalle de la factura.',
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            )
           : Form(
               key: _formKey,
               child: ListView(
@@ -700,6 +724,14 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     if (_gig == null || _client == null) return;
+    if (_existingInvoice?.isFiscallyLocked == true) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Factura bloqueada por modo VeriFactu')),
+        );
+      }
+      return;
+    }
 
     setState(() => _isSaving = true);
 
@@ -757,9 +789,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
       }
 
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Factura guardada. Pendiente de subir a Drive.'),
           ),

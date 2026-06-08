@@ -148,7 +148,7 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
                       clientMap.containsKey(clientFilter)) {
                     clientFilterName = clientMap[clientFilter]!.alias.isNotEmpty
                         ? clientMap[clientFilter]!.alias
-                        : clientMap[clientFilter]!.nombre;
+                        : clientMap[clientFilter]!.displayName;
                   }
 
                   // Label de mes filtrado
@@ -1007,7 +1007,7 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
         if (client != null && settings.notificacionesActivas) {
           await NotificationService.instance.schedulePaymentReminder(
             id: invoice.numero,
-            clientName: client.nombre,
+            clientName: client.displayName,
             total: invoice.total,
             invoiceNumber: invoice.numero,
             scheduledDate: DateTime.now().add(
@@ -1092,7 +1092,7 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
               if (client != null) {
                 await NotificationService.instance.schedulePaymentReminder(
                   id: invoice.numero,
-                  clientName: client.nombre,
+                  clientName: client.displayName,
                   total: invoice.total,
                   invoiceNumber: invoice.numero,
                   scheduledDate: DateTime.now().add(
@@ -1207,7 +1207,7 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
       final client = await ref.read(clientByIdProvider(gig.clientId).future);
       await GoogleCalendarService().syncGig(
         gig: gig,
-        clientName: client?.nombre ?? 'Cliente',
+        clientName: client?.displayName ?? 'Cliente',
         cachet: gig.cachet,
       );
     } catch (_) {}
@@ -1668,6 +1668,25 @@ class _InvoiceTile extends ConsumerWidget {
   Color _statusBgColor(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = context.colors;
+    final isRectifyingPaid =
+        invoice.isRectifying && invoice.status == InvoiceStatus.pagada;
+    final isRectifyingIssued =
+        invoice.isRectifying && invoice.status == InvoiceStatus.enviada;
+    final isRectifyingDraft =
+        invoice.isRectifying && invoice.status == InvoiceStatus.borrador;
+    if (isRectifyingPaid) {
+      return isDark
+          ? AppColors.fiscalBg.withValues(alpha: 0.22)
+          : AppColors.fiscalBg;
+    }
+    if (isRectifyingIssued) {
+      return isDark
+          ? AppColors.purpleBg.withValues(alpha: 0.22)
+          : AppColors.purpleBg;
+    }
+    if (isRectifyingDraft) {
+      return isDark ? colors.surfaceElevated : AppColors.draftBg;
+    }
     if (isDark) {
       switch (invoice.status) {
         case InvoiceStatus.borrador:
@@ -1691,6 +1710,21 @@ class _InvoiceTile extends ConsumerWidget {
   Color _statusTextColor(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = context.colors;
+    final isRectifyingPaid =
+        invoice.isRectifying && invoice.status == InvoiceStatus.pagada;
+    final isRectifyingIssued =
+        invoice.isRectifying && invoice.status == InvoiceStatus.enviada;
+    final isRectifyingDraft =
+        invoice.isRectifying && invoice.status == InvoiceStatus.borrador;
+    if (isRectifyingPaid) {
+      return AppColors.fiscal;
+    }
+    if (isRectifyingIssued) {
+      return AppColors.purple;
+    }
+    if (isRectifyingDraft) {
+      return isDark ? colors.textSecondary : AppColors.draft;
+    }
     if (isDark) {
       switch (invoice.status) {
         case InvoiceStatus.borrador:
@@ -1736,27 +1770,7 @@ class _InvoiceTile extends ConsumerWidget {
                 onChanged: (v) => onSelect?.call(v ?? false),
                 activeColor: scheme.primary,
               )
-            : Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: _statusBgColor(context),
-                  borderRadius: BorderRadius.circular(12),
-                  border: isDark
-                      ? Border.all(color: colors.border.withValues(alpha: 0.65))
-                      : null,
-                ),
-                child: Center(
-                  child: Text(
-                    '#${invoice.numero}',
-                    style: TextStyle(
-                      color: _statusTextColor(context),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
+            : _InvoiceNumberBadge(invoice: invoice, compact: true),
         title: clientAsync.when(
           data: (c) => Text(
             c?.alias.isNotEmpty == true ? c!.alias : c?.nombre ?? '',
@@ -1769,7 +1783,9 @@ class _InvoiceTile extends ConsumerWidget {
           error: (_, __) => const Text('Error'),
         ),
         subtitle: Text(
-          DateFormatter.dayOfWeekFull(invoice.fecha),
+          invoice.isRectifying
+              ? '${DateFormatter.dayOfWeekFull(invoice.fecha)} · Rectificativa'
+              : DateFormatter.dayOfWeekFull(invoice.fecha),
           style: TextStyle(
             color: isDark ? colors.textSecondary : AppColors.textSecondary,
           ),
@@ -1918,30 +1934,29 @@ class _InvoiceGridCard extends ConsumerWidget {
                         activeColor: scheme.primary,
                       )
                     else
+                      _InvoiceNumberBadge(invoice: invoice),
+                    const Spacer(),
+                    if (invoice.isRectifying) ...[
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 8,
-                          vertical: 4,
+                          vertical: 3,
                         ),
                         decoration: BoxDecoration(
-                          color: _statusBgColor(context),
-                          borderRadius: BorderRadius.circular(10),
-                          border: isDark
-                              ? Border.all(
-                                  color: colors.border.withValues(alpha: 0.65),
-                                )
-                              : null,
+                          color: AppColors.primaryLight,
+                          borderRadius: BorderRadius.circular(999),
                         ),
-                        child: Text(
-                          '#${invoice.numero}',
+                        child: const Text(
+                          'Rectificativa',
                           style: TextStyle(
-                            color: _statusTextColor(context),
-                            fontSize: 12,
+                            fontSize: 10,
                             fontWeight: FontWeight.w700,
+                            color: AppColors.primary,
                           ),
                         ),
                       ),
-                    const Spacer(),
+                      const SizedBox(width: 6),
+                    ],
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 8,
@@ -2022,6 +2037,89 @@ class _InvoiceGridCard extends ConsumerWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _InvoiceNumberBadge extends StatelessWidget {
+  final Invoice invoice;
+  final bool compact;
+
+  const _InvoiceNumberBadge({required this.invoice, this.compact = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = context.colors;
+    final isRectifying = invoice.isRectifying;
+    final background = isRectifying && invoice.status == InvoiceStatus.pagada
+        ? AppColors.fiscalBg
+        : isRectifying && invoice.status == InvoiceStatus.enviada
+        ? AppColors.purpleBg
+        : isRectifying && invoice.status == InvoiceStatus.borrador
+        ? AppColors.draftBg
+        : switch (invoice.status) {
+            InvoiceStatus.borrador => AppColors.draftBg,
+            InvoiceStatus.enviada => AppColors.warningBg,
+            InvoiceStatus.pagada => AppColors.successBg,
+          };
+    final foreground = isRectifying && invoice.status == InvoiceStatus.pagada
+        ? AppColors.fiscal
+        : isRectifying && invoice.status == InvoiceStatus.enviada
+        ? AppColors.purple
+        : isRectifying && invoice.status == InvoiceStatus.borrador
+        ? AppColors.draft
+        : switch (invoice.status) {
+            InvoiceStatus.borrador => AppColors.draft,
+            InvoiceStatus.enviada => AppColors.warning,
+            InvoiceStatus.pagada => AppColors.success,
+          };
+    final width = compact ? 62.0 : 74.0;
+    final height = compact ? 58.0 : 60.0;
+
+    return Container(
+      width: width,
+      height: height,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(16),
+        border: isDark
+            ? Border.all(color: colors.border.withValues(alpha: 0.65))
+            : Border.all(color: background.withValues(alpha: 0.7)),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            '${invoice.visualSeries}-${invoice.fecha.year}',
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: foreground,
+              fontSize: compact ? 10 : 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.4,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            invoice.numero.toString().padLeft(4, '0'),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: foreground,
+              fontSize: compact ? 15 : 16,
+              fontWeight: FontWeight.w800,
+              height: 1.0,
+              letterSpacing: 0.6,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -2343,9 +2441,7 @@ class _ManualRenumberDialogState extends ConsumerState<_ManualRenumberDialog> {
                               final invoice = visibleInvoices[index];
                               final client = clientMap[invoice.clientId];
                               final clientName =
-                                  client?.alias.isNotEmpty == true
-                                  ? client!.alias
-                                  : client?.nombre ?? invoice.clientId;
+                                  client?.displayName ?? invoice.clientId;
                               final controller = _controllerFor(invoice);
                               return Card(
                                 key: _fieldKeyFor(invoice.id),
@@ -2359,7 +2455,7 @@ class _ManualRenumberDialogState extends ConsumerState<_ManualRenumberDialog> {
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        'Nº actual: ${invoice.numero}',
+                                        'Nº actual: ${invoice.visualNumber}',
                                         style: const TextStyle(
                                           fontWeight: FontWeight.w700,
                                         ),
@@ -2429,17 +2525,15 @@ class _ManualRenumberDialogState extends ConsumerState<_ManualRenumberDialog> {
                                         final client =
                                             clientMap[invoice.clientId];
                                         final clientName =
-                                            client?.alias.isNotEmpty == true
-                                            ? client!.alias
-                                            : client?.nombre ??
-                                                  invoice.clientId;
+                                            client?.displayName ??
+                                            invoice.clientId;
                                         final controller = _controllerFor(
                                           invoice,
                                         );
                                         return DataRow(
                                           cells: [
                                             DataCell(
-                                              Text(invoice.numero.toString()),
+                                              Text(invoice.visualNumber),
                                             ),
                                             DataCell(
                                               Text(
@@ -2761,9 +2855,7 @@ class _InvClientSheetContentState extends State<_InvClientSheetContent> {
               ...filtered.map((client) {
                 final isSelected = widget.selectedClientId == client.id;
                 final count = widget.invoiceCounts[client.id] ?? 0;
-                final displayName = client.alias.isNotEmpty
-                    ? client.alias
-                    : client.nombre;
+                final displayName = client.displayName;
                 return ListTile(
                   leading: Icon(
                     isSelected

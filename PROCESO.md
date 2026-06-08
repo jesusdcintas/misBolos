@@ -450,16 +450,14 @@ cambiar factura a enviada.
 - Resend: opción simple y limpia si hay dominio propio.
 - Brevo: buena alternativa con panel completo y enfoque europeo.
 - SMTP: solo desde backend seguro, nunca directo desde Flutter.
-- Decisión pendiente: elegir Resend o Brevo antes de desplegar la función.
+- Decisión completada: proveedor seleccionado `Brevo`.
 
 **Arquitectura segura**
 - Flutter genera o solicita el PDF.
 - Flutter llama a una Supabase Edge Function.
 - La Edge Function guarda las claves del proveedor en secrets.
 - El cliente Flutter nunca contiene API keys privadas.
-- Secrets esperados si se usa Resend: `RESEND_API_KEY` e
-  `INVOICE_FROM_EMAIL`.
-- Si se usa Brevo, adaptar la Edge Function y usar secrets equivalentes:
+- Secrets activos para producción con Brevo:
   `BREVO_API_KEY` e `INVOICE_FROM_EMAIL`.
 
 **Cierre**

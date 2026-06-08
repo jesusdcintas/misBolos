@@ -11,6 +11,7 @@ import '../../models/pdf_theme.dart';
 import '../../providers/gig_provider.dart';
 import '../../providers/invoice_provider.dart';
 import '../../providers/settings_provider.dart';
+import '../../services/supabase_service.dart';
 import '../settings/duplicate_clients_screen.dart';
 import '../settings/import_screen.dart';
 
@@ -28,12 +29,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   String _pdfTheme = 'clasico';
   bool _notificaciones = true;
   int _diasRecordatorio = 7;
+  bool _emailInvoiceRemindersEnabled = false;
+  String _invoiceReminderFrequency = 'weekly';
   bool _autoCloudSyncEnabled = true;
   int _autoCloudSyncIntervalSeconds = 45;
   String _appThemeMode = 'light';
   bool _securityPinEnabled = false;
   String _securityPinCode = '';
   bool _securityBiometricEnabled = false;
+  bool _verifactuEnabled = false;
   int _lockDelaySeconds = 5;
   bool _loaded = false;
 
@@ -46,12 +50,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _pdfTheme = s.pdfTheme;
     _notificaciones = s.notificacionesActivas;
     _diasRecordatorio = s.diasRecordatorio;
+    _emailInvoiceRemindersEnabled = s.emailInvoiceRemindersEnabled;
+    _invoiceReminderFrequency = s.invoiceReminderFrequency;
     _autoCloudSyncEnabled = s.autoCloudSyncEnabled;
     _autoCloudSyncIntervalSeconds = s.autoCloudSyncIntervalSeconds;
     _appThemeMode = s.appThemeMode;
     _securityPinEnabled = s.securityPinEnabled;
     _securityPinCode = s.securityPinCode;
     _securityBiometricEnabled = s.securityBiometricEnabled;
+    _verifactuEnabled = s.verifactuEnabled;
   }
 
   @override
@@ -88,6 +95,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           const SizedBox(height: 12),
                           _buildSyncCard(),
                         ],
+                        const SizedBox(height: 12),
+                        _buildRemindersCard(settings),
                         const SizedBox(height: 12),
                         if (isWide)
                           Row(
@@ -229,6 +238,77 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
+  Widget _buildRemindersCard(AppSettings settings) {
+    final accountEmail =
+        SupabaseService.instance.userEmail?.trim().isNotEmpty == true
+        ? SupabaseService.instance.userEmail!.trim()
+        : settings.emisorEmail.trim();
+    final canUseEmailReminders =
+        SupabaseService.instance.isAuthenticated && accountEmail.isNotEmpty;
+    final emailSubtitle = canUseEmailReminders
+        ? 'Recibe un correo con tus facturas pendientes.'
+        : 'Inicia sesión y configura un email para activar recordatorios por correo.';
+
+    return _sectionCard(
+      'Recordatorios',
+      Icons.notifications_active_outlined,
+      Column(
+        children: [
+          SwitchListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Recordatorios en la app'),
+            subtitle: const Text(
+              'Recibe avisos dentro de MisBolos sobre facturas pendientes.',
+            ),
+            value: _notificaciones,
+            onChanged: (v) async {
+              setState(() => _notificaciones = v);
+              await _saveInstant();
+            },
+          ),
+          SwitchListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Recordatorios por email'),
+            subtitle: Text(emailSubtitle),
+            value: canUseEmailReminders && _emailInvoiceRemindersEnabled,
+            onChanged: canUseEmailReminders
+                ? (v) async {
+                    setState(() => _emailInvoiceRemindersEnabled = v);
+                    await _saveInstant();
+                  }
+                : null,
+          ),
+          if (_emailInvoiceRemindersEnabled && canUseEmailReminders)
+            ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Frecuencia de recordatorios'),
+              subtitle: const Text(
+                'Recibirás un resumen de tus facturas pendientes según la frecuencia seleccionada.',
+              ),
+              trailing: DropdownButton<String>(
+                value: _invoiceReminderFrequency,
+                items: const [
+                  DropdownMenuItem(value: 'weekly', child: Text('Cada 7 días')),
+                  DropdownMenuItem(
+                    value: 'biweekly',
+                    child: Text('Cada 15 días'),
+                  ),
+                  DropdownMenuItem(value: 'monthly', child: Text('Mensual')),
+                ],
+                onChanged: (v) async {
+                  setState(() => _invoiceReminderFrequency = v ?? 'weekly');
+                  await _saveInstant();
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSecurityCard() {
     return _sectionCard(
       'Seguridad',
@@ -299,7 +379,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Widget _buildPdfCard() {
     return _sectionCard(
-      'Facturación PDF',
+      'Facturación',
       Icons.receipt_long_outlined,
       Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -363,6 +443,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   Expanded(child: irpf),
                 ],
               );
+            },
+          ),
+          const SizedBox(height: 12),
+          SwitchListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Activar modo VeriFactu'),
+            subtitle: const Text(
+              'Aplica reglas fiscales estrictas sobre las facturas emitidas.',
+            ),
+            value: _verifactuEnabled,
+            onChanged: (value) async {
+              if (value) {
+                final confirmed = await _confirmEnableVerifactu();
+                if (confirmed != true) return;
+              }
+              setState(() => _verifactuEnabled = value);
+              await _saveInstant();
             },
           ),
           const SizedBox(height: 12),
@@ -580,17 +678,40 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       return;
     }
     final current = await ref.read(settingsProvider.future);
+    final accountEmail =
+        SupabaseService.instance.userEmail?.trim().isNotEmpty == true
+        ? SupabaseService.instance.userEmail!.trim()
+        : current.emisorEmail.trim();
+    final canUseEmailReminders =
+        SupabaseService.instance.isAuthenticated && accountEmail.isNotEmpty;
     final settings = current.copyWith(
       notificacionesActivas: _notificaciones,
       diasRecordatorio: _diasRecordatorio,
+      emailInvoiceRemindersEnabled:
+          canUseEmailReminders && _emailInvoiceRemindersEnabled,
+      invoiceReminderFrequency: _invoiceReminderFrequency,
       autoCloudSyncEnabled: _autoCloudSyncEnabled,
       autoCloudSyncIntervalSeconds: _autoCloudSyncIntervalSeconds,
       appThemeMode: _appThemeMode,
       securityPinEnabled: _securityPinEnabled,
       securityPinCode: pin,
       securityBiometricEnabled: _securityBiometricEnabled,
+      verifactuEnabled: _verifactuEnabled,
     );
     await ref.read(settingsProvider.notifier).save(settings);
+    if (SupabaseService.instance.isAuthenticated) {
+      try {
+        await SupabaseService.instance.uploadSettings(settings);
+        await ref
+            .read(settingsProvider.notifier)
+            .save(
+              settings.copyWith(
+                cloudSettingsSignature: SupabaseService.instance
+                    .settingsSyncSignature(settings),
+              ),
+            );
+      } catch (_) {}
+    }
     _showUpdated();
   }
 
@@ -603,6 +724,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       pdfTheme: _pdfTheme,
     );
     await ref.read(settingsProvider.notifier).save(settings);
+    if (SupabaseService.instance.isAuthenticated) {
+      try {
+        await SupabaseService.instance.uploadSettings(settings);
+        await ref
+            .read(settingsProvider.notifier)
+            .save(
+              settings.copyWith(
+                cloudSettingsSignature: SupabaseService.instance
+                    .settingsSyncSignature(settings),
+              ),
+            );
+      } catch (_) {}
+    }
     _showUpdated();
   }
 
@@ -611,6 +745,28 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('Preferencia actualizada')));
+  }
+
+  Future<bool?> _confirmEnableVerifactu() {
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Activar modo VeriFactu'),
+        content: const Text(
+          'Al activar este modo, las facturas emitidas quedarán bloqueadas y no podrán editarse ni eliminarse. Para corregir una factura tendrás que crear una factura rectificativa.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Activar'),
+          ),
+        ],
+      ),
+    );
   }
 
   Color _pdfThemeColor(PdfTheme theme) {

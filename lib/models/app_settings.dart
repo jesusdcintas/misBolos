@@ -15,6 +15,10 @@ class AppSettings {
   final double irpfDefault;
   final bool notificacionesActivas;
   final int diasRecordatorio;
+  final bool emailInvoiceRemindersEnabled;
+  final String invoiceReminderFrequency;
+  final DateTime? invoiceLastReminderSentAt;
+  final bool verifactuEnabled;
   final String? driveRootFolderId;
   final String? driveRootFolderName;
   final String? driveAccountEmail;
@@ -48,6 +52,10 @@ class AppSettings {
     this.irpfDefault = 0.15,
     this.notificacionesActivas = true,
     this.diasRecordatorio = 7,
+    this.emailInvoiceRemindersEnabled = false,
+    this.invoiceReminderFrequency = 'weekly',
+    this.invoiceLastReminderSentAt,
+    this.verifactuEnabled = false,
     this.driveRootFolderId,
     this.driveRootFolderName,
     this.driveAccountEmail,
@@ -82,6 +90,10 @@ class AppSettings {
     double? irpfDefault,
     bool? notificacionesActivas,
     int? diasRecordatorio,
+    bool? emailInvoiceRemindersEnabled,
+    String? invoiceReminderFrequency,
+    DateTime? invoiceLastReminderSentAt,
+    bool? verifactuEnabled,
     String? driveRootFolderId,
     String? driveRootFolderName,
     String? driveAccountEmail,
@@ -101,6 +113,7 @@ class AppSettings {
     bool clearDriveAccount = false,
     bool clearLastDriveBackupAt = false,
     bool clearLastDriveSyncAt = false,
+    bool clearInvoiceLastReminderSentAt = false,
   }) {
     return AppSettings(
       logoPath: logoPath ?? this.logoPath,
@@ -120,6 +133,14 @@ class AppSettings {
       notificacionesActivas:
           notificacionesActivas ?? this.notificacionesActivas,
       diasRecordatorio: diasRecordatorio ?? this.diasRecordatorio,
+      emailInvoiceRemindersEnabled:
+          emailInvoiceRemindersEnabled ?? this.emailInvoiceRemindersEnabled,
+      invoiceReminderFrequency:
+          invoiceReminderFrequency ?? this.invoiceReminderFrequency,
+      invoiceLastReminderSentAt: clearInvoiceLastReminderSentAt
+          ? null
+          : invoiceLastReminderSentAt ?? this.invoiceLastReminderSentAt,
+      verifactuEnabled: verifactuEnabled ?? this.verifactuEnabled,
       driveRootFolderId: clearDriveRootFolder
           ? null
           : driveRootFolderId ?? this.driveRootFolderId,
@@ -171,6 +192,13 @@ class AppSettings {
       'irpf_default': irpfDefault,
       'notificaciones_activas': notificacionesActivas ? 1 : 0,
       'dias_recordatorio': diasRecordatorio,
+      'email_invoice_reminders_enabled': emailInvoiceRemindersEnabled ? 1 : 0,
+      'invoice_reminder_frequency': invoiceReminderFrequency,
+      'invoice_last_reminder_sent_at': invoiceLastReminderSentAt
+          ?.toIso8601String(),
+      'last_invoice_reminder_email_sent_at': invoiceLastReminderSentAt
+          ?.toIso8601String(),
+      'verifactu_enabled': verifactuEnabled ? 1 : 0,
       'drive_root_folder_id': driveRootFolderId,
       'drive_root_folder_name': driveRootFolderName,
       'drive_account_email': driveAccountEmail,
@@ -207,6 +235,18 @@ class AppSettings {
       irpfDefault: (map['irpf_default'] as num?)?.toDouble() ?? 0.15,
       notificacionesActivas: (map['notificaciones_activas'] as int?) == 1,
       diasRecordatorio: map['dias_recordatorio'] as int? ?? 7,
+      emailInvoiceRemindersEnabled:
+          (map['email_invoice_reminders_enabled'] as int? ?? 0) == 1,
+      invoiceReminderFrequency:
+          map['invoice_reminder_frequency'] as String? ?? 'weekly',
+      invoiceLastReminderSentAt: map['invoice_last_reminder_sent_at'] != null
+          ? DateTime.tryParse(map['invoice_last_reminder_sent_at'] as String)
+          : map['last_invoice_reminder_email_sent_at'] != null
+          ? DateTime.tryParse(
+              map['last_invoice_reminder_email_sent_at'] as String,
+            )
+          : null,
+      verifactuEnabled: (map['verifactu_enabled'] as int? ?? 0) == 1,
       driveRootFolderId: map['drive_root_folder_id'] as String?,
       driveRootFolderName: map['drive_root_folder_name'] as String?,
       driveAccountEmail: map['drive_account_email'] as String?,
@@ -232,4 +272,7 @@ class AppSettings {
           (map['security_biometric_enabled'] as int? ?? 0) == 1,
     );
   }
+
+  @Deprecated('Use invoiceLastReminderSentAt')
+  DateTime? get lastInvoiceReminderEmailSentAt => invoiceLastReminderSentAt;
 }

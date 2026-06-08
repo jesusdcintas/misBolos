@@ -68,6 +68,19 @@ CREATE TABLE IF NOT EXISTS invoices (
   items JSONB NOT NULL DEFAULT '[]',
   status TEXT NOT NULL DEFAULT 'borrador'
     CHECK (status IN ('borrador', 'enviada', 'pagada')),
+  is_fiscally_issued BOOLEAN NOT NULL DEFAULT false,
+  fiscal_hash TEXT,
+  fiscal_record_id UUID,
+  invoice_type TEXT NOT NULL DEFAULT 'normal'
+    CHECK (invoice_type IN ('normal', 'rectifying')),
+  rectifies_invoice_id UUID REFERENCES invoices(id) ON DELETE SET NULL,
+  rectification_reason TEXT,
+  rectification_reason_type TEXT,
+  rectification_reason_description TEXT,
+  rectification_type TEXT
+    CHECK (rectification_type IS NULL OR rectification_type IN ('substitution', 'difference')),
+  original_invoice_number TEXT,
+  original_invoice_date DATE,
   notas TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -80,8 +93,8 @@ ALTER TABLE gigs
   FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE SET NULL;
 
 -- El número de factura es único por usuario y año fiscal, no global
-CREATE UNIQUE INDEX idx_invoices_numero_user_year
-  ON invoices(user_id, (EXTRACT(YEAR FROM fecha_emision)), numero)
+CREATE UNIQUE INDEX idx_invoices_year_type_numero
+  ON invoices(user_id, (EXTRACT(YEAR FROM fecha_emision)), invoice_type, numero)
   WHERE deleted_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS invoice_number_changes (
@@ -217,6 +230,12 @@ CREATE TABLE IF NOT EXISTS user_settings (
   emisor_telefono TEXT,
   iban TEXT,
   iva_default REAL DEFAULT 0.21,
+  in_app_invoice_reminders_enabled BOOLEAN NOT NULL DEFAULT true,
+  email_invoice_reminders_enabled BOOLEAN NOT NULL DEFAULT false,
+  invoice_reminder_frequency TEXT NOT NULL DEFAULT 'weekly',
+  invoice_last_reminder_sent_at TIMESTAMPTZ,
+  last_invoice_reminder_email_sent_at TIMESTAMPTZ,
+  verifactu_enabled BOOLEAN NOT NULL DEFAULT false,
   logo_url TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -239,6 +258,45 @@ CREATE POLICY "Users can update their own settings"
 CREATE TRIGGER user_settings_updated_at
   BEFORE UPDATE ON user_settings
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+CREATE TABLE IF NOT EXISTS invoice_reminder_email_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  recipient_email TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  invoice_ids TEXT[] NOT NULL DEFAULT '{}',
+  invoice_count INTEGER NOT NULL DEFAULT 0,
+  total_pending NUMERIC NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'sent',
+  error_message TEXT,
+  sent_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS invoice_fiscal_records (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  invoice_id UUID NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+  record_type TEXT NOT NULL CHECK (record_type IN ('issue', 'rectification', 'cancellation')),
+  invoice_number TEXT NOT NULL,
+  invoice_series TEXT NOT NULL DEFAULT '',
+  issued_at TIMESTAMPTZ NOT NULL,
+  previous_hash TEXT,
+  current_hash TEXT NOT NULL,
+  payload_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  aeat_status TEXT NOT NULL DEFAULT 'not_sent'
+    CHECK (aeat_status IN ('not_sent', 'pending', 'sent', 'accepted', 'rejected', 'error')),
+  aeat_error TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_invoice_reminder_email_logs_user_created
+  ON invoice_reminder_email_logs(user_id, created_at DESC);
+
+ALTER TABLE invoice_reminder_email_logs ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view their own invoice reminder email logs"
+  ON invoice_reminder_email_logs FOR SELECT USING (auth.uid() = user_id);
 
 -- =============================================================
 -- Tabla de gastos (expenses) — módulo v10

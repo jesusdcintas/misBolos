@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/utils/period_utils.dart';
 import '../database/database_helper.dart';
+import '../models/client.dart';
 import '../models/gig.dart';
 import '../models/invoice.dart';
 import 'client_provider.dart';
@@ -730,7 +731,7 @@ final yearlyVatDetailProvider =
             QuarterVatInvoice(
               invoiceId: inv.id,
               numero: inv.numero,
-              clientName: client?.nombre ?? 'Cliente desconocido',
+              clientName: client?.displayName ?? 'Cliente desconocido',
               fecha: inv.fecha,
               base: inv.subtotal,
               iva: inv.ivaAmount,
@@ -806,13 +807,19 @@ class PeriodTooltipData {
   final double totalCobrado;
   final double totalIva;
   final int numFacturas;
+  final double? totalOficial;
+  final double? totalPrivado;
 
   PeriodTooltipData({
     required this.label,
     required this.totalCobrado,
     required this.totalIva,
     required this.numFacturas,
+    this.totalOficial,
+    this.totalPrivado,
   });
+
+  bool get hasGlobalBreakdown => totalOficial != null || totalPrivado != null;
 }
 
 final monthTooltipProvider =
@@ -930,7 +937,7 @@ final monthlyFinancialDetailProvider =
         gigDetails.add(
           MonthlyGigDetail(
             gigId: gig.id,
-            clientName: client?.nombre ?? 'Desconocido',
+            clientName: client?.displayName ?? 'Desconocido',
             fecha: gig.fecha,
             importe: gig.cachet ?? 0,
             status: gig.status,
@@ -1240,7 +1247,7 @@ final overdueInvoicesProvider = FutureProvider<OverdueAlert>((ref) async {
       overdue.add(
         OverdueInvoice(
           invoice: inv,
-          clientName: client?.nombre ?? 'Cliente desconocido',
+          clientName: client?.displayName ?? 'Cliente desconocido',
           daysSinceSent: days,
         ),
       );
@@ -1476,7 +1483,7 @@ final financialPeriodSummaryProvider =
               QuarterVatInvoice(
                 invoiceId: inv.id,
                 numero: inv.numero,
-                clientName: client?.nombre ?? 'Cliente desconocido',
+                clientName: client?.displayName ?? 'Cliente desconocido',
                 fecha: inv.fecha,
                 base: inv.subtotal,
                 iva: inv.ivaAmount,
@@ -1619,7 +1626,7 @@ final financialPeriodSummaryProvider =
             gigDetails.add(
               MonthlyGigDetail(
                 gigId: gig.id,
-                clientName: client?.nombre ?? 'Desconocido',
+                clientName: client?.displayName ?? 'Desconocido',
                 fecha: gig.fecha,
                 importe: gig.cachet ?? 0,
                 status: gig.status,
@@ -1677,7 +1684,7 @@ final financialPeriodSummaryProvider =
           gigDetails.add(
             MonthlyGigDetail(
               gigId: gig.id,
-              clientName: client?.nombre ?? 'Desconocido',
+              clientName: client?.displayName ?? 'Desconocido',
               fecha: gig.fecha,
               importe: gig.cachet ?? 0,
               status: gig.status,

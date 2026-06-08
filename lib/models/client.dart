@@ -114,3 +114,12 @@ class Client {
     );
   }
 }
+
+extension ClientDisplayName on Client {
+  String get displayName {
+    final cleanAlias = alias.trim();
+    if (cleanAlias.isNotEmpty) return cleanAlias;
+    final cleanName = nombre.trim();
+    return cleanName.isNotEmpty ? cleanName : 'Cliente';
+  }
+}

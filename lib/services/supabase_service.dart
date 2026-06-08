@@ -11,6 +11,7 @@ import '../models/expense.dart';
 import '../models/asset.dart';
 import '../models/gig.dart';
 import '../models/invoice.dart';
+import '../models/invoice_fiscal_record.dart';
 import '../models/sync_queue_item.dart';
 
 class SupabaseService {
@@ -281,6 +282,25 @@ class SupabaseService {
       );
     }
     debugPrint('[Supabase] Uploaded ${invoices.length} invoices');
+  }
+
+  Future<void> uploadInvoiceFiscalRecord(InvoiceFiscalRecord record) async {
+    if (!isAuthenticated) return;
+    await _client!.from('invoice_fiscal_records').upsert({
+      'id': record.id,
+      'user_id': userId,
+      'invoice_id': record.invoiceId,
+      'record_type': record.recordType.dbValue,
+      'invoice_number': record.invoiceNumber,
+      'invoice_series': record.invoiceSeries,
+      'issued_at': record.issuedAt.toUtc().toIso8601String(),
+      'previous_hash': record.previousHash,
+      'current_hash': record.currentHash,
+      'payload_json': record.payloadJson,
+      'aeat_status': record.aeatStatus.dbValue,
+      'aeat_error': record.aeatError,
+      'created_at': record.createdAt.toUtc().toIso8601String(),
+    }, onConflict: 'id');
   }
 
   Future<bool> _remoteInvoiceExists(String invoiceId) async {
@@ -561,6 +581,16 @@ class SupabaseService {
       'emisor_telefono': settings.emisorTelefono,
       'iban': settings.iban,
       'iva_default': settings.ivaDefault,
+      'in_app_invoice_reminders_enabled': settings.notificacionesActivas,
+      'email_invoice_reminders_enabled': settings.emailInvoiceRemindersEnabled,
+      'invoice_reminder_frequency': settings.invoiceReminderFrequency,
+      'invoice_last_reminder_sent_at': settings.invoiceLastReminderSentAt
+          ?.toUtc()
+          .toIso8601String(),
+      'last_invoice_reminder_email_sent_at': settings.invoiceLastReminderSentAt
+          ?.toUtc()
+          .toIso8601String(),
+      'verifactu_enabled': settings.verifactuEnabled,
       if (logoUrl != null) 'logo_url': logoUrl,
     };
 
@@ -582,6 +612,11 @@ class SupabaseService {
       settings.emisorTelefono.trim(),
       settings.iban.trim(),
       settings.ivaDefault.toStringAsFixed(4),
+      settings.notificacionesActivas.toString(),
+      settings.emailInvoiceRemindersEnabled.toString(),
+      settings.invoiceReminderFrequency,
+      settings.invoiceLastReminderSentAt?.toUtc().toIso8601String() ?? '',
+      settings.verifactuEnabled.toString(),
       logoSignature,
     ].join('|');
   }
@@ -634,6 +669,20 @@ class SupabaseService {
         emisorTelefono: data['emisor_telefono'] ?? '',
         iban: data['iban'] ?? '',
         ivaDefault: (data['iva_default'] as num?)?.toDouble() ?? 0.21,
+        notificacionesActivas:
+            data['in_app_invoice_reminders_enabled'] as bool? ?? true,
+        emailInvoiceRemindersEnabled:
+            data['email_invoice_reminders_enabled'] as bool? ?? false,
+        invoiceReminderFrequency:
+            data['invoice_reminder_frequency'] as String? ?? 'weekly',
+        invoiceLastReminderSentAt: data['invoice_last_reminder_sent_at'] != null
+            ? DateTime.tryParse(data['invoice_last_reminder_sent_at'] as String)
+            : data['last_invoice_reminder_email_sent_at'] != null
+            ? DateTime.tryParse(
+                data['last_invoice_reminder_email_sent_at'] as String,
+              )
+            : null,
+        verifactuEnabled: data['verifactu_enabled'] as bool? ?? false,
         logoPath: localLogoPath,
       );
       debugPrint('[Supabase] Downloaded settings');
@@ -995,6 +1044,20 @@ class SupabaseService {
     'drive_file_id': i.driveFileId,
     'drive_file_url': i.driveFileUrl,
     'drive_synced_at': i.driveSyncedAt?.toUtc().toIso8601String(),
+    'is_fiscally_issued': i.isFiscallyIssued,
+    'fiscal_hash': i.fiscalHash,
+    'fiscal_record_id': i.fiscalRecordId,
+    'invoice_type': i.invoiceType.dbValue,
+    'rectifies_invoice_id': i.rectifiesInvoiceId,
+    'rectification_reason': i.rectificationReason,
+    'rectification_reason_type': i.rectificationReasonType?.dbValue,
+    'rectification_reason_description': i.rectificationReasonDescription,
+    'rectification_type': i.rectificationType?.dbValue,
+    'original_invoice_number': i.originalInvoiceNumber,
+    'original_invoice_date': i.originalInvoiceDate
+        ?.toIso8601String()
+        .split('T')
+        .first,
     if (i.deletedAt != null)
       'deleted_at': i.deletedAt!.toUtc().toIso8601String(),
   };
@@ -1053,8 +1116,8 @@ class SupabaseService {
       driveUploadedAt: m['drive_uploaded_at'] != null
           ? DateTime.tryParse(m['drive_uploaded_at'].toString())
           : null,
-      driveSyncStatus: (m['drive_sync_status']?.toString().trim().isNotEmpty ??
-              false)
+      driveSyncStatus:
+          (m['drive_sync_status']?.toString().trim().isNotEmpty ?? false)
           ? m['drive_sync_status'].toString()
           : ((m['drive_file_id']?.toString().trim().isNotEmpty ?? false)
                 ? 'uploaded'
@@ -1066,6 +1129,25 @@ class SupabaseService {
       ),
       deletedAt: m['deleted_at'] != null
           ? DateTime.parse(m['deleted_at'].toString())
+          : null,
+      isFiscallyIssued: m['is_fiscally_issued'] as bool? ?? false,
+      fiscalHash: m['fiscal_hash']?.toString(),
+      fiscalRecordId: m['fiscal_record_id']?.toString(),
+      invoiceType: InvoiceTypeExtension.fromDb(m['invoice_type']?.toString()),
+      rectifiesInvoiceId: m['rectifies_invoice_id']?.toString(),
+      rectificationReason: m['rectification_reason']?.toString(),
+      rectificationReasonType: RectificationReasonTypeExtension.fromDb(
+        m['rectification_reason_type']?.toString(),
+      ),
+      rectificationReasonDescription:
+          m['rectification_reason_description']?.toString() ??
+          m['rectification_reason']?.toString(),
+      rectificationType: RectificationTypeExtension.fromDb(
+        m['rectification_type']?.toString(),
+      ),
+      originalInvoiceNumber: m['original_invoice_number']?.toString(),
+      originalInvoiceDate: m['original_invoice_date'] != null
+          ? DateTime.tryParse(m['original_invoice_date'].toString())
           : null,
     );
   }

@@ -381,7 +381,7 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
           );
           await GoogleCalendarService().syncGig(
             gig: savedGig,
-            clientName: client?.nombre ?? 'Cliente',
+            clientName: client?.displayName ?? 'Cliente',
             cachet: savedGig.cachet,
           );
         } catch (_) {}

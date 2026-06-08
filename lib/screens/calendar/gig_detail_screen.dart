@@ -6,6 +6,7 @@ import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../core/utils/date_formatter.dart';
+import '../../models/client.dart';
 import '../../models/gig.dart';
 import '../../models/invoice.dart';
 import '../../providers/gig_provider.dart';
@@ -92,7 +93,7 @@ class _GigDetailContent extends ConsumerWidget {
               data: (client) => ListTile(
                 leading: const Icon(Icons.person, color: AppColors.primary),
                 title: const Text(AppStrings.cliente),
-                subtitle: Text(client?.nombre ?? 'Desconocido'),
+                subtitle: Text(client?.displayName ?? 'Desconocido'),
                 onTap: client != null
                     ? () => context.push('/client/${client.id}')
                     : null,
@@ -326,7 +327,7 @@ class _GigDetailContent extends ConsumerWidget {
       final client = await ref.read(clientByIdProvider(gig.clientId).future);
       await GoogleCalendarService().syncGig(
         gig: gig,
-        clientName: client?.nombre ?? 'Cliente',
+        clientName: client?.displayName ?? 'Cliente',
         cachet: gig.cachet,
       );
     } catch (_) {}

@@ -4,12 +4,14 @@ String buildInvoicePdfFileName({
   required Invoice invoice,
   required String? clientName,
 }) {
-  final number = invoice.numero.toString().padLeft(3, '0');
   final date = _formatDate(invoice.fecha);
   final customer = (clientName == null || clientName.trim().isEmpty)
       ? 'Sin cliente'
       : clientName.trim();
-  return sanitizeFileName('FACTURA $number - $customer - $date.pdf');
+  final title = invoice.isRectifying ? 'FACTURA RECTIFICATIVA' : 'FACTURA';
+  return sanitizeFileName(
+    '$title ${invoice.visualNumber} - $customer - $date.pdf',
+  );
 }
 
 String sanitizeFileName(String input) {
@@ -27,4 +29,3 @@ String _formatDate(DateTime date) {
   final day = date.day.toString().padLeft(2, '0');
   return '$year-$month-$day';
 }
-

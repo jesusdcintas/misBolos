@@ -106,6 +106,7 @@ Pendiente opcional:
 - No se borra/mueve/renombra contenido existente en Drive fuera del alcance seguro definido.
 - Backup/restauración JSON fuera de alcance actual.
 - En logout se limpia estado y datos locales del usuario para evitar mezcla entre sesiones.
+- Proveedor de email transaccional cerrado: `Brevo` (secrets activos: `BREVO_API_KEY` e `INVOICE_FROM_EMAIL`).
 
 ---
 

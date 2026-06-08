@@ -5,6 +5,7 @@ import '../../core/constants/app_strings.dart';
 import '../../core/theme/app_theme_colors.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../core/utils/date_formatter.dart';
+import '../../models/client.dart';
 import '../../models/gig.dart';
 import '../../providers/gig_provider.dart';
 import '../../providers/client_provider.dart';
@@ -1040,7 +1041,7 @@ class _GigTile extends ConsumerWidget {
         ),
         title: clientAsync.when(
           data: (client) => Text(
-            client?.nombre ?? 'Cliente desconocido',
+            client?.displayName ?? 'Cliente desconocido',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -1104,7 +1105,7 @@ class _UpcomingGigTile extends ConsumerWidget {
         ),
         title: clientAsync.when(
           data: (client) => Text(
-            client?.nombre ?? 'Cliente desconocido',
+            client?.displayName ?? 'Cliente desconocido',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),

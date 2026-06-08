@@ -5,6 +5,7 @@ import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../core/utils/date_formatter.dart';
+import '../../models/client.dart';
 import '../../models/invoice.dart';
 import '../../models/invoice_email_log.dart';
 import '../../models/gig.dart';
@@ -109,7 +110,7 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Factura #${currentInvoice.numero}'),
+            Text(currentInvoice.visualNumber),
             Text(
               'Factura ${currentIndex + 1} de ${invoices.length}',
               style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
@@ -162,6 +163,17 @@ class _InvoiceDetailContent extends ConsumerWidget {
     final settingsAsync = ref.watch(settingsProvider);
     final emailSendState = ref.watch(invoiceEmailSendProvider);
     final emailLogsAsync = ref.watch(invoiceEmailLogsProvider(invoice.id));
+    final relatedRectificatives =
+        ref
+            .watch(invoicesProvider)
+            .valueOrNull
+            ?.where(
+              (candidate) =>
+                  candidate.rectifiesInvoiceId == invoice.id &&
+                  candidate.deletedAt == null,
+            )
+            .toList(growable: false) ??
+        const <Invoice>[];
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -176,22 +188,91 @@ class _InvoiceDetailContent extends ConsumerWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'FACTURA',
+                      invoice.displayName.toUpperCase(),
                       style: TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
                         color: AppColors.primary,
                       ),
                     ),
-                    Text(
-                      '#${invoice.numero}',
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        if (invoice.isRectifying)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryLight,
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: const Text(
+                              'RECTIFICATIVA',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ),
+                        const SizedBox(height: 4),
+                        Text(
+                          invoice.visualNumber,
+                          style: const TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
+                if (invoice.isRectifying) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.warningBg,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Factura rectificativa',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                            color: AppColors.warning,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Factura rectificada: ${invoice.originalInvoiceNumber ?? '-'}',
+                        ),
+                        if (invoice.originalInvoiceDate != null)
+                          Text(
+                            'Fecha factura original: ${DateFormatter.display(invoice.originalInvoiceDate!)}',
+                          ),
+                        Text(
+                          'Motivo: ${invoice.rectificationReasonType?.label ?? 'Sin motivo'}',
+                        ),
+                        Text(
+                          'Tipo de rectificación: ${invoice.rectificationType == RectificationType.difference ? 'Diferencias' : 'Sustitución'}',
+                        ),
+                        if ((invoice.rectificationReasonDescription ?? '')
+                            .trim()
+                            .isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(invoice.rectificationReasonDescription!.trim()),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
                 const Divider(),
                 const SizedBox(height: 8),
 
@@ -435,6 +516,63 @@ class _InvoiceDetailContent extends ConsumerWidget {
 
         const SizedBox(height: 16),
 
+        if (relatedRectificatives.isNotEmpty) ...[
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Rectificativas asociadas',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                  ),
+                  const SizedBox(height: 8),
+                  for (final rectifying in relatedRectificatives) ...[
+                    InkWell(
+                      onTap: () => context.push('/invoice/${rectifying.id}'),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.primaryLight,
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: const Text(
+                                'RECTIFICATIVA',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                '${rectifying.visualNumber} · ${rectifying.rectificationReasonType?.label ?? 'Sin motivo'}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
+
         // Estado
         Center(
           child: Container(
@@ -452,7 +590,62 @@ class _InvoiceDetailContent extends ConsumerWidget {
             ),
           ),
         ),
+        if (invoice.isRectifying) ...[
+          const SizedBox(height: 8),
+          Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.primaryLight,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Text(
+                'Rectificativa',
+                style: TextStyle(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+        ],
+        if (invoice.isFiscallyIssued ||
+            (invoice.fiscalHash?.isNotEmpty ?? false)) ...[
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.primaryLight,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              'Estado fiscal: ${invoice.fiscalStateLabel} · Hash: ${invoice.fiscalHash == null ? '-' : invoice.fiscalHash!.substring(0, invoice.fiscalHash!.length < 12 ? invoice.fiscalHash!.length : 12)}',
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
         const SizedBox(height: 16),
+
+        if (invoice.isFiscallyLocked) ...[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.warningBg,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.warning),
+            ),
+            child: const Text(
+              'Factura bloqueada por modo VeriFactu',
+              style: TextStyle(
+                color: AppColors.warning,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
 
         // Cambiar estado
         if (invoice.status == InvoiceStatus.borrador)
@@ -479,7 +672,8 @@ class _InvoiceDetailContent extends ConsumerWidget {
               label: const Text('Marcar como cobrada'),
             ),
           ),
-        if (invoice.status != InvoiceStatus.borrador) ...[
+        if (invoice.status != InvoiceStatus.borrador &&
+            !invoice.isFiscallyLocked) ...[
           const SizedBox(height: 8),
           SizedBox(
             width: double.infinity,
@@ -497,7 +691,8 @@ class _InvoiceDetailContent extends ConsumerWidget {
         if (invoice.status != InvoiceStatus.pagada) const SizedBox(height: 8),
 
         // Editar (solo en borrador)
-        if (invoice.status == InvoiceStatus.borrador)
+        if (invoice.status == InvoiceStatus.borrador &&
+            !invoice.isFiscallyLocked)
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
@@ -506,7 +701,20 @@ class _InvoiceDetailContent extends ConsumerWidget {
               label: const Text('Editar factura'),
             ),
           ),
-        if (invoice.status == InvoiceStatus.borrador) const SizedBox(height: 8),
+        if (invoice.status == InvoiceStatus.borrador &&
+            !invoice.isFiscallyLocked)
+          const SizedBox(height: 8),
+
+        if (invoice.isFiscallyLocked)
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: () => _createRectifyingInvoice(context, ref),
+              icon: const Icon(Icons.receipt_long_outlined),
+              label: const Text('Crear rectificativa'),
+            ),
+          ),
+        if (invoice.isFiscallyLocked) const SizedBox(height: 8),
 
         // Compartir
         SizedBox(
@@ -549,23 +757,30 @@ class _InvoiceDetailContent extends ConsumerWidget {
         const SizedBox(height: 8),
 
         // Eliminar factura
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: () => _deleteInvoice(context, ref),
-            icon: const Icon(Icons.delete_outline, color: Colors.red),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.red,
-              side: const BorderSide(color: Colors.red),
+        if (!invoice.isFiscallyLocked)
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => _deleteInvoice(context, ref),
+              icon: const Icon(Icons.delete_outline, color: Colors.red),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.red,
+                side: const BorderSide(color: Colors.red),
+              ),
+              label: const Text('Eliminar factura'),
             ),
-            label: const Text('Eliminar factura'),
           ),
-        ),
       ],
     );
   }
 
   Color get _statusBgColor {
+    if (invoice.isRectifying && invoice.status == InvoiceStatus.pagada) {
+      return AppColors.fiscalBg;
+    }
+    if (invoice.isRectifying && invoice.status == InvoiceStatus.enviada) {
+      return AppColors.purpleBg;
+    }
     switch (invoice.status) {
       case InvoiceStatus.borrador:
         return AppColors.primaryLight;
@@ -577,6 +792,12 @@ class _InvoiceDetailContent extends ConsumerWidget {
   }
 
   Color get _statusTextColor {
+    if (invoice.isRectifying && invoice.status == InvoiceStatus.pagada) {
+      return AppColors.fiscal;
+    }
+    if (invoice.isRectifying && invoice.status == InvoiceStatus.enviada) {
+      return AppColors.purple;
+    }
     switch (invoice.status) {
       case InvoiceStatus.borrador:
         return AppColors.primary;
@@ -656,7 +877,7 @@ class _InvoiceDetailContent extends ConsumerWidget {
       builder: (ctx) => AlertDialog(
         title: const Text('Enviar factura por email'),
         content: Text(
-          'Se enviará la factura #${invoice.numero} a ${client.email}.',
+          'Se enviará la factura ${invoice.visualNumber} a ${client.email}.',
         ),
         actions: [
           TextButton(
@@ -686,7 +907,7 @@ class _InvoiceDetailContent extends ConsumerWidget {
       if (settings.notificacionesActivas) {
         await NotificationService.instance.schedulePaymentReminder(
           id: invoice.numero,
-          clientName: client.nombre,
+          clientName: client.displayName,
           total: invoice.total,
           invoiceNumber: invoice.numero,
           scheduledDate: DateTime.now().add(
@@ -740,7 +961,7 @@ class _InvoiceDetailContent extends ConsumerWidget {
           if (client != null) {
             await NotificationService.instance.schedulePaymentReminder(
               id: invoice.numero,
-              clientName: client.nombre,
+              clientName: client.displayName,
               total: invoice.total,
               invoiceNumber: invoice.numero,
               scheduledDate: DateTime.now().add(
@@ -825,7 +1046,7 @@ class _InvoiceDetailContent extends ConsumerWidget {
       final client = await ref.read(clientByIdProvider(gig.clientId).future);
       await GoogleCalendarService().syncGig(
         gig: gig,
-        clientName: client?.nombre ?? 'Cliente',
+        clientName: client?.displayName ?? 'Cliente',
         cachet: gig.cachet,
       );
     } catch (_) {}
@@ -837,7 +1058,7 @@ class _InvoiceDetailContent extends ConsumerWidget {
       builder: (ctx) => AlertDialog(
         title: const Text('¿Eliminar factura?'),
         content: Text(
-          'Se eliminará permanentemente la factura #${invoice.numero}. Esta acción no se puede deshacer.',
+          'Se eliminará permanentemente la factura ${invoice.visualNumber}. Esta acción no se puede deshacer.',
         ),
         actions: [
           TextButton(
@@ -890,6 +1111,317 @@ class _InvoiceDetailContent extends ConsumerWidget {
         context.pop();
       }
     }
+  }
+
+  Future<void> _createRectifyingInvoice(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final reasonController = TextEditingController();
+    RectificationReasonType selectedReasonType =
+        RectificationReasonType.amountCorrection;
+    RectificationType selectedRectificationType =
+        RectificationType.substitution;
+    int step = 0;
+
+    final result =
+        await showDialog<
+          ({
+            RectificationReasonType reasonType,
+            RectificationType rectificationType,
+            String description,
+          })
+        >(
+          context: context,
+          builder: (ctx) => StatefulBuilder(
+            builder: (ctx, setDialogState) {
+              final isOther =
+                  selectedReasonType == RectificationReasonType.other;
+
+              Widget content;
+              switch (step) {
+                case 0:
+                  content = Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Paso 1 de 3',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<RectificationReasonType>(
+                        initialValue: selectedReasonType,
+                        decoration: const InputDecoration(
+                          labelText: 'Motivo de rectificación',
+                        ),
+                        items: RectificationReasonType.values
+                            .map(
+                              (value) => DropdownMenuItem(
+                                value: value,
+                                child: Text(value.label),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) {
+                          if (value == null) return;
+                          setDialogState(() => selectedReasonType = value);
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'El motivo es obligatorio para generar la rectificativa.',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                      if (isOther) ...[
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: reasonController,
+                          onChanged: (_) => setDialogState(() {}),
+                          decoration: const InputDecoration(
+                            labelText: 'Descripción del motivo',
+                            hintText: 'Explica el motivo concreto',
+                          ),
+                          minLines: 2,
+                          maxLines: 4,
+                        ),
+                      ],
+                    ],
+                  );
+                  break;
+                case 1:
+                  content = Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Paso 2 de 3',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 8),
+                      InkWell(
+                        onTap: () => setDialogState(
+                          () => selectedRectificationType =
+                              RectificationType.substitution,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          width: double.infinity,
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color:
+                                selectedRectificationType ==
+                                    RectificationType.substitution
+                                ? AppColors.primaryLight
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color:
+                                  selectedRectificationType ==
+                                      RectificationType.substitution
+                                  ? AppColors.primary
+                                  : AppColors.divider,
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: const [
+                              Row(
+                                children: [
+                                  Text(
+                                    'Sustitución',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  SizedBox(width: 8),
+                                  _RecommendedChip(),
+                                ],
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                'La nueva factura sustituye completamente a la original.',
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      InkWell(
+                        onTap: () => setDialogState(
+                          () => selectedRectificationType =
+                              RectificationType.difference,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color:
+                                selectedRectificationType ==
+                                    RectificationType.difference
+                                ? AppColors.primaryLight
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color:
+                                  selectedRectificationType ==
+                                      RectificationType.difference
+                                  ? AppColors.primary
+                                  : AppColors.divider,
+                            ),
+                          ),
+                          child: const Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Diferencias',
+                                style: TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                'La rectificativa refleja únicamente la diferencia respecto a la factura original.',
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                  break;
+                default:
+                  content = Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Paso 3 de 3',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 8),
+                      Text('Factura original: ${invoice.visualNumber}'),
+                      Text('Motivo: ${selectedReasonType.label}'),
+                      if (selectedReasonType == RectificationReasonType.other &&
+                          reasonController.text.trim().isNotEmpty)
+                        Text(reasonController.text.trim()),
+                      Text(
+                        'Tipo: ${selectedRectificationType == RectificationType.difference ? 'Diferencias' : 'Sustitución'}',
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Al crearla se generará un borrador independiente con su propia numeración rectificativa.',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ],
+                  );
+              }
+
+              final canAdvance =
+                  !(step == 0 &&
+                      selectedReasonType == RectificationReasonType.other &&
+                      reasonController.text.trim().isEmpty);
+
+              return AlertDialog(
+                title: const Text('Crear rectificativa'),
+                content: SizedBox(
+                  width: 520,
+                  child: SingleChildScrollView(child: content),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      if (step == 0) {
+                        Navigator.pop(ctx);
+                      } else {
+                        setDialogState(() => step -= 1);
+                      }
+                    },
+                    child: Text(step == 0 ? 'Cancelar' : 'Atrás'),
+                  ),
+                  if (step < 2)
+                    FilledButton(
+                      onPressed: canAdvance
+                          ? () => setDialogState(() => step += 1)
+                          : null,
+                      child: const Text('Siguiente'),
+                    )
+                  else
+                    FilledButton(
+                      onPressed: () {
+                        if (selectedReasonType ==
+                                RectificationReasonType.other &&
+                            reasonController.text.trim().isEmpty) {
+                          return;
+                        }
+                        final description =
+                            selectedReasonType ==
+                                    RectificationReasonType.other &&
+                                reasonController.text.trim().isEmpty
+                            ? ''
+                            : reasonController.text.trim();
+                        Navigator.pop(ctx, (
+                          reasonType: selectedReasonType,
+                          rectificationType: selectedRectificationType,
+                          description: description.isNotEmpty
+                              ? description
+                              : selectedReasonType.label,
+                        ));
+                      },
+                      child: const Text('Crear'),
+                    ),
+                ],
+              );
+            },
+          ),
+        );
+    reasonController.dispose();
+    if (!context.mounted || result == null) return;
+
+    try {
+      final rectifying = await ref
+          .read(invoicesProvider.notifier)
+          .createRectifyingInvoice(
+            invoice.id,
+            reasonType: result.reasonType,
+            reasonDescription: result.description,
+            type: result.rectificationType,
+          );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Rectificativa ${rectifying.visualNumber} creada'),
+        ),
+      );
+      context.push('/invoice/edit/${rectifying.id}');
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
+    }
+  }
+}
+
+class _RecommendedChip extends StatelessWidget {
+  const _RecommendedChip();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: AppColors.primaryLight,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: const Text(
+        'Recomendado',
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: AppColors.primary,
+        ),
+      ),
+    );
   }
 }
 

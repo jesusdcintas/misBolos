@@ -1,0 +1,2 @@
+[functions.send-invoice-reminders]
+verify_jwt = false

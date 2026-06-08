@@ -7,6 +7,7 @@ import '../models/invoice.dart';
 import '../repositories/client_repository.dart';
 import '../repositories/gig_repository.dart';
 import '../repositories/invoice_repository.dart';
+import 'date_resolver_service.dart';
 
 class AiEntityCandidate<T> {
   final T entity;
@@ -44,7 +45,8 @@ class AiEntityResolverService {
     AiAssistantAction action, {
     bool onlyFacturable = false,
   }) async {
-    final directId = _readString(action.resolvedEntityId) ??
+    final directId =
+        _readString(action.resolvedEntityId) ??
         _readString(action.objetivo['gig_id']);
     if (directId != null) {
       final gig = await GigRepository.instance.getById(directId);
@@ -64,14 +66,19 @@ class AiEntityResolverService {
     final clients = await ClientRepository.instance.getAll();
     final invoices = await InvoiceRepository.instance.getAll();
     final clientById = {for (final client in clients) client.id: client};
-    final invoiceByGigId = {for (final invoice in invoices) invoice.gigId: invoice};
+    final invoiceByGigId = {
+      for (final invoice in invoices) invoice.gigId: invoice,
+    };
 
-    final selector = (_readString(action.objetivo['selector']) ?? '').toLowerCase();
+    final selector = (_readString(action.objetivo['selector']) ?? '')
+        .toLowerCase();
     final contextGigIds = _readContextEntityIds(action, type: 'gig');
 
     var pool = gigs.where((gig) {
       if (gig.status == GigStatus.cancelado) return false;
-      if (onlyFacturable && (!gig.facturable || gig.invoiceId != null)) return false;
+      if (onlyFacturable && (!gig.facturable || gig.invoiceId != null)) {
+        return false;
+      }
       return true;
     }).toList();
 
@@ -87,10 +94,20 @@ class AiEntityResolverService {
       return AiEntityResolution(selected: pool.first, candidates: const []);
     }
 
-    if (_containsAny(action, const ['ese bolo', 'el anterior', 'el último', 'ultimo'])) {
-      final contextual = pool.where((gig) => contextGigIds.contains(gig.id)).toList();
+    if (_containsAny(action, const [
+      'ese bolo',
+      'el anterior',
+      'el último',
+      'ultimo',
+    ])) {
+      final contextual = pool
+          .where((gig) => contextGigIds.contains(gig.id))
+          .toList();
       if (contextual.length == 1) {
-        return AiEntityResolution(selected: contextual.first, candidates: const []);
+        return AiEntityResolution(
+          selected: contextual.first,
+          candidates: const [],
+        );
       }
     }
 
@@ -107,22 +124,15 @@ class AiEntityResolverService {
       clueGigName: clueGigName,
     );
 
-    _logResolver(
-      'filtros',
-      {
-        'cliente_o_nombre': clueClientOrName,
-        'cliente': clueClientQuery,
-        'nombre': clueGigName,
-        'fecha': clueDates.map(_isoDate).toList(),
-        'importe_actual': clueCurrentAmount,
-        'importe_nuevo': _extractUpdatedAmount(action, sourceText),
-      },
-    );
-    _logCandidates(
-      'antes_filtros_duros',
-      pool,
-      clientById,
-    );
+    _logResolver('filtros', {
+      'cliente_o_nombre': clueClientOrName,
+      'cliente': clueClientQuery,
+      'nombre': clueGigName,
+      'fecha': clueDates.map(_isoDate).toList(),
+      'importe_actual': clueCurrentAmount,
+      'importe_nuevo': _extractUpdatedAmount(action, sourceText),
+    });
+    _logCandidates('antes_filtros_duros', pool, clientById);
 
     final hasHardClientOrName = clueClientOrName != null;
     final hasHardDate = clueDates.isNotEmpty;
@@ -152,17 +162,27 @@ class AiEntityResolverService {
       }).toList();
     }
 
-    _logCandidates(
-      'despues_filtros_duros',
-      pool,
-      clientById,
-    );
+    _logCandidates('despues_filtros_duros', pool, clientById);
 
     if (pool.isEmpty && (hasHardClientOrName || hasHardDate || hasHardAmount)) {
       return const AiEntityResolution(
         selected: null,
         reason: 'No he encontrado un bolo que cumpla los filtros indicados.',
       );
+    }
+
+    if (_isMarkingCollected(action, sourceText)) {
+      final pendingToCollect = pool
+          .where(
+            (gig) =>
+                gig.status == GigStatus.facturado ||
+                gig.status == GigStatus.realizadoB,
+          )
+          .toList();
+      if (pendingToCollect.isNotEmpty) {
+        pool = pendingToCollect;
+        _logCandidates('preferencia_pendientes_cobro', pool, clientById);
+      }
     }
 
     final scored = <AiEntityCandidate<Gig>>[];
@@ -180,7 +200,9 @@ class AiEntityResolverService {
       }
 
       if (clueGigName != null && clueGigName.isNotEmpty) {
-        final haystack = '${client?.nombre ?? ''} ${client?.alias ?? ''} ${gig.notas ?? ''}'.toLowerCase();
+        final haystack =
+            '${client?.nombre ?? ''} ${client?.alias ?? ''} ${gig.notas ?? ''}'
+                .toLowerCase();
         if (haystack.contains(clueGigName.toLowerCase())) {
           score += 60;
         }
@@ -191,7 +213,9 @@ class AiEntityResolverService {
         if (exact) {
           score += 80;
         } else {
-          final near = clueDates.any((date) => (gig.fecha.difference(date).inDays).abs() <= 1);
+          final near = clueDates.any(
+            (date) => (gig.fecha.difference(date).inDays).abs() <= 1,
+          );
           if (near) score += 50;
         }
       }
@@ -218,16 +242,16 @@ class AiEntityResolverService {
     }
 
     scored.sort((a, b) => b.score.compareTo(a.score));
-    _logResolver(
-      'score_final',
-      {
-        'candidatos': scored
-            .map((candidate) => '${candidate.label} (score=${candidate.score})')
-            .toList(),
-      },
-    );
+    _logResolver('score_final', {
+      'candidatos': scored
+          .map((candidate) => '${candidate.label} (score=${candidate.score})')
+          .toList(),
+    });
     if (scored.isEmpty) {
-      if (pool.length == 1 && !hasHardClientOrName && !hasHardDate && !hasHardAmount) {
+      if (pool.length == 1 &&
+          !hasHardClientOrName &&
+          !hasHardDate &&
+          !hasHardAmount) {
         return AiEntityResolution(selected: pool.first, candidates: const []);
       }
       return const AiEntityResolution(
@@ -238,13 +262,19 @@ class AiEntityResolverService {
 
     final best = scored.first;
     if (scored.length == 1 && best.score >= 80) {
-      _logResolver('entidad_seleccionada', {'gig_id': best.entity.id, 'score': best.score});
+      _logResolver('entidad_seleccionada', {
+        'gig_id': best.entity.id,
+        'score': best.score,
+      });
       return AiEntityResolution(selected: best.entity, candidates: scored);
     }
     if (scored.length > 1) {
       final second = scored[1];
       if (best.score >= 120 && (best.score - second.score) >= 25) {
-        _logResolver('entidad_seleccionada', {'gig_id': best.entity.id, 'score': best.score});
+        _logResolver('entidad_seleccionada', {
+          'gig_id': best.entity.id,
+          'score': best.score,
+        });
         return AiEntityResolution(selected: best.entity, candidates: scored);
       }
       return AiEntityResolution(
@@ -263,7 +293,8 @@ class AiEntityResolverService {
   Future<AiEntityResolution<Client>> resolveClient(
     AiAssistantAction action,
   ) async {
-    final directId = _readString(action.resolvedEntityId) ??
+    final directId =
+        _readString(action.resolvedEntityId) ??
         _readString(action.objetivo['client_id']);
     if (directId != null) {
       final client = await ClientRepository.instance.getById(directId);
@@ -286,7 +317,7 @@ class AiEntityResolverService {
             (client) => AiEntityCandidate(
               entity: client,
               score: _isExactClientMatch(client, query) ? 100 : 60,
-              label: client.nombre,
+              label: client.displayName,
             ),
           )
           .toList(),
@@ -299,7 +330,8 @@ class AiEntityResolverService {
   Future<AiEntityResolution<Invoice>> resolveInvoice(
     AiAssistantAction action,
   ) async {
-    final directId = _readString(action.resolvedEntityId) ??
+    final directId =
+        _readString(action.resolvedEntityId) ??
         _readString(action.objetivo['invoice_id']);
     if (directId != null) {
       final invoice = await InvoiceRepository.instance.getById(directId);
@@ -310,18 +342,27 @@ class AiEntityResolverService {
 
     final invoices = await InvoiceRepository.instance.getAll();
     if (invoices.isEmpty) {
-      return const AiEntityResolution(selected: null, reason: 'No hay facturas.');
+      return const AiEntityResolution(
+        selected: null,
+        reason: 'No hay facturas.',
+      );
     }
-    final selector = (_readString(action.objetivo['selector']) ?? '').toLowerCase();
+    final selector = (_readString(action.objetivo['selector']) ?? '')
+        .toLowerCase();
     if (selector == 'ultima_factura') {
       invoices.sort((a, b) => b.fecha.compareTo(a.fecha));
       return AiEntityResolution(selected: invoices.first, candidates: const []);
     }
     final number = _extractInvoiceNumber(action, _sourceText(action));
     if (number != null) {
-      final byNumber = invoices.where((invoice) => invoice.numero == number).toList();
+      final byNumber = invoices
+          .where((invoice) => invoice.numero == number)
+          .toList();
       if (byNumber.length == 1) {
-        return AiEntityResolution(selected: byNumber.first, candidates: const []);
+        return AiEntityResolution(
+          selected: byNumber.first,
+          candidates: const [],
+        );
       }
       return AiEntityResolution(
         selected: null,
@@ -330,7 +371,7 @@ class AiEntityResolverService {
               (invoice) => AiEntityCandidate(
                 entity: invoice,
                 score: 100,
-                label: 'Factura #${invoice.numero}',
+                label: 'Factura ${invoice.visualNumber}',
               ),
             )
             .toList(),
@@ -372,6 +413,12 @@ class AiEntityResolverService {
     return values.any((value) => text.contains(value));
   }
 
+  bool _isMarkingCollected(AiAssistantAction action, String sourceText) {
+    final nextStatus = _readString(action.cambios['estado'])?.toLowerCase();
+    return nextStatus == 'cobrado' ||
+        (sourceText.contains('marca') && sourceText.contains('cobrad'));
+  }
+
   String? _extractGigQuery(AiAssistantAction action, String sourceText) {
     return _readString(action.objetivo['nombre']) ??
         _readString(action.objetivo['gig_nombre']) ??
@@ -384,11 +431,13 @@ class AiEntityResolverService {
         _readString(action.objetivo['cliente_nombre']) ??
         _readString(action.cliente['nombre']) ??
         _matchAfter(sourceText, RegExp(r'bolo\s+de\s+([a-z0-9áéíóúñ ._-]+)')) ??
-        _matchAfter(sourceText, RegExp(r'cliente\s+([a-z0-9áéíóúñ ._-]+)'));
+        _matchAfter(sourceText, RegExp(r'cliente\s+([a-z0-9áéíóúñ ._-]+)')) ??
+        _matchAfter(sourceText, RegExp(r'\bcon\s+([a-z0-9áéíóúñ ._-]+)'));
   }
 
   int? _extractInvoiceNumber(AiAssistantAction action, String sourceText) {
-    final fromAction = _readString(action.factura['numero']) ??
+    final fromAction =
+        _readString(action.factura['numero']) ??
         _readString(action.objetivo['numero_factura']);
     final parsed = int.tryParse(fromAction ?? '');
     if (parsed != null) return parsed;
@@ -397,7 +446,8 @@ class AiEntityResolverService {
   }
 
   double? _extractCurrentAmount(AiAssistantAction action, String sourceText) {
-    final fromAction = action.filtros['importe_actual'] ?? action.objetivo['importe_actual'];
+    final fromAction =
+        action.filtros['importe_actual'] ?? action.objetivo['importe_actual'];
     if (fromAction is num) return fromAction.toDouble();
     if (fromAction is String) {
       final parsed = double.tryParse(fromAction.replaceAll(',', '.'));
@@ -439,9 +489,23 @@ class AiEntityResolverService {
     ].whereType<String>();
     for (final raw in rawDates) {
       final parsed = DateTime.tryParse(raw);
-      if (parsed != null) dates.add(DateTime(parsed.year, parsed.month, parsed.day));
+      if (parsed != null) {
+        dates.add(DateTime(parsed.year, parsed.month, parsed.day));
+      }
     }
     dates.addAll(_parseSpanishDates(sourceText));
+    final now = DateTime.now();
+    final relativeTokens = DateResolverService.instance
+        .extractRelativeDateTokens(sourceText);
+    for (final token in relativeTokens) {
+      final resolved = DateResolverService.instance.resolveExpression(
+        token,
+        now: now,
+      );
+      if (resolved != null) {
+        dates.add(DateTime(resolved.year, resolved.month, resolved.day));
+      }
+    }
     return dates;
   }
 
@@ -488,8 +552,10 @@ class AiEntityResolverService {
     final year = gig.fecha.year.toString().padLeft(4, '0');
     final month = gig.fecha.month.toString().padLeft(2, '0');
     final day = gig.fecha.day.toString().padLeft(2, '0');
-    final amount = gig.cachet == null ? '' : ' - ${gig.cachet!.toStringAsFixed(2)} €';
-    return '$day/$month/$year - ${client?.nombre ?? 'Cliente'}$amount';
+    final amount = gig.cachet == null
+        ? ''
+        : ' - ${gig.cachet!.toStringAsFixed(2)} €';
+    return '$day/$month/$year - ${client?.displayName ?? 'Cliente'}$amount';
   }
 
   bool _isExactClientMatch(Client client, String query) {
@@ -529,6 +595,12 @@ class AiEntityResolverService {
     final clean = value
         .replaceAll(RegExp(r'\s+(del?|al?)\s+\d{1,2}.*$'), '')
         .replaceAll(RegExp(r'\s+a\s+\d+[.,]?\d*\s*€.*$'), '')
+        .replaceAll(
+          RegExp(
+            r'\s+a\s+(?:el\s+)?(lunes|martes|miercoles|miércoles|jueves|viernes|sabado|sábado|domingo|hoy|mañana|manana).*$',
+          ),
+          '',
+        )
         .trim();
     return clean.isEmpty ? null : clean;
   }
@@ -557,7 +629,8 @@ class AiEntityResolverService {
   }) {
     final normalized = _normalize(query);
     if (client != null) {
-      if (_isExactClientMatch(client, query) || _isPartialClientMatch(client, query)) {
+      if (_isExactClientMatch(client, query) ||
+          _isPartialClientMatch(client, query)) {
         return true;
       }
     }
@@ -582,7 +655,9 @@ class AiEntityResolverService {
     final values = gigs
         .map((gig) => _gigLabel(gig, clientById[gig.clientId]))
         .toList();
-    debugPrint('[AiEntityResolver][Gig][$stage] count=${gigs.length} values=$values');
+    debugPrint(
+      '[AiEntityResolver][Gig][$stage] count=${gigs.length} values=$values',
+    );
   }
 
   String _isoDate(DateTime date) {

@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 import '../database/database_helper.dart';
 import '../models/gig.dart';
 import '../models/invoice.dart';
+import 'invoice_fiscal_record_repository.dart';
 
 class InvoiceNumberChangeSource {
   static const createInvoice = 'create_invoice';
@@ -136,7 +137,10 @@ class InvoiceRepository {
     return getNextNumberForYear(DateTime.now().year);
   }
 
-  Future<int> getNextNumberForYear(int year) async {
+  Future<int> getNextNumberForYear(
+    int year, {
+    InvoiceType invoiceType = InvoiceType.normal,
+  }) async {
     final db = await DatabaseHelper.instance.database;
     final result = await db.rawQuery(
       '''
@@ -144,8 +148,9 @@ class InvoiceRepository {
       FROM invoices
       WHERE CAST(strftime('%Y', fecha) AS INTEGER) = ?
         AND deleted_at IS NULL
+        AND invoice_type = ?
       ''',
-      [year],
+      [year, invoiceType.dbValue],
     );
     final maxNum = result.first['max_num'] as int?;
     return (maxNum ?? 0) + 1;
@@ -203,13 +208,22 @@ class InvoiceRepository {
     final db = await DatabaseHelper.instance.database;
     final existingRows = await db.query(
       'invoices',
-      columns: ['numero'],
+      columns: ['numero', 'is_fiscally_issued', 'fiscal_hash'],
       where: 'id = ?',
       whereArgs: [invoice.id],
       limit: 1,
     );
     if (existingRows.isNotEmpty) {
       final currentNumber = existingRows.first['numero'] as int;
+      final locked =
+          (existingRows.first['is_fiscally_issued'] as int? ?? 0) == 1 ||
+          (existingRows.first['fiscal_hash'] as String?)?.trim().isNotEmpty ==
+              true;
+      if (locked) {
+        throw StateError(
+          'Factura bloqueada por modo VeriFactu. Crea una rectificativa.',
+        );
+      }
       if (currentNumber != invoice.numero) {
         throw StateError(
           'Cambio de número no permitido desde edición normal. '
@@ -225,17 +239,60 @@ class InvoiceRepository {
     );
   }
 
-  Future<void> updateStatus(String id, InvoiceStatus status) async {
+  Future<void> updateStatus(
+    String id,
+    InvoiceStatus status, {
+    bool verifactuEnabled = false,
+    String? userId,
+  }) async {
     final db = await DatabaseHelper.instance.database;
-    await db.update(
-      'invoices',
-      {
-        'status': status.dbValue,
-        'updated_at': DateTime.now().toIso8601String(),
-      },
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    await db.transaction((txn) async {
+      final rows = await txn.query(
+        'invoices',
+        where: 'id = ? AND deleted_at IS NULL',
+        whereArgs: [id],
+        limit: 1,
+      );
+      if (rows.isEmpty) return;
+      final invoice = Invoice.fromMap(rows.first);
+      if (invoice.isFiscallyLocked && status == InvoiceStatus.borrador) {
+        throw StateError(
+          'Factura bloqueada por modo VeriFactu. Crea una rectificativa.',
+        );
+      }
+
+      final now = DateTime.now().toIso8601String();
+      if (verifactuEnabled &&
+          status == InvoiceStatus.enviada &&
+          !invoice.isFiscallyLocked) {
+        final fiscalInvoice = invoice.copyWith(
+          status: status,
+          updatedAt: DateTime.now(),
+        );
+        final record = await InvoiceFiscalRecordRepository.instance
+            .createForInvoiceIssue(txn, fiscalInvoice, userId: userId);
+        await txn.update(
+          'invoices',
+          {
+            'status': status.dbValue,
+            'is_fiscally_issued': 1,
+            'fiscal_hash': record.currentHash,
+            'fiscal_record_id': record.id,
+            'updated_at': now,
+          },
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+        return;
+      }
+
+      await txn.update(
+        'invoices',
+        {'status': status.dbValue, 'updated_at': now},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    });
   }
 
   Future<void> updateDriveMetadata({
@@ -281,6 +338,28 @@ class InvoiceRepository {
 
   Future<void> delete(String id) async {
     final db = await DatabaseHelper.instance.database;
+    final invoice = await getById(id);
+    if (invoice?.isFiscallyLocked == true) {
+      throw StateError(
+        'Factura bloqueada por modo VeriFactu. Crea una rectificativa.',
+      );
+    }
+    final rectifyingChildren = await db.rawQuery(
+      '''
+      SELECT COUNT(*) AS total
+      FROM invoices
+      WHERE rectifies_invoice_id = ?
+        AND deleted_at IS NULL
+      ''',
+      [id],
+    );
+    final hasRectifyingChildren =
+        (rectifyingChildren.first['total'] as int? ?? 0) > 0;
+    if (hasRectifyingChildren) {
+      throw StateError(
+        'No se puede eliminar una factura con rectificativas asociadas.',
+      );
+    }
     final now = DateTime.now().toIso8601String();
     await db.update(
       'invoices',
@@ -300,6 +379,27 @@ class InvoiceRepository {
       );
       if (rows.isEmpty) return null;
       final invoice = Invoice.fromMap(rows.first);
+      if (invoice.isFiscallyLocked) {
+        throw StateError(
+          'Factura bloqueada por modo VeriFactu. Crea una rectificativa.',
+        );
+      }
+      final rectifyingChildren = await txn.rawQuery(
+        '''
+        SELECT COUNT(*) AS total
+        FROM invoices
+        WHERE rectifies_invoice_id = ?
+          AND deleted_at IS NULL
+        ''',
+        [id],
+      );
+      final hasRectifyingChildren =
+          (rectifyingChildren.first['total'] as int? ?? 0) > 0;
+      if (hasRectifyingChildren) {
+        throw StateError(
+          'No se puede eliminar una factura con rectificativas asociadas.',
+        );
+      }
       await txn.update(
         'gigs',
         {
@@ -377,11 +477,14 @@ class InvoiceRepository {
         FROM invoices
         WHERE CAST(strftime('%Y', fecha) AS INTEGER) = ?
           AND deleted_at IS NULL
+          AND invoice_type = (
+            SELECT invoice_type FROM invoices WHERE id = ? LIMIT 1
+          )
           AND numero IN ($placeholdersNumbers)
           AND id NOT IN ($placeholdersIds)
         LIMIT 1
         ''',
-        <Object?>[fiscalYear, ...targetNumbers, ...targetIds],
+        <Object?>[fiscalYear, targetIds.first, ...targetNumbers, ...targetIds],
       );
       if (outsideCollision.isNotEmpty) {
         final numero = outsideCollision.first['numero'];

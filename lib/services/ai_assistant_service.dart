@@ -36,6 +36,22 @@ class AiAssistantService {
     if (localBulkAction != null) {
       return localBulkAction;
     }
+    final localCreateGig = await _tryParseCreateGigAction(message);
+    if (localCreateGig != null) {
+      return localCreateGig;
+    }
+    final localMarkCollected = _tryParseMarkCollectedAction(message);
+    if (localMarkCollected != null) {
+      return localMarkCollected;
+    }
+    final localInvoiceSearch = _tryParseInvoiceSearch(message);
+    if (localInvoiceSearch != null) {
+      return localInvoiceSearch;
+    }
+    final localGigSearch = _tryParseGigSearch(message);
+    if (localGigSearch != null) {
+      return localGigSearch;
+    }
     final context = await _buildContext(
       conversationEntities: conversationEntities,
     );
@@ -46,7 +62,7 @@ class AiAssistantService {
     final enriched = Map<String, dynamic>.from(json)
       ..['_source_message'] = message
       ..['_conversation_entities'] = conversationEntities;
-    return AiAssistantAction.fromJson(enriched);
+    return _applyLocalActionCorrections(AiAssistantAction.fromJson(enriched));
   }
 
   Future<AiActionPreview> buildPreview(AiAssistantAction action) async {
@@ -55,18 +71,31 @@ class AiAssistantService {
         return _previewCreateGigs(action);
       case 'buscar_bolos':
       case 'resumen_agenda':
-        final result = await _searchGigs(action);
         final facturableFilter = _resolveFacturableFilter(action);
         final invoiceSearch = _isInvoiceSearch(action);
         final chargeFilter = _resolveChargeFilter(action);
+        if (invoiceSearch) {
+          final invoices = await _searchInvoices(action);
+          final title = chargeFilter == _ChargeFilter.pending
+              ? 'Facturas pendientes de cobro'
+              : chargeFilter == _ChargeFilter.collected
+              ? 'Facturas cobradas'
+              : _resolveInvoiceStatusFilter(action) == InvoiceStatus.borrador
+              ? 'Facturas en borrador'
+              : 'Facturas encontradas';
+          return AiActionPreview(
+            title: title,
+            description: invoices.isEmpty
+                ? 'No he encontrado facturas con esos filtros.'
+                : 'He encontrado ${invoices.length} factura(s).',
+            items: await _invoiceLines(invoices),
+            requiresConfirmation: false,
+            executable: false,
+          );
+        }
+        final result = await _searchGigs(action);
         final title = action.accion == 'resumen_agenda'
             ? 'Resumen de agenda'
-            : invoiceSearch
-            ? chargeFilter == _ChargeFilter.pending
-                  ? 'Facturas pendientes de cobro'
-                  : chargeFilter == _ChargeFilter.collected
-                  ? 'Facturas cobradas'
-                  : 'Facturas encontradas'
             : (facturableFilter == true
                   ? 'Bolos facturables encontrados'
                   : facturableFilter == false
@@ -115,7 +144,9 @@ class AiAssistantService {
         );
       case 'crear_facturas_masivas':
         final plan = await _buildBulkInvoicePlan(action);
-        final usesCollection = _readStringList(action.raw['gig_ids']).isNotEmpty;
+        final usesCollection = _readStringList(
+          action.raw['gig_ids'],
+        ).isNotEmpty;
         if (plan.eligible.isEmpty) {
           return AiActionPreview(
             title: 'Facturación masiva',
@@ -162,8 +193,8 @@ class AiAssistantService {
                     .map((c) => c.label)
                     .toList()
               : [
-                  'Factura #${invoice.numero}',
-                  if (client != null) client.nombre,
+                  'Factura ${invoice.visualNumber}',
+                  if (client != null) client.displayName,
                 ],
           requiresConfirmation: true,
           executable:
@@ -387,7 +418,10 @@ class AiAssistantService {
     );
   }
 
-  Future<(int, Gig?)> _executeCreateGigs(AiAssistantAction action, Ref ref) async {
+  Future<(int, Gig?)> _executeCreateGigs(
+    AiAssistantAction action,
+    Ref ref,
+  ) async {
     var created = 0;
     Gig? lastCreated;
     for (final draft in action.bolos) {
@@ -441,6 +475,14 @@ class AiAssistantService {
     final importe = _readNumber(action.cambios['importe']);
     if (importe != null) updated = updated.copyWith(cachet: importe);
     await ref.read(gigsProvider.notifier).updateGig(updated);
+    if (status == 'cobrado' && updated.facturable) {
+      final invoice = await InvoiceRepository.instance.getByGigId(updated.id);
+      if (invoice != null && invoice.status != InvoiceStatus.pagada) {
+        await ref
+            .read(invoicesProvider.notifier)
+            .updateStatus(invoice.id, InvoiceStatus.pagada);
+      }
+    }
     ref.invalidate(gigsProvider);
     ref.invalidate(dashboardStatsProvider);
     ref.invalidate(financialSummaryProvider);
@@ -452,7 +494,10 @@ class AiAssistantService {
     AiAssistantAction action,
     Ref ref,
   ) async {
-    final gig = (await _resolveTargetGig(action, onlyFacturable: true)).selected;
+    final gig = (await _resolveTargetGig(
+      action,
+      onlyFacturable: true,
+    )).selected;
     if (gig == null) return 'No he encontrado un bolo facturable válido.';
     final existing = await InvoiceRepository.instance.getByGigId(gig.id);
     if (existing != null) return 'Ese bolo ya tiene factura.';
@@ -500,7 +545,7 @@ class AiAssistantService {
     await ref
         .read(invoicesProvider.notifier)
         .updateStatus(invoice.id, InvoiceStatus.enviada);
-    return 'Factura #${invoice.numero} enviada a ${client.email}.';
+    return 'Factura ${invoice.visualNumber} enviada a ${client.email}.';
   }
 
   Future<String> _executeCreateBulkInvoices(
@@ -595,29 +640,50 @@ class AiAssistantService {
   Future<List<Gig>> _searchGigs(AiAssistantAction action) async {
     final gigs = await GigRepository.instance.getAll();
     final invoices = await InvoiceRepository.instance.getAll();
-    final invoiceByGigId = {for (final invoice in invoices) invoice.gigId: invoice};
+    final invoiceByGigId = {
+      for (final invoice in invoices) invoice.gigId: invoice,
+    };
     final sourceDate = _readString(action.filtros['fecha']);
     final exactDate = DateTime.tryParse(sourceDate ?? '');
-    final from = DateTime.tryParse(
+    var from = DateTime.tryParse(
       _readString(action.filtros['fecha_desde']) ?? '',
     );
-    final to = DateTime.tryParse(
+    var to = DateTime.tryParse(
       _readString(action.filtros['fecha_hasta']) ?? '',
     );
-    final query = _readString(action.filtros['texto'])?.toLowerCase();
+    if (action.accion == 'resumen_agenda' &&
+        from == null &&
+        to == null &&
+        _readString(action.filtros['fecha']) == null &&
+        _resolveMonthFilter(action) == null) {
+      final now = DateTime.now();
+      from = DateTime(now.year, now.month, now.day);
+      to = from.add(const Duration(days: 90));
+    }
+    final query =
+        (_readString(action.filtros['texto']) ??
+                _readString(action.filtros['cliente']) ??
+                _readClientFromSource(action))
+            ?.toLowerCase();
     final facturableFilter = _resolveFacturableFilter(action);
     final chargeFilter = _resolveChargeFilter(action);
     final invoiceOnly = _isInvoiceSearch(action);
     final monthFilter = _resolveMonthFilter(action);
     final statusFilter = _resolveInvoiceStatusFilter(action);
+    final gigStatusFilter = _readString(
+      action.filtros['estado'],
+    )?.toLowerCase();
     final clients = await ClientRepository.instance.getAll();
     final clientById = {for (final client in clients) client.id: client};
     final clientFilterId = _resolveClientFilterId(action, clients);
     return gigs.where((gig) {
       final invoice = invoiceByGigId[gig.id];
-      final effectiveDate = invoiceOnly && invoice != null ? invoice.fecha : gig.fecha;
+      final effectiveDate = invoiceOnly && invoice != null
+          ? invoice.fecha
+          : gig.fecha;
       if (from != null && effectiveDate.isBefore(from)) return false;
-      if (to != null && effectiveDate.isAfter(to.add(const Duration(days: 1)))) {
+      if (to != null &&
+          effectiveDate.isAfter(to.add(const Duration(days: 1)))) {
         return false;
       }
       if (exactDate != null &&
@@ -631,12 +697,28 @@ class AiAssistantService {
       }
       if (query != null) {
         final client = clientById[gig.clientId];
-        final name = client?.nombre.toLowerCase() ?? '';
-        if (!name.contains(query)) return false;
+        if (!_clientMatchesQuery(client, query)) return false;
       }
-      if (clientFilterId != null && gig.clientId != clientFilterId) return false;
+      if (clientFilterId != null && gig.clientId != clientFilterId) {
+        return false;
+      }
       if (facturableFilter != null && gig.facturable != facturableFilter) {
         return false;
+      }
+      if (!invoiceOnly && gigStatusFilter != null) {
+        if (gigStatusFilter == 'pendiente_cobro') {
+          return _isGigPendingCollection(gig, invoice);
+        }
+        if (gigStatusFilter == 'confirmado' &&
+            gig.status != GigStatus.confirmado &&
+            gig.status != GigStatus.confirmadoB) {
+          return false;
+        }
+        if (gigStatusFilter == 'cobrado' &&
+            gig.status != GigStatus.cobrado &&
+            gig.status != GigStatus.cobradoB) {
+          return false;
+        }
       }
       if (invoiceOnly && invoice == null) return false;
       if (statusFilter != null) {
@@ -647,7 +729,7 @@ class AiAssistantService {
           if (invoice == null) return false;
           if (invoice.status == InvoiceStatus.pagada) return false;
         } else {
-          if (gig.status == GigStatus.cobrado || gig.status == GigStatus.cobradoB) {
+          if (!_isGigPendingCollection(gig, invoice)) {
             return false;
           }
         }
@@ -657,10 +739,50 @@ class AiAssistantService {
           if (invoice == null) return false;
           if (invoice.status != InvoiceStatus.pagada) return false;
         } else {
-          if (gig.status != GigStatus.cobrado && gig.status != GigStatus.cobradoB) {
+          if (gig.status != GigStatus.cobrado &&
+              gig.status != GigStatus.cobradoB) {
             return false;
           }
         }
+      }
+      return true;
+    }).toList();
+  }
+
+  Future<List<Invoice>> _searchInvoices(AiAssistantAction action) async {
+    final invoices = await InvoiceRepository.instance.getAll();
+    final clients = await ClientRepository.instance.getAll();
+    final clientById = {for (final client in clients) client.id: client};
+    final sourceDate = _readString(action.filtros['fecha']);
+    final exactDate = DateTime.tryParse(sourceDate ?? '');
+    final statusFilter = _resolveInvoiceStatusFilter(action);
+    final monthFilter = _resolveMonthFilter(action);
+    final clientFilterId = _resolveClientFilterId(action, clients);
+    final query =
+        (_readString(action.filtros['texto']) ??
+                _readString(action.filtros['cliente']) ??
+                _readClientFromSource(action))
+            ?.toLowerCase();
+
+    return invoices.where((invoice) {
+      if (statusFilter != null && invoice.status != statusFilter) {
+        return false;
+      }
+      if (monthFilter != null && invoice.fecha.month != monthFilter) {
+        return false;
+      }
+      if (exactDate != null &&
+          (invoice.fecha.year != exactDate.year ||
+              invoice.fecha.month != exactDate.month ||
+              invoice.fecha.day != exactDate.day)) {
+        return false;
+      }
+      if (clientFilterId != null && invoice.clientId != clientFilterId) {
+        return false;
+      }
+      if (query != null &&
+          !_clientMatchesQuery(clientById[invoice.clientId], query)) {
+        return false;
       }
       return true;
     }).toList();
@@ -791,7 +913,7 @@ class AiAssistantService {
     }
     final client = await ClientRepository.instance.getById(gig.clientId);
     final before = <String>[
-      'before|Nombre|Bolo para ${client?.nombre ?? 'Cliente'}',
+      'before|Nombre|Bolo para ${client?.displayName ?? 'Cliente'}',
       'before|Fecha|${_formatDateEs(gig.fecha)}',
       'before|Importe|${gig.cachet == null ? 'Sin importe' : _money(gig.cachet!)}',
       'before|Estado|${gig.status.label}',
@@ -801,7 +923,9 @@ class AiAssistantService {
     final changes = <String>[];
     final fecha = DateTime.tryParse(_readString(action.cambios['fecha']) ?? '');
     if (fecha != null) {
-      changes.add('diff|Fecha|${_formatDateEs(gig.fecha)}|${_formatDateEs(fecha)}');
+      changes.add(
+        'diff|Fecha|${_formatDateEs(gig.fecha)}|${_formatDateEs(fecha)}',
+      );
     }
     final importeNuevo = _readNumber(action.cambios['importe']);
     if (importeNuevo != null) {
@@ -811,12 +935,14 @@ class AiAssistantService {
     }
     final status = _readString(action.cambios['estado']);
     if (status == 'cobrado') {
-      final next = gig.facturable ? GigStatus.cobrado.label : GigStatus.cobradoB.label;
+      final next = gig.facturable
+          ? GigStatus.cobrado.label
+          : GigStatus.cobradoB.label;
       changes.add('diff|Estado|${gig.status.label}|$next');
     }
 
     final description = changes.isEmpty
-        ? 'Voy a actualizar el bolo de ${client?.nombre ?? 'este cliente'}.'
+        ? 'Voy a actualizar el bolo de ${client?.displayName ?? 'este cliente'}.'
         : 'Estos son los cambios que se aplicarán:';
     final items = <String>[
       'section|Bolo encontrado|',
@@ -829,12 +955,30 @@ class AiAssistantService {
 
   Future<List<String>> _gigLines(List<Gig> gigs) async {
     final clients = await ClientRepository.instance.getAll();
+    final invoices = await InvoiceRepository.instance.getAll();
     final byId = {for (final client in clients) client.id: client};
+    final invoiceByGigId = {
+      for (final invoice in invoices) invoice.gigId: invoice,
+    };
     return gigs.map((gig) {
       final client = byId[gig.clientId];
-      final amount = gig.cachet == null ? '' : ' · ${_money(gig.cachet!)}';
+      final invoice = invoiceByGigId[gig.id];
+      final amount = invoice != null
+          ? ' · base ${_money(invoice.subtotal)} · IVA ${_money(invoice.ivaAmount)} · total ${_money(invoice.total)}'
+          : gig.cachet == null
+          ? ''
+          : ' · ${_money(gig.cachet!)}';
       final type = gig.facturable ? 'facturable' : 'no facturable';
-      return '${_date(gig.fecha)} · ${client?.nombre ?? 'Cliente'}$amount · $type';
+      return '${_date(gig.fecha)} · ${client?.displayName ?? 'Cliente'}$amount · ${gig.status.label} · $type';
+    }).toList();
+  }
+
+  Future<List<String>> _invoiceLines(List<Invoice> invoices) async {
+    final clients = await ClientRepository.instance.getAll();
+    final clientById = {for (final client in clients) client.id: client};
+    return invoices.map((invoice) {
+      final client = clientById[invoice.clientId];
+      return '${_date(invoice.fecha)} · Factura ${invoice.visualNumber} · ${client?.displayName ?? 'Cliente'} · base ${_money(invoice.subtotal)} · IVA ${_money(invoice.ivaAmount)} · total ${_money(invoice.total)} · ${invoice.status.label}';
     }).toList();
   }
 
@@ -842,7 +986,7 @@ class AiAssistantService {
     final clients = await ClientRepository.instance.getAll();
     final byId = {for (final client in clients) client.id: client};
     return gigs.map((gig) {
-      final clientName = byId[gig.clientId]?.nombre ?? 'Cliente';
+      final clientName = byId[gig.clientId]?.displayName ?? 'Cliente';
       final amount = gig.cachet == null ? 'Sin importe' : _money(gig.cachet!);
       return 'Fecha: ${_date(gig.fecha)} · Nombre: Bolo · Cliente: $clientName · Importe: $amount';
     }).toList();
@@ -900,7 +1044,7 @@ class AiAssistantService {
 
   Future<String> _gigDisplayName(Gig gig) async {
     final client = await ClientRepository.instance.getById(gig.clientId);
-    return 'Bolo para ${client?.nombre ?? 'Cliente'}';
+    return 'Bolo para ${client?.displayName ?? 'Cliente'}';
   }
 
   Future<String> _gigDisplayNameById(String gigId) async {
@@ -912,7 +1056,9 @@ class AiAssistantService {
   bool? _resolveFacturableFilter(AiAssistantAction action) {
     final fromFilters = action.filtros['facturable'];
     if (fromFilters is bool) return fromFilters;
-    final source = (action.raw['_source_message']?.toString() ?? '').toLowerCase();
+    final source = (action.raw['_source_message']?.toString() ?? '')
+        .toLowerCase();
+    if (source.contains('privad')) return false;
     if (source.contains('no facturable') ||
         source.contains(' en b') ||
         source.contains('sin factura')) {
@@ -927,6 +1073,89 @@ class AiAssistantService {
     return null;
   }
 
+  bool _clientMatchesQuery(Client? client, String rawQuery) {
+    if (client == null) return false;
+    final query = _normalizeText(rawQuery);
+    final values = [
+      client.nombre,
+      client.alias,
+      ...client.aliases,
+    ].map(_normalizeText);
+    return values.any(
+      (value) => value.contains(query) || query.contains(value),
+    );
+  }
+
+  bool _isGigPendingCollection(Gig gig, Invoice? invoice) {
+    if (gig.status == GigStatus.cobrado ||
+        gig.status == GigStatus.cobradoB ||
+        gig.status == GigStatus.cancelado) {
+      return false;
+    }
+    if (!gig.facturable) return gig.status == GigStatus.realizadoB;
+    if (gig.status != GigStatus.facturado) return false;
+    return invoice == null || invoice.status == InvoiceStatus.enviada;
+  }
+
+  String? _readClientFromSource(AiAssistantAction action) {
+    return _extractClientTextForLocalSearch(
+      action.raw['_source_message']?.toString() ?? '',
+    );
+  }
+
+  String _normalizeText(String value) {
+    return value
+        .toLowerCase()
+        .replaceAll('á', 'a')
+        .replaceAll('é', 'e')
+        .replaceAll('í', 'i')
+        .replaceAll('ó', 'o')
+        .replaceAll('ú', 'u')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+  }
+
+  String? _extractClientTextForLocalSearch(String source) {
+    final match = RegExp(
+      r'\b(?:con|del cliente|cliente)\s+([a-z0-9áéíóúñ ._-]+)$',
+      caseSensitive: false,
+    ).firstMatch(source.trim());
+    var value = match?.group(1)?.trim();
+    if (value == null || value.isEmpty) return null;
+    value = value
+        .replaceAll(
+          RegExp(
+            r'\s+(?:en|del?|de)\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\b.*$',
+            caseSensitive: false,
+          ),
+          '',
+        )
+        .trim();
+    return value.isEmpty ? null : value;
+  }
+
+  int? _monthFromText(String normalized) {
+    const months = {
+      'enero': 1,
+      'febrero': 2,
+      'marzo': 3,
+      'abril': 4,
+      'mayo': 5,
+      'junio': 6,
+      'julio': 7,
+      'agosto': 8,
+      'septiembre': 9,
+      'setiembre': 9,
+      'octubre': 10,
+      'noviembre': 11,
+      'diciembre': 12,
+    };
+    for (final entry in months.entries) {
+      if (normalized.contains(entry.key)) return entry.value;
+    }
+    return null;
+  }
+
   _ChargeFilter? _resolveChargeFilter(AiAssistantAction action) {
     final estado = _readString(action.filtros['estado'])?.toLowerCase() ?? '';
     if (estado.contains('cobrad') || estado == 'pagada') {
@@ -937,7 +1166,8 @@ class AiAssistantService {
         estado == 'enviada') {
       return _ChargeFilter.pending;
     }
-    final source = (action.raw['_source_message']?.toString() ?? '').toLowerCase();
+    final source = (action.raw['_source_message']?.toString() ?? '')
+        .toLowerCase();
     if (source.contains('por cobrar') ||
         source.contains('pendiente de cobro') ||
         source.contains('pendientes de cobro') ||
@@ -955,7 +1185,8 @@ class AiAssistantService {
   }
 
   InvoiceStatus? _resolveInvoiceStatusFilter(AiAssistantAction action) {
-    final status = _readString(action.filtros['status'])?.toLowerCase() ??
+    final status =
+        _readString(action.filtros['status'])?.toLowerCase() ??
         _readString(action.filtros['estado'])?.toLowerCase() ??
         '';
     if (status.contains('borrador')) return InvoiceStatus.borrador;
@@ -1008,7 +1239,8 @@ class AiAssistantService {
         clients.any((client) => client.id == rawClientId)) {
       return rawClientId;
     }
-    final clientText = _readString(action.filtros['cliente']) ??
+    final clientText =
+        _readString(action.filtros['cliente']) ??
         _readString(action.filtros['cliente_nombre']) ??
         _readString(action.objetivo['cliente']) ??
         _readString(action.objetivo['cliente_nombre']);
@@ -1032,12 +1264,179 @@ class AiAssistantService {
   }
 
   bool _isInvoiceSearch(AiAssistantAction action) {
-    final source = (action.raw['_source_message']?.toString() ?? '').toLowerCase();
-    return source.contains('factura') ||
-        action.filtros.containsKey('status') ||
-        action.filtros.containsKey('mes') ||
-        action.filtros.containsKey('cliente') ||
-        action.filtros.containsKey('cliente_id');
+    final source = (action.raw['_source_message']?.toString() ?? '')
+        .toLowerCase();
+    return source.contains('factura');
+  }
+
+  AiAssistantAction? _tryParseInvoiceSearch(String message) {
+    final normalized = _normalizeForParser(message);
+    if (_looksLikeMutation(normalized)) return null;
+    if (!normalized.contains('factura')) return null;
+
+    final filters = <String, dynamic>{};
+    if (normalized.contains('borrador')) {
+      filters['status'] = 'borrador';
+    } else if (normalized.contains('por cobrar') ||
+        normalized.contains('pendiente') ||
+        normalized.contains('sin cobrar')) {
+      filters['status'] = 'pendiente_de_cobro';
+    } else if (normalized.contains('cobrada') ||
+        normalized.contains('cobradas') ||
+        normalized.contains('pagada') ||
+        normalized.contains('pagadas')) {
+      filters['status'] = 'cobrada';
+    }
+
+    final month = _monthFromText(normalized);
+    if (month != null) filters['mes'] = month;
+
+    final client = _extractClientTextForLocalSearch(message);
+    if (client != null) filters['cliente'] = client;
+
+    return AiAssistantAction.fromJson({
+      'accion': 'buscar_bolos',
+      'requiere_confirmacion': false,
+      'confianza': 0.99,
+      'filtros': filters,
+      'objetivo': const <String, dynamic>{},
+      'cambios': const <String, dynamic>{},
+      'cliente': const <String, dynamic>{},
+      'clientes': const <dynamic>[],
+      'factura': const <String, dynamic>{},
+      'email': const <String, dynamic>{},
+      'advertencias': const <dynamic>[],
+      '_source_message': message,
+    });
+  }
+
+  AiAssistantAction? _tryParseGigSearch(String message) {
+    final normalized = _normalizeForParser(message);
+    if (_looksLikeMutation(normalized)) return null;
+    if (!normalized.contains('bolo') && !normalized.contains('evento')) {
+      return null;
+    }
+    final filters = <String, dynamic>{};
+    var shouldHandle = false;
+
+    if (normalized.contains('privad')) {
+      filters['facturable'] = false;
+      shouldHandle = true;
+    }
+    if (normalized.contains('facturable')) {
+      filters['facturable'] = true;
+      filters['estado'] = 'confirmado';
+      shouldHandle = true;
+    }
+    if (normalized.contains('por cobrar') ||
+        normalized.contains('pendiente de cobro') ||
+        normalized.contains('sin cobrar')) {
+      filters['estado'] = 'pendiente_cobro';
+      shouldHandle = true;
+    }
+    if (normalized.contains('cobrado') ||
+        normalized.contains('cobrados') ||
+        normalized.contains('cobrada') ||
+        normalized.contains('cobradas')) {
+      filters['estado'] = 'cobrado';
+      shouldHandle = true;
+    }
+
+    final client = _extractClientTextForLocalSearch(message);
+    if (client != null) {
+      filters['cliente'] = client;
+      shouldHandle = true;
+    }
+
+    if (!shouldHandle) return null;
+    return AiAssistantAction.fromJson({
+      'accion': 'buscar_bolos',
+      'requiere_confirmacion': false,
+      'confianza': 0.99,
+      'filtros': filters,
+      'objetivo': const <String, dynamic>{},
+      'cambios': const <String, dynamic>{},
+      'cliente': const <String, dynamic>{},
+      'clientes': const <dynamic>[],
+      'factura': const <String, dynamic>{},
+      'email': const <String, dynamic>{},
+      'advertencias': const <dynamic>[],
+      '_source_message': message,
+    });
+  }
+
+  Future<AiAssistantAction?> _tryParseCreateGigAction(String message) async {
+    final normalized = _normalizeForParser(message);
+    final hasCreateIntent = RegExp(
+      r'\b(crea|crear|anade|añade|apunta)\b',
+    ).hasMatch(normalized);
+    if (!hasCreateIntent || !normalized.contains('bolo')) return null;
+
+    final dateText = _extractFirstDateText(message);
+    final date = dateText == null ? null : _resolveDateText(dateText);
+    final amount = _extractAmountFromText(message);
+    final client = _extractClientForCreate(message, dateText: dateText);
+    if (date == null || amount == null || client == null) return null;
+
+    final resolvedClient = await _resolveClientName(client);
+    final facturable = _extractFacturableHint(normalized);
+    return AiAssistantAction.fromJson({
+      'accion': 'crear_bolos',
+      'requiere_confirmacion': true,
+      'confianza': 0.99,
+      'bolos': [
+        {
+          'fecha': _date(date),
+          'nombre': resolvedClient,
+          'importe': amount,
+          'facturable': facturable,
+          'estado': facturable == false ? 'confirmado_b' : 'confirmado',
+        },
+      ],
+      'filtros': const <String, dynamic>{},
+      'objetivo': const <String, dynamic>{},
+      'cambios': const <String, dynamic>{},
+      'cliente': const <String, dynamic>{},
+      'clientes': const <dynamic>[],
+      'factura': const <String, dynamic>{},
+      'email': const <String, dynamic>{},
+      'advertencias': const <dynamic>[],
+      '_source_message': message,
+    });
+  }
+
+  AiAssistantAction? _tryParseMarkCollectedAction(String message) {
+    final normalized = _normalizeForParser(message);
+    final hasIntent =
+        normalized.contains('marca') &&
+        normalized.contains('cobrad') &&
+        normalized.contains('bolo');
+    if (!hasIntent) return null;
+
+    final dateText = _extractFirstDateText(message);
+    final date = dateText == null ? null : _resolveDateText(dateText);
+    if (date == null) return null;
+
+    return AiAssistantAction.fromJson({
+      'accion': 'actualizar_bolo',
+      'requiere_confirmacion': true,
+      'confianza': 0.99,
+      'filtros': {'fecha': _date(date)},
+      'objetivo': const <String, dynamic>{},
+      'cambios': {'estado': 'cobrado'},
+      'cliente': const <String, dynamic>{},
+      'clientes': const <dynamic>[],
+      'factura': const <String, dynamic>{},
+      'email': const <String, dynamic>{},
+      'advertencias': const <dynamic>[],
+      '_source_message': message,
+    });
+  }
+
+  bool _looksLikeMutation(String normalized) {
+    return RegExp(
+      r'\b(crea|crear|anade|añade|apunta|marca|cambia|actualiza|modifica)\b',
+    ).hasMatch(normalized);
   }
 
   Future<List<String>> collectionGigIdsFor(AiAssistantAction action) async {
@@ -1058,7 +1457,9 @@ class AiAssistantService {
     ).hasMatch(normalized);
     final referencesAll =
         RegExp(r'\btod[oa]s?\b').hasMatch(normalized) ||
-        normalized.contains('a los facturables');
+        normalized.contains('a los facturables') ||
+        normalized.contains('confirmados') ||
+        normalized.contains('pendientes de facturar');
     final referencesCollection =
         normalized.contains('estos') ||
         normalized.contains('estas') ||
@@ -1068,7 +1469,8 @@ class AiAssistantService {
     final isBulkInvoice =
         hasInvoiceIntent &&
         !normalized.contains('email') &&
-        (referencesAll || (referencesCollection && collectionGigIds.isNotEmpty));
+        (referencesAll ||
+            (referencesCollection && collectionGigIds.isNotEmpty));
     if (!isBulkInvoice) return null;
     final gigIds = referencesAll ? const <String>[] : collectionGigIds;
     final raw = <String, dynamic>{
@@ -1079,6 +1481,7 @@ class AiAssistantService {
         'facturable': true,
         'sin_factura': true,
         'cancelado': false,
+        if (normalized.contains('confirmados')) 'estado': 'confirmado',
       },
       'gig_ids': gigIds,
       'advertencias': const <String>[],
@@ -1098,11 +1501,107 @@ class AiAssistantService {
         .trim();
   }
 
+  String? _extractClientForCreate(String source, {String? dateText}) {
+    final match = RegExp(
+      r'\b(?:crea|crear|añade|anade|apunta)\s+(?:un\s+)?bolo\s+para\s+(.+)$',
+      caseSensitive: false,
+    ).firstMatch(source.trim());
+    var value = match?.group(1)?.trim();
+    if (value == null || value.isEmpty) return null;
+    if (dateText != null && dateText.trim().isNotEmpty) {
+      value = value.replaceFirst(
+        RegExp(
+          '\\s+(?:el\\s+)?${RegExp.escape(dateText)}.*\$',
+          caseSensitive: false,
+        ),
+        '',
+      );
+    }
+    value = value
+        .replaceAll(
+          RegExp(r'\s+por\s+\d+[.,]?\d*.*$', caseSensitive: false),
+          '',
+        )
+        .trim();
+    return value.isEmpty ? null : value;
+  }
+
+  String? _extractFirstDateText(String source) {
+    final text = source.trim();
+    final normalized = _normalizeForParser(text);
+    final relativeTokens = DateResolverService.instance
+        .extractRelativeDateTokens(normalized);
+    final relative = relativeTokens.isEmpty ? null : relativeTokens.first;
+    if (relative != null) return relative;
+
+    final named = RegExp(
+      r'\b\d{1,2}\s+de\s+(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)(?:\s+de\s+\d{4})?\b',
+      caseSensitive: false,
+    ).firstMatch(text);
+    if (named != null) return named.group(0);
+
+    final slash = RegExp(
+      r'\b\d{1,2}[\/.-]\d{1,2}(?:[\/.-]\d{2,4})?\b',
+    ).firstMatch(text);
+    return slash?.group(0);
+  }
+
+  DateTime? _resolveDateText(String text) {
+    final now = DateTime.now();
+    final relative = DateResolverService.instance.resolveExpression(
+      text,
+      now: now,
+    );
+    if (relative != null) {
+      return DateTime(relative.year, relative.month, relative.day);
+    }
+
+    final normalized = _normalizeForParser(text);
+    const monthByName = {
+      'enero': 1,
+      'febrero': 2,
+      'marzo': 3,
+      'abril': 4,
+      'mayo': 5,
+      'junio': 6,
+      'julio': 7,
+      'agosto': 8,
+      'septiembre': 9,
+      'setiembre': 9,
+      'octubre': 10,
+      'noviembre': 11,
+      'diciembre': 12,
+    };
+    final named = RegExp(
+      r'\b(\d{1,2})\s+de\s+([a-zñ]+)(?:\s+de\s+(\d{4}))?\b',
+    ).firstMatch(normalized);
+    if (named != null) {
+      final day = int.tryParse(named.group(1) ?? '');
+      final month = monthByName[named.group(2)];
+      final year = int.tryParse(named.group(3) ?? '') ?? now.year;
+      if (day != null && month != null) return DateTime(year, month, day);
+    }
+
+    final slash = RegExp(
+      r'\b(\d{1,2})[\/.-](\d{1,2})(?:[\/.-](\d{2,4}))?\b',
+    ).firstMatch(normalized);
+    if (slash != null) {
+      final day = int.tryParse(slash.group(1) ?? '');
+      final month = int.tryParse(slash.group(2) ?? '');
+      final yearRaw = int.tryParse(slash.group(3) ?? '') ?? now.year;
+      final year = yearRaw < 100 ? yearRaw + 2000 : yearRaw;
+      if (day != null && month != null) return DateTime(year, month, day);
+    }
+    return null;
+  }
+
   Future<_BulkInvoicePlan> _buildBulkInvoicePlan(
     AiAssistantAction action,
   ) async {
     final gigs = await GigRepository.instance.getAll();
     final requestedIds = _readStringList(action.raw['gig_ids']).toSet();
+    final onlyConfirmed =
+        _readString(action.filtros['estado'])?.toLowerCase() == 'confirmado';
     var skippedNotBillable = 0;
     var skippedAlreadyInvoiced = 0;
     var skippedCancelled = 0;
@@ -1117,6 +1616,9 @@ class AiAssistantService {
       }
       if (!gig.facturable) {
         skippedNotBillable++;
+        continue;
+      }
+      if (onlyConfirmed && gig.status != GigStatus.confirmado) {
         continue;
       }
       if (gig.invoiceId != null && gig.invoiceId!.trim().isNotEmpty) {
@@ -1143,7 +1645,91 @@ class AiAssistantService {
     );
   }
 
-  Future<AiAssistantAction> _normalizeCreateBolos(AiAssistantAction action) async {
+  AiAssistantAction _applyLocalActionCorrections(AiAssistantAction action) {
+    final source = (action.raw['_source_message']?.toString() ?? '').trim();
+    final normalized = _normalizeForParser(source);
+    if (source.isEmpty) return action;
+
+    final raw = Map<String, dynamic>.from(action.raw);
+    raw['filtros'] = Map<String, dynamic>.from(action.filtros);
+    raw['objetivo'] = Map<String, dynamic>.from(action.objetivo);
+    raw['cambios'] = Map<String, dynamic>.from(action.cambios);
+
+    if (action.accion == 'actualizar_bolo') {
+      final amount = _extractTargetAmount(normalized);
+      if (amount != null && raw['cambios'] is Map) {
+        (raw['cambios'] as Map<String, dynamic>)['importe'] = amount;
+        if (!RegExp(
+          r'\bde\s+\d+(?:[.,]\d{1,2})?\s*(?:€|eur|euros)?\s+a\b',
+        ).hasMatch(normalized)) {
+          (raw['filtros'] as Map<String, dynamic>).remove('importe_actual');
+          (raw['objetivo'] as Map<String, dynamic>).remove('importe_actual');
+        }
+      }
+
+      final dateChange = _extractDateChange(source);
+      if (dateChange != null) {
+        (raw['filtros'] as Map<String, dynamic>)['fecha'] = _date(
+          dateChange.$1,
+        );
+        (raw['cambios'] as Map<String, dynamic>)['fecha'] = _date(
+          dateChange.$2,
+        );
+      }
+    }
+
+    if (action.accion == 'buscar_bolos' || action.accion == 'resumen_agenda') {
+      final client = _readClientFromSource(action);
+      if (client != null) {
+        (raw['filtros'] as Map<String, dynamic>)['cliente'] = client;
+      }
+    }
+
+    return AiAssistantAction.fromJson(raw);
+  }
+
+  double? _extractTargetAmount(String normalized) {
+    final match = RegExp(
+      r'\ba\s+(\d+(?:[.,]\d{1,2})?)\s*(?:€|eur|euros)?\b',
+    ).firstMatch(normalized);
+    if (match == null) return null;
+    return double.tryParse(match.group(1)!.replaceAll(',', '.'));
+  }
+
+  (DateTime, DateTime)? _extractDateChange(String source) {
+    final text = source.toLowerCase();
+    final weekdays = [
+      'lunes',
+      'martes',
+      'miercoles',
+      'miércoles',
+      'jueves',
+      'viernes',
+      'sabado',
+      'sábado',
+      'domingo',
+    ];
+    for (final day in weekdays) {
+      final pattern = RegExp(
+        'del?\\s+$day\\b.*\\ba\\s+(?:el\\s+)?$day\\s+de\\s+la\\s+semana\\s+que\\s+viene',
+        caseSensitive: false,
+      );
+      if (!pattern.hasMatch(text)) continue;
+      final now = DateTime.now();
+      final from = DateResolverService.instance.resolveExpression(
+        day,
+        now: now,
+      );
+      if (from == null) return null;
+      final to = from.add(const Duration(days: 7));
+      return (from, to);
+    }
+    return null;
+  }
+
+  Future<AiAssistantAction> _normalizeCreateBolos(
+    AiAssistantAction action,
+  ) async {
     if (action.bolos.isEmpty) return action;
     final raw = Map<String, dynamic>.from(action.raw);
     final now = DateTime.now();
@@ -1153,7 +1739,9 @@ class AiAssistantService {
       source: source,
       now: now,
     );
-    final tokens = DateResolverService.instance.extractRelativeDateTokens(source);
+    final tokens = DateResolverService.instance.extractRelativeDateTokens(
+      source,
+    );
     final todayIso = _date(now);
     final bolos = <Map<String, dynamic>>[];
     for (var i = 0; i < action.bolos.length; i++) {
@@ -1206,6 +1794,12 @@ class AiAssistantService {
             fecha = draft.fecha;
           }
         }
+      }
+      final existingClient = await ClientRepository.instance.findByNameOrAlias(
+        nombre,
+      );
+      if (existingClient != null) {
+        nombre = existingClient.nombre.trim();
       }
       bolos.add({
         'fecha': fecha,
@@ -1348,7 +1942,17 @@ class AiAssistantService {
   }
 
   double? _extractAmountFromText(String text) {
-    final match = RegExp(r'(\d+(?:[.,]\d{1,2})?)\s*€').firstMatch(text);
+    final byPor = RegExp(
+      r'\bpor\s+(\d+(?:[.,]\d{1,2})?)\s*(?:€|eur|euros)?\b',
+      caseSensitive: false,
+    ).firstMatch(text);
+    if (byPor != null) {
+      return double.tryParse(byPor.group(1)!.replaceAll(',', '.'));
+    }
+    final match = RegExp(
+      r'\b(\d+(?:[.,]\d{1,2})?)\s*(?:€|eur|euros)\b',
+      caseSensitive: false,
+    ).firstMatch(text);
     if (match == null) return null;
     return double.tryParse(match.group(1)!.replaceAll(',', '.'));
   }

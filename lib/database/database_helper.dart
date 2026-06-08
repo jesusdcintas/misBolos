@@ -35,6 +35,10 @@ import 'migrations/v32_settings_irpf_default.dart';
 import 'migrations/v33_ai_chat_history.dart';
 import 'migrations/v34_client_notes.dart';
 import 'migrations/v35_drive_queue_invoice_idempotency.dart';
+import 'migrations/v36_invoice_reminder_settings.dart';
+import 'migrations/v37_invoice_reminder_compat.dart';
+import 'migrations/v38_verifactu.dart';
+import 'migrations/v39_rectifying_invoice_series.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._internal();
@@ -58,7 +62,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 35,
+      version: 39,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       onConfigure: (db) async {
@@ -195,6 +199,18 @@ class DatabaseHelper {
     if (version >= 35) {
       await _applyMigration(db, v35DriveQueueInvoiceIdempotency);
     }
+    if (version >= 36) {
+      await _applyMigration(db, v36InvoiceReminderSettings);
+    }
+    if (version >= 37) {
+      await _applyMigration(db, v37InvoiceReminderCompat);
+    }
+    if (version >= 38) {
+      await _applyMigration(db, v38Verifactu);
+    }
+    if (version >= 39) {
+      await _applyMigration(db, v39RectifyingInvoiceSeries);
+    }
     await _ensureSoftDeleteColumns(db);
   }
 
@@ -300,6 +316,18 @@ class DatabaseHelper {
     }
     if (oldVersion < 35) {
       await _applyMigration(db, v35DriveQueueInvoiceIdempotency);
+    }
+    if (oldVersion < 36) {
+      await _applyMigration(db, v36InvoiceReminderSettings);
+    }
+    if (oldVersion < 37) {
+      await _applyMigration(db, v37InvoiceReminderCompat);
+    }
+    if (oldVersion < 38) {
+      await _applyMigration(db, v38Verifactu);
+    }
+    if (oldVersion < 39) {
+      await _applyMigration(db, v39RectifyingInvoiceSeries);
     }
     await _ensureSoftDeleteColumns(db);
   }

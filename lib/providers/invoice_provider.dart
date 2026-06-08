@@ -7,6 +7,7 @@ import '../models/invoice.dart';
 import '../models/sync_queue_item.dart';
 import '../repositories/app_event_repository.dart';
 import '../repositories/gig_repository.dart';
+import '../repositories/invoice_fiscal_record_repository.dart';
 import '../repositories/invoice_repository.dart';
 import '../repositories/sync_queue_repository.dart';
 import '../core/services/drive_document_sync_service.dart';
@@ -14,6 +15,7 @@ import '../core/services/google_drive_service.dart';
 import '../services/supabase_service.dart';
 import '../services/sync_queue_processor.dart';
 import 'gig_provider.dart';
+import 'settings_provider.dart';
 
 final invoiceRepositoryProvider = Provider((ref) => InvoiceRepository.instance);
 
@@ -205,8 +207,8 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
         driveUploadedAt: m['drive_uploaded_at'] != null
             ? DateTime.tryParse(m['drive_uploaded_at'].toString())
             : null,
-        driveSyncStatus: (m['drive_sync_status']?.toString().trim().isNotEmpty ??
-                false)
+        driveSyncStatus:
+            (m['drive_sync_status']?.toString().trim().isNotEmpty ?? false)
             ? m['drive_sync_status'].toString()
             : (m['drive_file_id']?.toString().trim().isNotEmpty ?? false)
             ? 'uploaded'
@@ -217,6 +219,19 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
             DateTime.tryParse((m['updated_at'] ?? '').toString()) ?? createdAt,
         deletedAt: m['deleted_at'] != null
             ? DateTime.tryParse(m['deleted_at'].toString())
+            : null,
+        isFiscallyIssued: m['is_fiscally_issued'] as bool? ?? false,
+        fiscalHash: m['fiscal_hash']?.toString(),
+        fiscalRecordId: m['fiscal_record_id']?.toString(),
+        invoiceType: InvoiceTypeExtension.fromDb(m['invoice_type']?.toString()),
+        rectifiesInvoiceId: m['rectifies_invoice_id']?.toString(),
+        rectificationReason: m['rectification_reason']?.toString(),
+        rectificationType: RectificationTypeExtension.fromDb(
+          m['rectification_type']?.toString(),
+        ),
+        originalInvoiceNumber: m['original_invoice_number']?.toString(),
+        originalInvoiceDate: m['original_invoice_date'] != null
+            ? DateTime.tryParse(m['original_invoice_date'].toString())
             : null,
       );
     } catch (_) {
@@ -555,9 +570,29 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
     _markLocalMutation();
     final repository = ref.read(invoiceRepositoryProvider);
     final previous = await repository.getById(id);
-    await repository.updateStatus(id, status);
+    final settings = await ref.read(settingsProvider.future);
+    await repository.updateStatus(
+      id,
+      status,
+      verifactuEnabled: settings.verifactuEnabled,
+      userId: SupabaseService.instance.userId,
+    );
     final invoice = await repository.getById(id);
     if (invoice != null) {
+      if (status == InvoiceStatus.enviada &&
+          invoice.fiscalRecordId?.trim().isNotEmpty == true) {
+        final fiscalRecord = await InvoiceFiscalRecordRepository.instance
+            .getById(invoice.fiscalRecordId!);
+        if (fiscalRecord != null) {
+          try {
+            await SupabaseService.instance.uploadInvoiceFiscalRecord(
+              fiscalRecord,
+            );
+          } catch (e) {
+            debugPrint('[VeriFactu] No se pudo subir registro fiscal: $e');
+          }
+        }
+      }
       await SyncQueueRepository.instance.enqueue(
         entityType: SyncEntityType.invoice,
         entityId: invoice.id,
@@ -594,6 +629,76 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
       ref.invalidate(gigsProvider);
     }
     await reloadLocal();
+  }
+
+  Future<Invoice> createRectifyingInvoice(
+    String originalInvoiceId, {
+    required RectificationReasonType reasonType,
+    required String reasonDescription,
+    RectificationType type = RectificationType.substitution,
+  }) async {
+    _markLocalMutation();
+    final repository = ref.read(invoiceRepositoryProvider);
+    final original = await repository.getById(originalInvoiceId);
+    if (original == null || original.deletedAt != null) {
+      throw StateError('Factura original no encontrada.');
+    }
+    if (!original.isFiscallyLocked) {
+      throw StateError('Solo puedes rectificar facturas emitidas fiscalmente.');
+    }
+
+    final nextNumber = await repository.getNextNumberForYear(
+      DateTime.now().year,
+      invoiceType: InvoiceType.rectifying,
+    );
+    final cleanDescription = reasonDescription.trim();
+    final rectifying = Invoice(
+      numero: nextNumber,
+      fecha: DateTime.now(),
+      clientId: original.clientId,
+      gigId: original.gigId,
+      items: original.items,
+      subtotal: original.subtotal,
+      ivaRate: original.ivaRate,
+      ivaAmount: original.ivaAmount,
+      irpfRate: original.irpfRate,
+      irpfAmount: original.irpfAmount,
+      total: original.total,
+      invoiceType: InvoiceType.rectifying,
+      rectifiesInvoiceId: original.id,
+      rectificationReason: cleanDescription,
+      rectificationReasonType: reasonType,
+      rectificationReasonDescription: cleanDescription,
+      rectificationType: type,
+      originalInvoiceNumber: original.visualNumber,
+      originalInvoiceDate: original.fecha,
+    );
+    await repository.insert(rectifying);
+    final saved = await repository.getById(rectifying.id) ?? rectifying;
+    await SyncQueueRepository.instance.enqueue(
+      entityType: SyncEntityType.invoice,
+      entityId: saved.id,
+      operation: SyncOperation.create,
+      payload: saved.toMap(),
+    );
+    await SyncQueueProcessor.instance.processPending(
+      reason: 'invoice_rectifying_create',
+    );
+    await AppEventRepository.instance.insert(
+      AppEvent(
+        entityType: 'invoice',
+        entityId: saved.id,
+        eventType: 'invoice_rectifying_created',
+        payload: {
+          'numero': saved.numero,
+          'rectifies_invoice_id': original.id,
+          'original_numero': original.numero,
+          'reason': cleanDescription,
+        },
+      ),
+    );
+    await reloadLocal();
+    return saved;
   }
 
   Future<void> remove(String id, {bool deleteFromDrive = false}) async {

@@ -58,7 +58,9 @@ class InvoiceEmailService {
   }
 
   String buildSubject(Invoice invoice) {
-    return 'Factura #${invoice.numero}';
+    return invoice.isRectifying
+        ? 'Factura rectificativa ${invoice.visualNumber}'
+        : 'Factura ${invoice.visualNumber}';
   }
 }
 

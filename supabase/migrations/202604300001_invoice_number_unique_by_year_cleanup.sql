@@ -7,11 +7,15 @@ DROP INDEX IF EXISTS public.idx_invoices_numero_unique;
 DROP INDEX IF EXISTS public.idx_invoices_numero_user;
 DROP INDEX IF EXISTS public.idx_invoices_numero_user_year;
 
+ALTER TABLE public.invoices
+  ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
 CREATE UNIQUE INDEX idx_invoices_numero_user_year
   ON public.invoices (
     user_id,
     (EXTRACT(YEAR FROM fecha_emision)),
     numero
-  );
+  )
+  WHERE deleted_at IS NULL;
 
 NOTIFY pgrst, 'reload schema';
