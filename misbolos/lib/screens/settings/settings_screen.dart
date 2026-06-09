@@ -59,6 +59,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _securityPinCode = s.securityPinCode;
     _securityBiometricEnabled = s.securityBiometricEnabled;
     _verifactuEnabled = s.verifactuEnabled;
+    _lockDelaySeconds = _normalizeLockDelay(s.securityLockDelaySeconds);
   }
 
   @override
@@ -164,6 +165,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ),
       ),
     );
+  }
+
+  int _normalizeLockDelay(int seconds) {
+    return const [0, 5, 15, 30].contains(seconds) ? seconds : 5;
   }
 
   Widget _buildAppearanceCard() {
@@ -321,12 +326,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             title: const Text('Bloqueo con PIN'),
             subtitle: const Text('Solicitar PIN al desbloquear la app'),
             value: _securityPinEnabled,
-            onChanged: (v) async {
+            onChanged: (v) {
               setState(() {
                 _securityPinEnabled = v;
                 if (!v) _securityPinCode = '';
               });
-              await _saveInstant();
             },
           ),
           if (_securityPinEnabled)
@@ -338,7 +342,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
               keyboardType: TextInputType.number,
               obscureText: true,
-              onChanged: (v) => _securityPinCode = v,
+              onChanged: (v) => setState(() => _securityPinCode = v),
               onFieldSubmitted: (_) async => _saveInstant(),
             ),
           const SizedBox(height: 8),
@@ -348,9 +352,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             title: const Text('Bloqueo biométrico'),
             subtitle: const Text('Touch ID / Face ID según dispositivo'),
             value: _securityBiometricEnabled,
-            onChanged: (v) async {
+            onChanged: (v) {
               setState(() => _securityBiometricEnabled = v);
-              await _saveInstant();
             },
           ),
           ListTile(
@@ -368,8 +371,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ],
               onChanged: (v) {
                 setState(() => _lockDelaySeconds = v ?? 5);
-                _showUpdated();
               },
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: _saveInstant,
+              icon: const Icon(Icons.save_outlined),
+              label: const Text('Guardar configuración de seguridad'),
             ),
           ),
         ],
@@ -449,7 +460,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           SwitchListTile(
             dense: true,
             contentPadding: EdgeInsets.zero,
-            title: const Text('Activar modo VeriFactu'),
+            title: const Text('Activar modo fiscal estricto'),
             subtitle: const Text(
               'Aplica reglas fiscales estrictas sobre las facturas emitidas.',
             ),
@@ -667,7 +678,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Future<void> _saveInstant() async {
     final pin = _securityPinCode.trim();
-    if (_securityPinEnabled && !RegExp(r'^\\d{4,8}$').hasMatch(pin)) {
+    if (_securityPinEnabled && !RegExp(r'^\d{4,8}$').hasMatch(pin)) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -696,6 +707,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       securityPinEnabled: _securityPinEnabled,
       securityPinCode: pin,
       securityBiometricEnabled: _securityBiometricEnabled,
+      securityLockDelaySeconds: _lockDelaySeconds,
       verifactuEnabled: _verifactuEnabled,
     );
     await ref.read(settingsProvider.notifier).save(settings);
@@ -751,7 +763,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     return showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Activar modo VeriFactu'),
+        title: const Text('Activar modo fiscal estricto'),
         content: const Text(
           'Al activar este modo, las facturas emitidas quedarán bloqueadas y no podrán editarse ni eliminarse. Para corregir una factura tendrás que crear una factura rectificativa.',
         ),

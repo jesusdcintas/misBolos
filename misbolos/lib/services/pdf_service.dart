@@ -947,7 +947,7 @@ class PdfService {
                             width: 0.5,
                           ),
                           columnWidths: {
-                            0: const pw.FlexColumnWidth(1),
+                            0: const pw.FlexColumnWidth(2),
                             1: const pw.FlexColumnWidth(3),
                             2: const pw.FlexColumnWidth(2),
                             3: const pw.FlexColumnWidth(2),
@@ -959,7 +959,7 @@ class PdfService {
                                 color: headerBg,
                               ),
                               children: [
-                                _headerCell('Nº'),
+                                _headerCell('Número'),
                                 _headerCell('Cliente'),
                                 _headerCell('Fecha'),
                                 _headerCell('Base'),
@@ -973,7 +973,7 @@ class PdfService {
                                 ),
                                 children: [
                                   _dataCell(
-                                    '#${q.invoices[i].numero}',
+                                    q.invoices[i].displayNumber,
                                     pw.TextAlign.center,
                                   ),
                                   _dataCell(

@@ -6,6 +6,7 @@ import '../../core/constants/app_strings.dart';
 import '../../models/client.dart';
 import '../../providers/client_provider.dart';
 import '../../providers/gig_provider.dart';
+import '../../providers/invoice_provider.dart';
 import '../../widgets/common/empty_state.dart';
 import '../../widgets/common/skeleton_loading.dart';
 import '../../core/utils/app_haptics.dart';
@@ -23,12 +24,28 @@ class _ClientsListScreenState extends ConsumerState<ClientsListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final clientsAsync = _searchQuery.isEmpty
-        ? ref.watch(clientsProvider)
-        : ref.watch(clientSearchProvider(_searchQuery));
+    final clientsAsync = ref.watch(clientsProvider);
+    final headerCount = clientsAsync.valueOrNull == null
+        ? null
+        : _filterClients(clientsAsync.valueOrNull!).length;
 
     final content = Column(
       children: [
+        if (widget.embedded)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                headerCount == null
+                    ? AppStrings.clientes
+                    : '${AppStrings.clientes} ($headerCount)',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ),
         Padding(
           padding: const EdgeInsets.all(16),
           child: TextField(
@@ -41,7 +58,8 @@ class _ClientsListScreenState extends ConsumerState<ClientsListScreen> {
         ),
         Expanded(
           child: clientsAsync.when(
-            data: (clients) {
+            data: (allClients) {
+              final clients = _filterClients(allClients);
               if (clients.isEmpty) {
                 return const EmptyState(
                   icon: Icons.people_outline,
@@ -49,6 +67,7 @@ class _ClientsListScreenState extends ConsumerState<ClientsListScreen> {
                 );
               }
               return ListView.builder(
+                padding: const EdgeInsets.only(bottom: 96),
                 itemCount: clients.length,
                 itemBuilder: (context, index) {
                   final client = clients[index];
@@ -120,7 +139,13 @@ class _ClientsListScreenState extends ConsumerState<ClientsListScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text(AppStrings.clientes)),
+      appBar: AppBar(
+        title: Text(
+          headerCount == null
+              ? AppStrings.clientes
+              : '${AppStrings.clientes} ($headerCount)',
+        ),
+      ),
       body: content,
       floatingActionButton: FloatingActionButton(
         onPressed: () => context.push('/client/new'),
@@ -129,17 +154,38 @@ class _ClientsListScreenState extends ConsumerState<ClientsListScreen> {
     );
   }
 
+  List<Client> _filterClients(List<Client> clients) {
+    final query = _searchQuery.trim().toLowerCase();
+    if (query.isEmpty) return clients;
+    return clients.where((client) {
+      final haystacks = [
+        client.nombre,
+        client.alias,
+        client.cifNif,
+        ...client.aliases,
+      ].map((value) => value.toLowerCase());
+      return haystacks.any((value) => value.contains(query));
+    }).toList();
+  }
+
   Future<void> _confirmDeleteClient(BuildContext context, Client client) async {
     final gigs = await ref.read(gigsByClientProvider(client.id).future);
+    final invoices = await ref.read(invoicesByClientProvider(client.id).future);
     if (!context.mounted) return;
 
-    if (gigs.isNotEmpty) {
+    if (gigs.isNotEmpty || invoices.isNotEmpty) {
+      final details = [
+        if (gigs.isNotEmpty)
+          '${gigs.length} bolo${gigs.length == 1 ? '' : 's'}',
+        if (invoices.isNotEmpty)
+          '${invoices.length} factura${invoices.length == 1 ? '' : 's'}',
+      ].join(' y ');
       await showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('No se puede eliminar'),
           content: Text(
-            'Este cliente tiene ${gigs.length} bolo(s) asociados. Para evitar romper el historial, elimina o reasigna primero esos bolos.',
+            'Este cliente tiene $details asociados. Para evitar romper el historial, elimina o reasigna primero esos registros.',
           ),
           actions: [
             FilledButton(
@@ -186,9 +232,13 @@ class _ClientsListScreenState extends ConsumerState<ClientsListScreen> {
       );
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('No se pudo eliminar: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No se pudo eliminar: el cliente tiene datos relacionados.',
+          ),
+        ),
+      );
     }
   }
 }

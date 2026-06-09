@@ -9,13 +9,11 @@ import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/services/drive_document_sync_service.dart';
 import '../../core/services/google_drive_service.dart';
-import '../../database/database_helper.dart';
 import '../../models/app_settings.dart';
 import '../../providers/assets_provider.dart';
 import '../../providers/auth_controller.dart';
 import '../../providers/expenses_provider.dart';
 import '../../providers/invoice_provider.dart';
-import '../../providers/gig_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/sync_provider.dart';
 import '../../services/google_auth_service.dart';
@@ -115,8 +113,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             ],
                             const SizedBox(height: 12),
                             _buildAccountSecurityCard(),
-                            const SizedBox(height: 12),
-                            _buildLocalDataCard(),
                             const SizedBox(height: 12),
                             _BillingFormCard(
                               settings: settings,
@@ -272,7 +268,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             status: check == null
                 ? _driveStatusText(driveState)
                 : _driveStatusText(effectiveState),
-            subtitle: check?.message ?? _driveSubtitleText(driveState, settings),
+            subtitle:
+                check?.message ?? _driveSubtitleText(driveState, settings),
             tone: _driveTone(effectiveState),
             onTap: () => _handleDriveCardTap(effectiveState, settings),
           );
@@ -642,29 +639,43 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   void _showGoogleAccountSheet(GoogleAuthState auth) {
     showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
       showDragHandle: true,
       builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, 8, 18, 18),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Cuenta Google',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 6),
-              Text(auth.email ?? 'Cuenta conectada'),
-              const SizedBox(height: 14),
-              OutlinedButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  ref.read(googleAuthProvider.notifier).signOut();
-                },
-                child: const Text('Desconectar Google'),
-              ),
-            ],
+        child: SizedBox(
+          height: MediaQuery.of(context).size.height * 0.88,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+            child: Column(
+              children: [
+                _buildSheetHeader(
+                  context,
+                  title: 'Cuenta Google',
+                  subtitle: 'Acceso y conexión',
+                ),
+                const SizedBox(height: 10),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(auth.email ?? 'Cuenta conectada'),
+                        const SizedBox(height: 14),
+                        OutlinedButton(
+                          onPressed: () {
+                            Navigator.of(context).pop();
+                            ref.read(googleAuthProvider.notifier).signOut();
+                          },
+                          child: const Text('Desconectar Google'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -677,6 +688,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       showDragHandle: true,
       builder: (context) => SafeArea(
         child: SizedBox(
@@ -685,6 +697,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
             child: Column(
               children: [
+                _buildSheetHeader(
+                  context,
+                  title: 'Google Drive',
+                  subtitle: 'Configuración y diagnóstico',
+                ),
+                const SizedBox(height: 10),
                 _buildGoogleDriveSection(settings),
                 const SizedBox(height: 10),
                 _buildDriveHelpSection(),
@@ -699,13 +717,60 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   void _showCalendarPanel(GoogleAuthState auth) {
     showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
       showDragHandle: true,
       builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-          child: _buildCalendarSection(auth),
+        child: SizedBox(
+          height: MediaQuery.of(context).size.height * 0.88,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+            child: Column(
+              children: [
+                _buildSheetHeader(
+                  context,
+                  title: 'Google Calendar',
+                  subtitle: 'Sincronización de agenda',
+                ),
+                const SizedBox(height: 10),
+                _buildCalendarSection(auth),
+              ],
+            ),
+          ),
         ),
       ),
+    );
+  }
+
+  Widget _buildSheetHeader(
+    BuildContext context, {
+    required String title,
+    required String subtitle,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -763,37 +828,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   child: const Text('Eliminar cuenta'),
                 ),
               ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLocalDataCard() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Datos locales',
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Borra la base local de esta cuenta en este dispositivo. Útil para empezar de cero sin tocar Supabase.',
-            ),
-            const SizedBox(height: 12),
-            FilledButton.tonal(
-              style: FilledButton.styleFrom(
-                foregroundColor: AppColors.error,
-              ),
-              onPressed: _confirmClearLocalData,
-              child: const Text('Limpiar datos locales'),
             ),
           ],
         ),
@@ -869,51 +903,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             'No se pudo eliminar la cuenta. Verifica la Edge Function delete-user-account. Error: $e',
           ),
         ),
-      );
-    }
-  }
-
-  Future<void> _confirmClearLocalData() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Limpiar datos locales'),
-        content: const Text(
-          'Se borrarán del dispositivo las facturas, bolos, clientes, gastos, inversiones, cola de sincronización y otros datos locales de esta cuenta. No se borrará nada en Supabase. Esta acción no se puede deshacer.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Limpiar'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-
-    try {
-      await DatabaseHelper.instance.clearUserScopedData();
-      await DatabaseHelper.instance.close();
-      ref.invalidate(invoicesProvider);
-      ref.invalidate(gigsProvider);
-      ref.invalidate(expensesProvider);
-      ref.invalidate(assetsProvider);
-      ref.invalidate(settingsProvider);
-      await ref.read(invoicesProvider.notifier).reloadLocal(force: true);
-      await ref.read(expensesProvider.notifier).reloadLocal();
-      await ref.read(assetsProvider.notifier).reloadLocal();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Datos locales limpiados')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudieron limpiar los datos locales: $e')),
       );
     }
   }
@@ -1303,16 +1292,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    if (rootId?.isNotEmpty == true)
-                      Text(
-                        rootId!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: AppColors.textMuted,
-                        ),
-                      ),
                   ] else
                     const Text(
                       'Selecciona dónde guardar facturas, gastos e inversiones.',
@@ -2050,6 +2029,8 @@ class _BillingFormCardState extends State<_BillingFormCard> {
 
   late String _logoPath;
   bool _saving = false;
+  bool _dirty = false;
+  bool _syncingControllers = false;
 
   @override
   void initState() {
@@ -2069,6 +2050,17 @@ class _BillingFormCardState extends State<_BillingFormCard> {
       text: widget.settings.emisorCiudad,
     );
     _ibanController = TextEditingController(text: widget.settings.iban);
+    for (final controller in [
+      _nombreController,
+      _nifController,
+      _emailController,
+      _telefonoController,
+      _direccionController,
+      _ciudadController,
+      _ibanController,
+    ]) {
+      controller.addListener(_markDirty);
+    }
 
     _nombreFocus = FocusNode();
     _nifFocus = FocusNode();
@@ -2089,6 +2081,17 @@ class _BillingFormCardState extends State<_BillingFormCard> {
 
   @override
   void dispose() {
+    for (final controller in [
+      _nombreController,
+      _nifController,
+      _emailController,
+      _telefonoController,
+      _direccionController,
+      _ciudadController,
+      _ibanController,
+    ]) {
+      controller.removeListener(_markDirty);
+    }
     _nombreController.dispose();
     _nifController.dispose();
     _emailController.dispose();
@@ -2105,6 +2108,11 @@ class _BillingFormCardState extends State<_BillingFormCard> {
     _ciudadFocus.dispose();
     _ibanFocus.dispose();
     super.dispose();
+  }
+
+  void _markDirty() {
+    if (_syncingControllers || _dirty) return;
+    _dirty = true;
   }
 
   @override
@@ -2125,7 +2133,10 @@ class _BillingFormCardState extends State<_BillingFormCard> {
             _LogoSelector(
               logoPath: _logoPath,
               onPick: _pickLogo,
-              onRemove: () => setState(() => _logoPath = ''),
+              onRemove: () => setState(() {
+                _logoPath = '';
+                _dirty = true;
+              }),
             ),
             const SizedBox(height: 12),
             LayoutBuilder(
@@ -2336,20 +2347,30 @@ class _BillingFormCardState extends State<_BillingFormCard> {
   }
 
   void _syncIfExternalChanged(AppSettings nextS) {
-    if (_logoPath != nextS.logoPath) {
-      _logoPath = nextS.logoPath;
+    if (_dirty || _saving) return;
+    _syncingControllers = true;
+    try {
+      if (_logoPath != nextS.logoPath) {
+        _logoPath = nextS.logoPath;
+      }
+      _syncController(_nombreController, _nombreFocus, nextS.emisorNombre);
+      _syncController(_nifController, _nifFocus, nextS.emisorNIF);
+      _syncController(_emailController, _emailFocus, nextS.emisorEmail);
+      _syncController(
+        _telefonoController,
+        _telefonoFocus,
+        nextS.emisorTelefono,
+      );
+      _syncController(
+        _direccionController,
+        _direccionFocus,
+        nextS.emisorDireccion,
+      );
+      _syncController(_ciudadController, _ciudadFocus, nextS.emisorCiudad);
+      _syncController(_ibanController, _ibanFocus, nextS.iban);
+    } finally {
+      _syncingControllers = false;
     }
-    _syncController(_nombreController, _nombreFocus, nextS.emisorNombre);
-    _syncController(_nifController, _nifFocus, nextS.emisorNIF);
-    _syncController(_emailController, _emailFocus, nextS.emisorEmail);
-    _syncController(_telefonoController, _telefonoFocus, nextS.emisorTelefono);
-    _syncController(
-      _direccionController,
-      _direccionFocus,
-      nextS.emisorDireccion,
-    );
-    _syncController(_ciudadController, _ciudadFocus, nextS.emisorCiudad);
-    _syncController(_ibanController, _ibanFocus, nextS.iban);
   }
 
   void _syncController(
@@ -2376,7 +2397,10 @@ class _BillingFormCardState extends State<_BillingFormCard> {
     final destPath = '${dir.path}/logo.png';
     await File(image.path).copy(destPath);
     if (!mounted) return;
-    setState(() => _logoPath = destPath);
+    setState(() {
+      _logoPath = destPath;
+      _dirty = true;
+    });
   }
 
   Future<void> _save() async {
@@ -2394,6 +2418,9 @@ class _BillingFormCardState extends State<_BillingFormCard> {
           iban: _ibanController.text.trim(),
         ),
       );
+      if (mounted) {
+        setState(() => _dirty = false);
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }

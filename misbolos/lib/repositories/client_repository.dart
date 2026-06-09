@@ -17,13 +17,21 @@ class ClientRepository {
 
   Future<List<Client>> getAll() async {
     final db = await DatabaseHelper.instance.database;
-    final maps = await db.query('clients', orderBy: 'nombre ASC');
+    final maps = await db.query(
+      'clients',
+      where: 'deleted_at IS NULL',
+      orderBy: 'nombre ASC',
+    );
     return maps.map((m) => Client.fromMap(m)).toList();
   }
 
-  Future<Client?> getById(String id) async {
+  Future<Client?> getById(String id, {bool includeDeleted = false}) async {
     final db = await DatabaseHelper.instance.database;
-    final maps = await db.query('clients', where: 'id = ?', whereArgs: [id]);
+    final maps = await db.query(
+      'clients',
+      where: includeDeleted ? 'id = ?' : 'id = ? AND deleted_at IS NULL',
+      whereArgs: [id],
+    );
     if (maps.isEmpty) return null;
     return Client.fromMap(maps.first);
   }
@@ -32,7 +40,8 @@ class ClientRepository {
     final db = await DatabaseHelper.instance.database;
     final maps = await db.query(
       'clients',
-      where: 'nombre LIKE ? OR alias LIKE ? OR aliases LIKE ? OR cif_nif LIKE ?',
+      where:
+          'deleted_at IS NULL AND (nombre LIKE ? OR alias LIKE ? OR aliases LIKE ? OR cif_nif LIKE ?)',
       whereArgs: ['%$query%', '%$query%', '%$query%', '%$query%'],
       orderBy: 'nombre ASC',
     );
@@ -46,7 +55,7 @@ class ClientRepository {
     // Search by nombre exact match (case-insensitive)
     var maps = await db.query(
       'clients',
-      where: 'LOWER(nombre) = ?',
+      where: 'deleted_at IS NULL AND LOWER(nombre) = ?',
       whereArgs: [normalized],
     );
     if (maps.isNotEmpty) return Client.fromMap(maps.first);
@@ -54,7 +63,7 @@ class ClientRepository {
     // Search by alias exact match
     maps = await db.query(
       'clients',
-      where: 'LOWER(alias) = ?',
+      where: 'deleted_at IS NULL AND LOWER(alias) = ?',
       whereArgs: [normalized],
     );
     if (maps.isNotEmpty) return Client.fromMap(maps.first);
@@ -62,7 +71,7 @@ class ClientRepository {
     // Search in aliases JSON array
     maps = await db.query(
       'clients',
-      where: 'LOWER(aliases) LIKE ?',
+      where: 'deleted_at IS NULL AND LOWER(aliases) LIKE ?',
       whereArgs: ['%"$normalized"%'],
     );
     if (maps.isNotEmpty) {
@@ -94,6 +103,12 @@ class ClientRepository {
 
   Future<void> delete(String id) async {
     final db = await DatabaseHelper.instance.database;
-    await db.delete('clients', where: 'id = ?', whereArgs: [id]);
+    final now = DateTime.now().toIso8601String();
+    await db.update(
+      'clients',
+      {'deleted_at': now, 'updated_at': now},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 }

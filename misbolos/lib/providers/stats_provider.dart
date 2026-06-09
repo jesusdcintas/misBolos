@@ -636,6 +636,7 @@ final quarterlyIncomeProvider =
 class QuarterVatInvoice {
   final String invoiceId;
   final int numero;
+  final String displayNumber;
   final String clientName;
   final DateTime fecha;
   final double base;
@@ -644,11 +645,36 @@ class QuarterVatInvoice {
   QuarterVatInvoice({
     required this.invoiceId,
     required this.numero,
+    required this.displayNumber,
     required this.clientName,
     required this.fecha,
     required this.base,
     required this.iva,
   });
+}
+
+int _compareQuarterVatInvoices(QuarterVatInvoice a, QuarterVatInvoice b) {
+  final aKey = _invoiceDisplaySortKey(a.displayNumber, a.numero);
+  final bKey = _invoiceDisplaySortKey(b.displayNumber, b.numero);
+  for (var i = 0; i < aKey.length; i++) {
+    final diff = aKey[i].compareTo(bKey[i]);
+    if (diff != 0) return diff;
+  }
+  return a.displayNumber.compareTo(b.displayNumber);
+}
+
+List<int> _invoiceDisplaySortKey(String displayNumber, int fallbackNumber) {
+  final match = RegExp(
+    r'^([A-Z])-([0-9]{4})-([0-9]+)$',
+  ).firstMatch(displayNumber.trim().toUpperCase());
+  final year = int.tryParse(match?.group(2) ?? '') ?? 0;
+  final number = int.tryParse(match?.group(3) ?? '') ?? fallbackNumber;
+  final series = switch (match?.group(1)) {
+    'F' => 0,
+    'R' => 1,
+    _ => 9,
+  };
+  return [year, number, series];
 }
 
 class QuarterVatDetail {
@@ -731,6 +757,7 @@ final yearlyVatDetailProvider =
             QuarterVatInvoice(
               invoiceId: inv.id,
               numero: inv.numero,
+              displayNumber: inv.visualNumber,
               clientName: client?.displayName ?? 'Cliente desconocido',
               fecha: inv.fecha,
               base: inv.subtotal,
@@ -738,6 +765,7 @@ final yearlyVatDetailProvider =
             ),
           );
         }
+        invoiceDetails.sort(_compareQuarterVatInvoices);
 
         // Historical gigs
         final qHistoricGigs = allGigs
@@ -1055,8 +1083,7 @@ final financialStatsProvider = FutureProvider.family<FinancialStats, int>((
   // Bolos cerrados sin facturar = facturables con status confirmado
   double bolosSinFacturar = 0;
   for (final gig in gigsYear) {
-    if (gig.facturable &&
-        gig.status == GigStatus.confirmado) {
+    if (gig.facturable && gig.status == GigStatus.confirmado) {
       bolosSinFacturar += gig.cachet ?? 0;
     }
   }
@@ -1094,8 +1121,7 @@ final financialStatsProvider = FutureProvider.family<FinancialStats, int>((
 
     double sinFacturarMes = 0;
     for (final gig in gigsMonth) {
-      if (gig.facturable &&
-          gig.status == GigStatus.confirmado) {
+      if (gig.facturable && gig.status == GigStatus.confirmado) {
         sinFacturarMes += gig.cachet ?? 0;
       }
     }
@@ -1483,6 +1509,7 @@ final financialPeriodSummaryProvider =
               QuarterVatInvoice(
                 invoiceId: inv.id,
                 numero: inv.numero,
+                displayNumber: inv.visualNumber,
                 clientName: client?.displayName ?? 'Cliente desconocido',
                 fecha: inv.fecha,
                 base: inv.subtotal,
@@ -1490,6 +1517,7 @@ final financialPeriodSummaryProvider =
               ),
             );
           }
+          invoiceDetails.sort(_compareQuarterVatInvoices);
 
           // Bolos históricos facturables cobrados sin factura en este trimestre
           final qHistoricGigs = allGigs

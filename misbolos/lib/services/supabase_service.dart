@@ -13,6 +13,7 @@ import '../models/gig.dart';
 import '../models/invoice.dart';
 import '../models/invoice_fiscal_record.dart';
 import '../models/sync_queue_item.dart';
+import '../repositories/client_repository.dart';
 
 class SupabaseService {
   static final SupabaseService instance = SupabaseService._();
@@ -251,7 +252,12 @@ class SupabaseService {
         );
         return;
       }
-      await uploadGigDirect(Gig.fromMap(item.payload));
+      final gig = Gig.fromMap(item.payload);
+      final client = await ClientRepository.instance.getById(gig.clientId);
+      if (client != null) {
+        await uploadClients([client]);
+      }
+      await uploadGigDirect(gig);
       return;
     }
 
@@ -549,7 +555,7 @@ class SupabaseService {
   Future<void> uploadSettings(AppSettings settings) async {
     if (!isAuthenticated) return;
 
-    if (_billingFieldsAreEmpty(settings)) {
+    if (_billingFieldsAreEmpty(settings) && settings.logoPath.trim().isEmpty) {
       debugPrint('[Supabase] Skipping empty local settings upload');
       return;
     }
@@ -725,10 +731,6 @@ class SupabaseService {
       final ext = p.extension(cloudPath);
       final localPath = '${dir.path}/logo$ext';
       final file = File(localPath);
-      if (await file.exists()) {
-        debugPrint('[Supabase] Logo already local: $localPath');
-        return localPath;
-      }
 
       final bytes = await _client!.storage.from('logos').download(cloudPath);
       await file.writeAsBytes(bytes);
@@ -766,7 +768,9 @@ class SupabaseService {
   }
 
   Future<void> deleteClient(String id) async {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated) {
+      throw StateError('Supabase no está autenticado.');
+    }
     try {
       await _client!
           .from('clients')
@@ -776,6 +780,7 @@ class SupabaseService {
       debugPrint('[Supabase] Deleted client $id from cloud');
     } catch (e) {
       debugPrint('[Supabase] Delete client error: $e');
+      rethrow;
     }
   }
 

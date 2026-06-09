@@ -8,7 +8,7 @@ enum BiometricUnlockResult { success, failed, cancelled, unavailable, error }
 class AppLockManager extends ChangeNotifier {
   AppLockManager({
     LocalAuthentication? localAuth,
-    Duration lockAfterBackground = const Duration(seconds: 4),
+    Duration lockAfterBackground = const Duration(seconds: 5),
   }) : _localAuth = localAuth ?? LocalAuthentication(),
        _lockAfterBackground = lockAfterBackground;
 

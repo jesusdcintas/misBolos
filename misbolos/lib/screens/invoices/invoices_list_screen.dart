@@ -2075,8 +2075,8 @@ class _InvoiceNumberBadge extends StatelessWidget {
             InvoiceStatus.enviada => AppColors.warning,
             InvoiceStatus.pagada => AppColors.success,
           };
-    final width = compact ? 62.0 : 74.0;
-    final height = compact ? 58.0 : 60.0;
+    final width = compact ? 78.0 : 84.0;
+    final height = compact ? 62.0 : 64.0;
 
     return Container(
       width: width,
@@ -2100,7 +2100,7 @@ class _InvoiceNumberBadge extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: foreground,
-              fontSize: compact ? 10 : 11,
+              fontSize: compact ? 9.5 : 11,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.4,
             ),
@@ -2113,7 +2113,7 @@ class _InvoiceNumberBadge extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: foreground,
-              fontSize: compact ? 15 : 16,
+              fontSize: compact ? 14 : 16,
               fontWeight: FontWeight.w800,
               height: 1.0,
               letterSpacing: 0.6,

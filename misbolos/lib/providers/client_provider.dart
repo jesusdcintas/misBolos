@@ -19,11 +19,21 @@ class ClientsNotifier extends AsyncNotifier<List<Client>> {
 
   Future<void> add(Client client) async {
     await ref.read(clientRepositoryProvider).insert(client);
+    try {
+      await SupabaseService.instance.uploadClients([client]);
+    } catch (e) {
+      debugPrint('[ClientProvider] Supabase upload failed: $e');
+    }
     ref.invalidateSelf();
   }
 
   Future<void> updateClient(Client client) async {
     await ref.read(clientRepositoryProvider).update(client);
+    try {
+      await SupabaseService.instance.uploadClients([client]);
+    } catch (e) {
+      debugPrint('[ClientProvider] Supabase upload failed: $e');
+    }
     ref.invalidateSelf();
   }
 
@@ -43,7 +53,10 @@ final clientByIdProvider = FutureProvider.family<Client?, String>((ref, id) {
   return ref.read(clientRepositoryProvider).getById(id);
 });
 
-final clientSearchProvider = FutureProvider.family<List<Client>, String>((ref, query) {
+final clientSearchProvider = FutureProvider.family<List<Client>, String>((
+  ref,
+  query,
+) {
   if (query.isEmpty) return ref.read(clientRepositoryProvider).getAll();
   return ref.read(clientRepositoryProvider).search(query);
 });

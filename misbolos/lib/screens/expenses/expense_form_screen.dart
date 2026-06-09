@@ -643,7 +643,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.auto_awesome_outlined, size: 18),
-                  label: const Text('Extraer información con IA'),
+                  label: const Text('Extraer información'),
                 ),
               ],
             ),

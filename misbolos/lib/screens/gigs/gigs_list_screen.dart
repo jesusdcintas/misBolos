@@ -47,87 +47,6 @@ class GigsListScreen extends ConsumerStatefulWidget {
 }
 
 class _GigsListScreenState extends ConsumerState<GigsListScreen> {
-  bool _selectionMode = false;
-  final Set<String> _selectedIds = <String>{};
-
-  void _enterSelection(String id) {
-    setState(() {
-      _selectionMode = true;
-      _selectedIds.add(id);
-    });
-  }
-
-  void _toggleSelection(String id) {
-    setState(() {
-      if (_selectedIds.contains(id)) {
-        _selectedIds.remove(id);
-      } else {
-        _selectedIds.add(id);
-      }
-      if (_selectedIds.isEmpty) _selectionMode = false;
-    });
-  }
-
-  void _toggleSelectAll(List<Gig> gigs) {
-    setState(() {
-      if (_selectedIds.length == gigs.length) {
-        _selectedIds.clear();
-        _selectionMode = false;
-      } else {
-        _selectedIds
-          ..clear()
-          ..addAll(gigs.map((g) => g.id));
-        _selectionMode = true;
-      }
-    });
-  }
-
-  void _clearSelection() {
-    setState(() {
-      _selectedIds.clear();
-      _selectionMode = false;
-    });
-  }
-
-  Future<void> _applyBulkStatus(GigStatus status) async {
-    await ref
-        .read(gigsProvider.notifier)
-        .bulkUpdateStatus(_selectedIds, status);
-    _clearSelection();
-  }
-
-  Future<void> _applyBulkFacturable(bool facturable) async {
-    await ref
-        .read(gigsProvider.notifier)
-        .bulkSetFacturable(_selectedIds, facturable);
-    _clearSelection();
-  }
-
-  Future<void> _applyBulkDelete(BuildContext context) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Eliminar bolos'),
-        content: Text(
-          'Se eliminarán ${_selectedIds.length} bolos. ¿Confirmas?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Eliminar'),
-          ),
-        ],
-      ),
-    );
-    if (confirm != true) return;
-    await ref.read(gigsProvider.notifier).bulkDelete(_selectedIds);
-    _clearSelection();
-  }
-
   Future<void> _refreshGigs() async {
     await ref
         .read(syncProvider.notifier)
@@ -148,6 +67,16 @@ class _GigsListScreenState extends ConsumerState<GigsListScreen> {
     final clientFilter = ref.watch(gigClientFilterProvider);
     final facturableFilter = ref.watch(gigFacturableFilterProvider);
     final sortOption = ref.watch(gigSortProvider);
+    final headerCount = gigsAsync.valueOrNull == null
+        ? null
+        : _filteredGigCount(
+            gigsAsync.valueOrNull!,
+            statusFilter: statusFilter,
+            selectedYear: selectedYear,
+            selectedMonth: selectedMonth,
+            clientFilter: clientFilter,
+            facturableFilter: facturableFilter,
+          );
 
     final hasActiveFilters =
         statusFilter != null ||
@@ -160,27 +89,11 @@ class _GigsListScreenState extends ConsumerState<GigsListScreen> {
       appBar: AppBar(
         title: AnimatedSwitcher(
           duration: const Duration(milliseconds: 180),
-          child: _selectionMode
-              ? Text(
-                  '${_selectedIds.length} seleccionados',
-                  key: const ValueKey('count'),
-                )
-              : const Text('Bolos', key: ValueKey('title')),
+          child: Text(
+            headerCount == null ? 'Bolos' : 'Bolos ($headerCount)',
+            key: ValueKey('title-$headerCount'),
+          ),
         ),
-        leading: _selectionMode
-            ? IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: _clearSelection,
-              )
-            : null,
-        actions: _selectionMode
-            ? [
-                TextButton(
-                  onPressed: _clearSelection,
-                  child: const Text('Cancelar'),
-                ),
-              ]
-            : null,
       ),
       body: gigsAsync.when(
         data: (allGigs) {
@@ -319,19 +232,6 @@ class _GigsListScreenState extends ConsumerState<GigsListScreen> {
                   padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
                   child: Row(
                     children: [
-                      _InlineActionButton(
-                        icon: Icons.checklist,
-                        label: _selectionMode ? 'Cancelar' : 'Seleccionar',
-                        onTap: _selectionMode
-                            ? _clearSelection
-                            : () {
-                                setState(() {
-                                  _selectionMode = true;
-                                  _selectedIds.clear();
-                                });
-                              },
-                      ),
-                      const SizedBox(width: 8),
                       Expanded(
                         child: PopupMenuButton<GigSortOption>(
                           onSelected: (value) {
@@ -362,26 +262,6 @@ class _GigsListScreenState extends ConsumerState<GigsListScreen> {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: PopupMenuButton<String>(
-                          onSelected: (value) {
-                            if (value == 'select_all') {
-                              _toggleSelectAll(filteredGigs);
-                            }
-                          },
-                          itemBuilder: (context) => const [
-                            PopupMenuItem(
-                              value: 'select_all',
-                              child: Text('Seleccionar todo'),
-                            ),
-                          ],
-                          child: const _InlineActionButtonContent(
-                            icon: Icons.more_horiz,
-                            label: 'Más',
-                          ),
-                        ),
-                      ),
                     ],
                   ),
                 ),
@@ -397,15 +277,12 @@ class _GigsListScreenState extends ConsumerState<GigsListScreen> {
                         _StatusChip(
                           label: 'Todos',
                           selected:
-                              statusFilter == null &&
-                              facturableFilter == null,
+                              statusFilter == null && facturableFilter == null,
                           onTap: () {
                             ref.read(gigStatusFilterProvider.notifier).state =
                                 null;
                             ref
-                                    .read(
-                                      gigFacturableFilterProvider.notifier,
-                                    )
+                                    .read(gigFacturableFilterProvider.notifier)
                                     .state =
                                 null;
                           },
@@ -415,22 +292,20 @@ class _GigsListScreenState extends ConsumerState<GigsListScreen> {
                           selected: facturableFilter == true,
                           onTap: () =>
                               ref
-                                      .read(
-                                        gigFacturableFilterProvider.notifier,
-                                      )
-                                      .state =
-                                  facturableFilter == true ? null : true,
+                                  .read(gigFacturableFilterProvider.notifier)
+                                  .state = facturableFilter == true
+                              ? null
+                              : true,
                         ),
                         _StatusChip(
                           label: 'Privados',
                           selected: facturableFilter == false,
                           onTap: () =>
                               ref
-                                      .read(
-                                        gigFacturableFilterProvider.notifier,
-                                      )
-                                      .state =
-                                  facturableFilter == false ? null : false,
+                                  .read(gigFacturableFilterProvider.notifier)
+                                  .state = facturableFilter == false
+                              ? null
+                              : false,
                         ),
                         _StatusChip(
                           label: GigStatus.confirmado.label,
@@ -575,13 +450,7 @@ class _GigsListScreenState extends ConsumerState<GigsListScreen> {
                       itemCount: filteredGigs.length,
                       itemBuilder: (context, index) {
                         final gig = filteredGigs[index];
-                        return _GigListTile(
-                          gig: gig,
-                          selectionMode: _selectionMode,
-                          selected: _selectedIds.contains(gig.id),
-                          onLongPressSelect: () => _enterSelection(gig.id),
-                          onToggleSelect: () => _toggleSelection(gig.id),
-                        );
+                        return _GigListTile(gig: gig);
                       },
                     ),
                   ),
@@ -593,74 +462,34 @@ class _GigsListScreenState extends ConsumerState<GigsListScreen> {
             Column(children: List.generate(6, (_) => const GigCardSkeleton())),
         error: (e, _) => Center(child: Text('Error: $e')),
       ),
-      floatingActionButton: _selectionMode
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: () => context.push('/gig/new'),
-              icon: const Icon(Icons.add),
-              label: const Text(AppStrings.nuevoBolo),
-            ),
-      bottomNavigationBar: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        height: _selectionMode ? 62 : 0,
-        child: _selectionMode
-            ? SafeArea(
-                top: false,
-                child: Material(
-                  color: colors.surface,
-                  elevation: 8,
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 8,
-                    ),
-                    child: Row(
-                      children: [
-                        IconButton(
-                          tooltip: 'Cobrado',
-                          onPressed: () => _applyBulkStatus(GigStatus.cobrado),
-                          icon: const Icon(Icons.check_circle_outline),
-                        ),
-                        IconButton(
-                          tooltip: 'Confirmado',
-                          onPressed: () =>
-                              _applyBulkStatus(GigStatus.confirmado),
-                          icon: const Icon(Icons.hourglass_empty),
-                        ),
-                        IconButton(
-                          tooltip: 'Privado',
-                          onPressed: () => _applyBulkStatus(GigStatus.cobradoB),
-                          icon: const Icon(
-                            Icons.account_balance_wallet_outlined,
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: 'Facturable',
-                          onPressed: () => _applyBulkFacturable(true),
-                          icon: const Icon(Icons.receipt_long_outlined),
-                        ),
-                        IconButton(
-                          tooltip: 'No facturable',
-                          onPressed: () => _applyBulkFacturable(false),
-                          icon: const Icon(Icons.money_off_csred_outlined),
-                        ),
-                        IconButton(
-                          tooltip: 'Eliminar',
-                          onPressed: () => _applyBulkDelete(context),
-                          icon: const Icon(
-                            Icons.delete_outline,
-                            color: AppColors.error,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              )
-            : const SizedBox.shrink(),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => context.push('/gig/new'),
+        icon: const Icon(Icons.add),
+        label: const Text(AppStrings.nuevoBolo),
       ),
     );
+  }
+
+  int _filteredGigCount(
+    List<Gig> gigs, {
+    required GigStatus? statusFilter,
+    required int? selectedYear,
+    required int? selectedMonth,
+    required String? clientFilter,
+    required bool? facturableFilter,
+  }) {
+    return gigs.where((gig) {
+      if (statusFilter != null && gig.status != statusFilter) return false;
+      if (selectedYear != null && gig.fecha.year != selectedYear) return false;
+      if (selectedMonth != null && gig.fecha.month != selectedMonth) {
+        return false;
+      }
+      if (clientFilter != null && gig.clientId != clientFilter) return false;
+      if (facturableFilter != null && gig.facturable != facturableFilter) {
+        return false;
+      }
+      return true;
+    }).length;
   }
 
   // ─── Bottom sheets ───
@@ -1079,29 +908,6 @@ class _ClearFiltersButton extends StatelessWidget {
   }
 }
 
-class _InlineActionButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  const _InlineActionButton({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
-        child: _InlineActionButtonContent(icon: icon, label: label),
-      ),
-    );
-  }
-}
-
 class _InlineActionButtonContent extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -1257,18 +1063,8 @@ class _ClientSheetContentState extends State<_ClientSheetContent> {
 
 class _GigListTile extends ConsumerWidget {
   final Gig gig;
-  final bool selectionMode;
-  final bool selected;
-  final VoidCallback onLongPressSelect;
-  final VoidCallback onToggleSelect;
 
-  const _GigListTile({
-    required this.gig,
-    required this.selectionMode,
-    required this.selected,
-    required this.onLongPressSelect,
-    required this.onToggleSelect,
-  });
+  const _GigListTile({required this.gig});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1276,11 +1072,8 @@ class _GigListTile extends ConsumerWidget {
 
     return Dismissible(
       key: Key(gig.id),
-      direction: selectionMode
-          ? DismissDirection.none
-          : DismissDirection.horizontal,
+      direction: DismissDirection.horizontal,
       confirmDismiss: (direction) async {
-        if (selectionMode) return false;
         if (direction == DismissDirection.startToEnd) {
           HapticFeedback.mediumImpact();
           _showSwipeOptions(context, ref, gig);
@@ -1345,14 +1138,9 @@ class _GigListTile extends ConsumerWidget {
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           child: ListTile(
             onTap: () {
-              if (selectionMode) {
-                onToggleSelect();
-                return;
-              }
               AppHaptics.light();
               context.push('/gig/${gig.id}');
             },
-            onLongPress: onLongPressSelect,
             leading: Container(
               width: 44,
               height: 44,
@@ -1398,20 +1186,15 @@ class _GigListTile extends ConsumerWidget {
                   ),
               ],
             ),
-            trailing: selectionMode
-                ? Checkbox(value: selected, onChanged: (_) => onToggleSelect())
-                : Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      FacturableBadge(facturable: gig.facturable),
-                      const SizedBox(height: 4),
-                      StatusBadge(
-                        status: gig.status,
-                        facturable: gig.facturable,
-                      ),
-                    ],
-                  ),
+            trailing: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                FacturableBadge(facturable: gig.facturable),
+                const SizedBox(height: 4),
+                StatusBadge(status: gig.status, facturable: gig.facturable),
+              ],
+            ),
             isThreeLine: true,
           ),
         ),

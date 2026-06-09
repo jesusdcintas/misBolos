@@ -351,7 +351,7 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp>
   StreamSubscription<AuthState>? _authStateSub;
   ProviderSubscription<AsyncValue<AppSettings>>? _settingsSub;
   final AppLockManager _lockManager = AppLockManager(
-    lockAfterBackground: const Duration(seconds: 4),
+    lockAfterBackground: const Duration(seconds: 5),
   );
   bool _sessionReady = false;
   bool _sessionSwitching = false;
@@ -488,6 +488,9 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp>
       pinEnabled: settings.securityPinEnabled,
       pinCode: settings.securityPinCode,
       biometricEnabled: settings.securityBiometricEnabled,
+      lockAfterBackground: Duration(
+        seconds: settings.securityLockDelaySeconds.clamp(0, 3600),
+      ),
     );
   }
 

@@ -39,6 +39,8 @@ import 'migrations/v36_invoice_reminder_settings.dart';
 import 'migrations/v37_invoice_reminder_compat.dart';
 import 'migrations/v38_verifactu.dart';
 import 'migrations/v39_rectifying_invoice_series.dart';
+import 'migrations/v40_security_lock_delay.dart';
+import 'migrations/v41_clients_soft_delete.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._internal();
@@ -62,7 +64,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 39,
+      version: 41,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       onConfigure: (db) async {
@@ -211,6 +213,12 @@ class DatabaseHelper {
     if (version >= 39) {
       await _applyMigration(db, v39RectifyingInvoiceSeries);
     }
+    if (version >= 40) {
+      await _applyMigration(db, v40SecurityLockDelay);
+    }
+    if (version >= 41) {
+      await _applyMigration(db, v41ClientsSoftDelete);
+    }
     await _ensureSoftDeleteColumns(db);
   }
 
@@ -329,6 +337,12 @@ class DatabaseHelper {
     if (oldVersion < 39) {
       await _applyMigration(db, v39RectifyingInvoiceSeries);
     }
+    if (oldVersion < 40) {
+      await _applyMigration(db, v40SecurityLockDelay);
+    }
+    if (oldVersion < 41) {
+      await _applyMigration(db, v41ClientsSoftDelete);
+    }
     await _ensureSoftDeleteColumns(db);
   }
 
@@ -350,8 +364,12 @@ class DatabaseHelper {
   }
 
   Future<void> _ensureSoftDeleteColumns(Database db) async {
+    await _ensureColumnExists(db, table: 'clients', column: 'deleted_at');
     await _ensureColumnExists(db, table: 'expenses', column: 'deleted_at');
     await _ensureColumnExists(db, table: 'assets', column: 'deleted_at');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_clients_deleted_at ON clients(deleted_at)',
+    );
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_expenses_deleted_at ON expenses(deleted_at)',
     );
@@ -421,6 +439,8 @@ class DatabaseHelper {
         await txn.delete('drive_sync_queue');
         await txn.delete('ai_chat_messages');
         await txn.delete('ai_chats');
+        await txn.delete('app_events');
+        await txn.delete('declared_quarters');
         await txn.delete('invoices');
         await txn.delete('gigs');
         await txn.delete('clients');

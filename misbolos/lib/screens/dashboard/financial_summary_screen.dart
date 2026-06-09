@@ -132,11 +132,14 @@ class FinancialSummaryScreen extends ConsumerWidget {
     FinancialSummary? fiscalSummary,
   ) async {
     try {
+      final shareOrigin = _shareOrigin(context);
       final file = await PdfService().generateSummaryPdf(
         summary: summary,
         fiscalSummary: fiscalSummary,
       );
-      await Share.shareXFiles([XFile(file.path)]);
+      await Share.shareXFiles([
+        XFile(file.path),
+      ], sharePositionOrigin: shareOrigin);
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(
@@ -144,6 +147,31 @@ class FinancialSummaryScreen extends ConsumerWidget {
         ).showSnackBar(SnackBar(content: Text('Error al generar PDF: $e')));
       }
     }
+  }
+
+  Rect _shareOrigin(BuildContext context) {
+    final box = context.findRenderObject();
+    if (box is RenderBox && box.hasSize && !box.size.isEmpty) {
+      return box.localToGlobal(Offset.zero) & box.size;
+    }
+
+    final overlayBox = Overlay.maybeOf(context)?.context.findRenderObject();
+    if (overlayBox is RenderBox &&
+        overlayBox.hasSize &&
+        !overlayBox.size.isEmpty) {
+      return Rect.fromCenter(
+        center: overlayBox.localToGlobal(overlayBox.size.center(Offset.zero)),
+        width: 1,
+        height: 1,
+      );
+    }
+
+    final size = MediaQuery.sizeOf(context);
+    return Rect.fromCenter(
+      center: Offset(size.width / 2, size.height / 2),
+      width: 1,
+      height: 1,
+    );
   }
 }
 
@@ -895,7 +923,7 @@ class _IvaQuarterCard extends ConsumerWidget {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    '#${inv.numero} · ${inv.clientName}',
+                                    '${inv.displayNumber} · ${inv.clientName}',
                                     style: const TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w500,

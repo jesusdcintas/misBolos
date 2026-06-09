@@ -62,16 +62,16 @@ flutter_launcher_icons:
   ios: true
   macos:
     generate: true
-    image_path: "assets/icon/logo2.png"
-  image_path: "assets/icon/logo2.png"
+    image_path: "assets/icon/logo3.png"
+  image_path: "assets/icon/logo3.png"
   min_sdk_android: 21
   remove_alpha_ios: true
   web:
     generate: true
-    image_path: "assets/icon/logo2.png"
+    image_path: "assets/icon/logo3.png"
   windows:
     generate: true
-    image_path: "assets/icon/logo2.png"
+    image_path: "assets/icon/logo3.png"
 
 # The following section is specific to Flutter packages.
 flutter:

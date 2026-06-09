@@ -17,6 +17,7 @@ class Client {
   final String notas;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final DateTime? deletedAt;
 
   Client({
     String? id,
@@ -34,6 +35,7 @@ class Client {
     this.notas = '',
     DateTime? createdAt,
     DateTime? updatedAt,
+    this.deletedAt,
   }) : id = id ?? const Uuid().v4(),
        createdAt = createdAt ?? DateTime.now(),
        updatedAt = updatedAt ?? DateTime.now();
@@ -52,6 +54,7 @@ class Client {
     String? whatsappPhone,
     String? notas,
     DateTime? updatedAt,
+    DateTime? deletedAt,
   }) {
     return Client(
       id: id,
@@ -69,6 +72,7 @@ class Client {
       notas: notas ?? this.notas,
       createdAt: createdAt,
       updatedAt: updatedAt ?? DateTime.now(),
+      deletedAt: deletedAt ?? this.deletedAt,
     );
   }
 
@@ -89,6 +93,7 @@ class Client {
       'notas': notas,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
+      'deleted_at': deletedAt?.toIso8601String(),
     };
   }
 
@@ -111,6 +116,9 @@ class Client {
       notas: map['notas'] as String? ?? '',
       createdAt: DateTime.parse(map['created_at'] as String),
       updatedAt: DateTime.parse(map['updated_at'] as String),
+      deletedAt: map['deleted_at'] != null
+          ? DateTime.tryParse(map['deleted_at'].toString())
+          : null,
     );
   }
 }

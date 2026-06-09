@@ -34,6 +34,7 @@ class AppSettings {
   final bool securityPinEnabled;
   final String securityPinCode;
   final bool securityBiometricEnabled;
+  final int securityLockDelaySeconds;
 
   AppSettings({
     this.logoPath = '',
@@ -71,6 +72,7 @@ class AppSettings {
     this.securityPinEnabled = false,
     this.securityPinCode = '',
     this.securityBiometricEnabled = false,
+    this.securityLockDelaySeconds = 5,
   });
 
   AppSettings copyWith({
@@ -109,6 +111,7 @@ class AppSettings {
     bool? securityPinEnabled,
     String? securityPinCode,
     bool? securityBiometricEnabled,
+    int? securityLockDelaySeconds,
     bool clearDriveRootFolder = false,
     bool clearDriveAccount = false,
     bool clearLastDriveBackupAt = false,
@@ -171,6 +174,8 @@ class AppSettings {
       securityPinCode: securityPinCode ?? this.securityPinCode,
       securityBiometricEnabled:
           securityBiometricEnabled ?? this.securityBiometricEnabled,
+      securityLockDelaySeconds:
+          securityLockDelaySeconds ?? this.securityLockDelaySeconds,
     );
   }
 
@@ -214,6 +219,7 @@ class AppSettings {
       'security_pin_enabled': securityPinEnabled ? 1 : 0,
       'security_pin_code': securityPinCode,
       'security_biometric_enabled': securityBiometricEnabled ? 1 : 0,
+      'security_lock_delay_seconds': securityLockDelaySeconds,
     };
   }
 
@@ -270,6 +276,7 @@ class AppSettings {
       securityPinCode: map['security_pin_code'] as String? ?? '',
       securityBiometricEnabled:
           (map['security_biometric_enabled'] as int? ?? 0) == 1,
+      securityLockDelaySeconds: map['security_lock_delay_seconds'] as int? ?? 5,
     );
   }
 

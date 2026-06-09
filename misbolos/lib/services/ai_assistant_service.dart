@@ -1367,6 +1367,9 @@ class AiAssistantService {
 
   Future<AiAssistantAction?> _tryParseCreateGigAction(String message) async {
     final normalized = _normalizeForParser(message);
+    final structured = await _tryParseStructuredCreateGigAction(message);
+    if (structured != null) return structured;
+
     final hasCreateIntent = RegExp(
       r'\b(crea|crear|anade|añade|apunta)\b',
     ).hasMatch(normalized);
@@ -1393,6 +1396,44 @@ class AiAssistantService {
           'estado': facturable == false ? 'confirmado_b' : 'confirmado',
         },
       ],
+      'filtros': const <String, dynamic>{},
+      'objetivo': const <String, dynamic>{},
+      'cambios': const <String, dynamic>{},
+      'cliente': const <String, dynamic>{},
+      'clientes': const <dynamic>[],
+      'factura': const <String, dynamic>{},
+      'email': const <String, dynamic>{},
+      'advertencias': const <dynamic>[],
+      '_source_message': message,
+    });
+  }
+
+  Future<AiAssistantAction?> _tryParseStructuredCreateGigAction(
+    String message,
+  ) async {
+    final now = DateTime.now();
+    final parsed = await _parseStructuredGigLines(source: message, now: now);
+    if (parsed.isEmpty) return null;
+
+    final bolos = parsed
+        .map(
+          (line) => {
+            'fecha': _date(line.date),
+            'nombre': line.client,
+            'importe': line.amount,
+            'facturable': line.facturableDetected,
+            'estado': line.facturableDetected == false
+                ? 'confirmado_b'
+                : 'confirmado',
+          },
+        )
+        .toList();
+
+    return AiAssistantAction.fromJson({
+      'accion': 'crear_bolos',
+      'requiere_confirmacion': true,
+      'confianza': 0.99,
+      'bolos': bolos,
       'filtros': const <String, dynamic>{},
       'objetivo': const <String, dynamic>{},
       'cambios': const <String, dynamic>{},
@@ -1857,6 +1898,9 @@ class AiAssistantService {
     required String source,
     required DateTime now,
   }) async {
+    final structured = await _parseStructuredGigLines(source: source, now: now);
+    if (structured.isNotEmpty) return structured;
+
     final lines = source
         .split('\n')
         .map((line) => line.trim())
@@ -1930,6 +1974,146 @@ class AiAssistantService {
       );
     }
     return parsed;
+  }
+
+  Future<List<_MassGigParsedLine>> _parseStructuredGigLines({
+    required String source,
+    required DateTime now,
+  }) async {
+    final labeled = await _parseLabeledGigBlock(source);
+    if (labeled != null) return [labeled];
+
+    final lines = source
+        .split('\n')
+        .expand((line) {
+          final trimmed = line.trim();
+          if (trimmed.isEmpty) return const <String>[];
+          final dateMatch = _firstExplicitDateMatch(trimmed);
+          if (dateMatch != null && dateMatch.start > 0) {
+            return [trimmed.substring(dateMatch.start).trim()];
+          }
+          return [trimmed];
+        })
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toList();
+
+    final parsed = <_MassGigParsedLine>[];
+    for (final rawLine in lines) {
+      final line = rawLine
+          .replaceAll('—', ' - ')
+          .replaceAll('–', ' - ')
+          .replaceAll('|', ' - ')
+          .replaceAll(';', ' - ');
+      final parts = line
+          .split(RegExp(r'\s+-\s+'))
+          .map((part) => part.trim())
+          .where((part) => part.isNotEmpty)
+          .toList();
+      if (parts.length < 3) continue;
+
+      final date = _resolveDateText(_stripFieldLabel(parts[0]));
+      if (date == null) continue;
+
+      final clientText = _stripFieldLabel(parts[1]);
+      if (clientText.isEmpty) continue;
+
+      final tail = parts.skip(2).join(' ');
+      final amount = _extractAmountFromText(tail);
+      final facturableDetected = _extractFacturableHint(tail.toLowerCase());
+      if (amount == null || facturableDetected == null) continue;
+
+      final resolvedClient = await _resolveClientName(clientText);
+      debugPrint(
+        '[STRUCTURED_GIG_PARSE] rawLine="$rawLine" resolvedDate=${_date(date)} client="$resolvedClient" amount=$amount facturable=$facturableDetected',
+      );
+      parsed.add(
+        _MassGigParsedLine(
+          client: resolvedClient,
+          date: DateTime(date.year, date.month, date.day),
+          amount: amount,
+          facturableDetected: facturableDetected,
+        ),
+      );
+    }
+    return parsed;
+  }
+
+  Future<_MassGigParsedLine?> _parseLabeledGigBlock(String source) async {
+    final fecha = _extractLabeledValue(source, const ['fecha', 'dia', 'día']);
+    final cliente = _extractLabeledValue(source, const [
+      'cliente',
+      'clientes',
+      'client',
+      'nombre',
+      'nombres',
+    ]);
+    final importe = _extractLabeledValue(source, const [
+      'importe',
+      'cachet',
+      'caché',
+      'precio',
+    ]);
+    final typeLine = _extractLabeledValue(source, const ['tipo', 'facturable']);
+    final date = fecha == null ? null : _resolveDateText(fecha);
+    final amount = importe == null ? null : _extractAmountFromText(importe);
+    final facturable = _extractFacturableHint(
+      '${typeLine ?? ''}\n$source'.toLowerCase(),
+    );
+    if (date == null ||
+        amount == null ||
+        facturable == null ||
+        cliente == null ||
+        cliente.trim().isEmpty) {
+      return null;
+    }
+
+    final resolvedClient = await _resolveClientName(cliente);
+    debugPrint(
+      '[LABELED_GIG_PARSE] resolvedDate=${_date(date)} client="$resolvedClient" amount=$amount facturable=$facturable',
+    );
+    return _MassGigParsedLine(
+      client: resolvedClient,
+      date: DateTime(date.year, date.month, date.day),
+      amount: amount,
+      facturableDetected: facturable,
+    );
+  }
+
+  String? _extractLabeledValue(String source, List<String> labels) {
+    for (final label in labels) {
+      final match = RegExp(
+        '^\\s*${RegExp.escape(label)}\\s*:\\s*(.+?)\\s*\$',
+        caseSensitive: false,
+        multiLine: true,
+      ).firstMatch(source);
+      final value = match?.group(1)?.trim();
+      if (value != null && value.isNotEmpty) return value;
+    }
+    return null;
+  }
+
+  RegExpMatch? _firstExplicitDateMatch(String source) {
+    final named = RegExp(
+      r'\b\d{1,2}\s+de\s+(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)(?:\s+de\s+\d{4})?\b',
+      caseSensitive: false,
+    ).firstMatch(source);
+    if (named != null) return named;
+    return RegExp(
+      r'\b\d{1,2}[\/.-]\d{1,2}(?:[\/.-]\d{2,4})?\b',
+    ).firstMatch(source);
+  }
+
+  String _stripFieldLabel(String value) {
+    return value
+        .replaceFirst(
+          RegExp(
+            r'^(?:fecha|d[ií]a|cliente|clientes|client|nombre|nombres|importe|precio|cachet|cach[eé])\s*:\s*',
+            caseSensitive: false,
+          ),
+          '',
+        )
+        .trim();
   }
 
   Future<String> _resolveClientName(String raw) async {

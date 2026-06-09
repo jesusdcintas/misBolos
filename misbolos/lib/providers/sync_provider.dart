@@ -74,6 +74,30 @@ class SyncNotifier extends StateNotifier<SyncState> {
     }
   }
 
+  bool _shouldForceFullCorePull(String reason) {
+    switch (reason) {
+      case 'manual_button':
+      case 'pull_to_refresh':
+      case 'auth_signed_in':
+      case 'app_start':
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  bool _shouldForceFullCorePush(String reason) {
+    switch (reason) {
+      case 'manual_button':
+      case 'pull_to_refresh':
+      case 'auth_signed_in':
+      case 'app_start':
+        return true;
+      default:
+        return false;
+    }
+  }
+
   String _friendlySyncError(Object error) {
     final msg = error.toString().toLowerCase();
     if (msg.contains('failed host lookup') ||
@@ -146,12 +170,16 @@ class SyncNotifier extends StateNotifier<SyncState> {
       final lastSyncAt = settings.lastCloudSyncAt;
 
       final clientsWatch = Stopwatch()..start();
+      final forceFullCorePush = _shouldForceFullCorePush(reason);
       final clients = await ClientRepository.instance.getAll();
-      final changedClients = lastSyncAt == null
+      final changedClients = forceFullCorePush || lastSyncAt == null
           ? clients
           : clients.where((c) => c.updatedAt.isAfter(lastSyncAt)).toList();
       if (changedClients.isNotEmpty) {
         await _supabase.uploadClients(changedClients);
+      }
+      if (forceFullCorePush) {
+        debugPrint('[SYNC][DATA] clients push completo (reason=$reason)');
       }
       clientsWatch.stop();
       debugPrint(
@@ -318,9 +346,13 @@ class SyncNotifier extends StateNotifier<SyncState> {
 
       // Descargar solo cambios desde Supabase
       final clientsWatch = Stopwatch()..start();
+      final forceFullCorePull = _shouldForceFullCorePull(reason);
       var cloudClients = await _supabase.downloadClientsChangesSince(
-        lastSyncAt,
+        forceFullCorePull ? null : lastSyncAt,
       );
+      if (forceFullCorePull) {
+        debugPrint('[SYNC][DATA] clients pull completo (reason=$reason)');
+      }
       if (cloudClients.isEmpty &&
           localClients.isEmpty &&
           lastSyncAt != null &&
@@ -332,7 +364,12 @@ class SyncNotifier extends StateNotifier<SyncState> {
       }
       clientsWatch.stop();
       final gigsWatch = Stopwatch()..start();
-      var cloudGigs = await _supabase.downloadGigs(changedAfter: lastSyncAt);
+      var cloudGigs = await _supabase.downloadGigs(
+        changedAfter: forceFullCorePull ? null : lastSyncAt,
+      );
+      if (forceFullCorePull) {
+        debugPrint('[SYNC][DATA] gigs pull completo (reason=$reason)');
+      }
       if (cloudGigs.isEmpty &&
           localGigs.isEmpty &&
           lastSyncAt != null &&
@@ -345,10 +382,7 @@ class SyncNotifier extends StateNotifier<SyncState> {
       gigsWatch.stop();
       final invoicesWatch = Stopwatch()..start();
       final forceFullInvoicesPull =
-          (reason == 'manual_button' ||
-              reason == 'auth_signed_in' ||
-              reason == 'app_start') &&
-          _shouldRunDefensiveCloudPull(reason);
+          forceFullCorePull && _shouldRunDefensiveCloudPull(reason);
       var cloudInvoices = await _supabase.downloadInvoices(
         changedAfter: forceFullInvoicesPull ? null : lastSyncAt,
       );
@@ -695,6 +729,10 @@ class SyncNotifier extends StateNotifier<SyncState> {
       lastDriveSyncAt: local.lastDriveSyncAt,
       lastCloudSyncAt: local.lastCloudSyncAt,
       cloudSettingsSignature: local.cloudSettingsSignature,
+      securityPinEnabled: local.securityPinEnabled,
+      securityPinCode: local.securityPinCode,
+      securityBiometricEnabled: local.securityBiometricEnabled,
+      securityLockDelaySeconds: local.securityLockDelaySeconds,
     );
   }
 }

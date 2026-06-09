@@ -31,7 +31,8 @@ class AiConversationContext {
       'pending_bulk_entities': pendingBulkEntities,
     'missing_fields': missingFields,
     'partial_data': partialData,
-    if (lastCreatedActionId != null) 'last_created_action_id': lastCreatedActionId,
+    if (lastCreatedActionId != null)
+      'last_created_action_id': lastCreatedActionId,
     if (lastReferencedEntity != null)
       'last_referenced_entity': lastReferencedEntity,
     if (lastPreviewAction != null) 'last_preview_action': lastPreviewAction,
@@ -191,7 +192,48 @@ class AiConversationContextService {
     final before = <String, dynamic>{...partial};
     final missingBefore = _missingFields(partial);
 
-    final amount = _extractAmount(text);
+    final labeledClient = _extractLabeledValue(text, const [
+      'cliente',
+      'clientes',
+      'client',
+      'nombre',
+      'nombres',
+    ]);
+    if (labeledClient != null && labeledClient.trim().isNotEmpty) {
+      partial['cliente_o_nombre'] = labeledClient.trim();
+      _logContextFieldMatch(
+        matchedField: 'cliente_o_nombre',
+        value: labeledClient.trim(),
+        partialDataBefore: before,
+        partialDataAfter: partial,
+      );
+    }
+
+    final labeledDate = _extractLabeledValue(text, const [
+      'fecha',
+      'dia',
+      'día',
+    ]);
+    final resolvedLabeledDate = labeledDate == null
+        ? null
+        : _resolveDateText(labeledDate, now: now);
+    if (resolvedLabeledDate != null) {
+      partial['fecha'] = _iso(resolvedLabeledDate);
+      _logContextFieldMatch(
+        matchedField: 'fecha',
+        value: partial['fecha'],
+        partialDataBefore: before,
+        partialDataAfter: partial,
+      );
+    }
+
+    final labeledAmount = _extractLabeledValue(text, const [
+      'importe',
+      'precio',
+      'cachet',
+      'caché',
+    ]);
+    final amount = _extractAmount(labeledAmount ?? text);
     if (amount != null) {
       partial['importe'] = amount;
       _logContextFieldMatch(
@@ -200,46 +242,57 @@ class AiConversationContextService {
         partialDataBefore: before,
         partialDataAfter: partial,
       );
-    } else {
-      final facturable = _extractFacturable(text);
-      if (facturable != null) {
-        partial['facturable'] = facturable;
-        _logContextFieldMatch(
-          matchedField: 'facturable',
-          value: facturable,
-          partialDataBefore: before,
-          partialDataAfter: partial,
+    }
+
+    final labeledFacturable = _extractLabeledValue(text, const [
+      'facturable',
+      'tipo',
+    ]);
+    final facturable = _extractFacturable('${labeledFacturable ?? ''}\n$text');
+    if (facturable != null) {
+      partial['facturable'] = facturable;
+      _logContextFieldMatch(
+        matchedField: 'facturable',
+        value: facturable,
+        partialDataBefore: before,
+        partialDataAfter: partial,
+      );
+    }
+
+    if (resolvedLabeledDate == null) {
+      final dateToken = DateResolverService.instance.extractRelativeDateTokens(
+        text,
+      );
+      if (dateToken.isNotEmpty) {
+        final date = DateResolverService.instance.resolveExpression(
+          dateToken.first,
+          now: now,
         );
-      } else {
-        final dateToken = DateResolverService.instance.extractRelativeDateTokens(
-          text,
-        );
-        if (dateToken.isNotEmpty) {
-          final date = DateResolverService.instance.resolveExpression(
-            dateToken.first,
-            now: now,
-          );
-          if (date != null) {
-            final resolved = _iso(date);
-            partial['fecha'] = resolved;
-            _logContextFieldMatch(
-              matchedField: 'fecha',
-              value: resolved,
-              partialDataBefore: before,
-              partialDataAfter: partial,
-            );
-          }
-        } else if (missingBefore.contains('cliente_o_nombre') &&
-            _looksLikeName(text)) {
-          partial['cliente_o_nombre'] = text;
+        if (date != null) {
+          final resolved = _iso(date);
+          partial['fecha'] = resolved;
           _logContextFieldMatch(
-            matchedField: 'cliente_o_nombre',
-            value: text,
+            matchedField: 'fecha',
+            value: resolved,
             partialDataBefore: before,
             partialDataAfter: partial,
           );
         }
       }
+    }
+
+    if (labeledClient == null &&
+        missingBefore.contains('cliente_o_nombre') &&
+        amount == null &&
+        facturable == null &&
+        _looksLikeName(text)) {
+      partial['cliente_o_nombre'] = text;
+      _logContextFieldMatch(
+        matchedField: 'cliente_o_nombre',
+        value: text,
+        partialDataBefore: before,
+        partialDataAfter: partial,
+      );
     }
 
     final missing = _missingFields(partial);
@@ -290,7 +343,9 @@ class AiConversationContextService {
         .toList();
     final amount = _extractAmount(text);
     final facturable = _extractFacturable(text);
-    final dateToken = DateResolverService.instance.extractRelativeDateTokens(text);
+    final dateToken = DateResolverService.instance.extractRelativeDateTokens(
+      text,
+    );
     final global = lower.startsWith('todos') || lower.startsWith('todas');
 
     void apply(Map<String, dynamic> entity) {
@@ -342,8 +397,7 @@ class AiConversationContextService {
       if (!matchedAny) {
         final unresolved = entities
             .where(
-              (entity) =>
-                  (entity['missing_fields'] as List<String>).isNotEmpty,
+              (entity) => (entity['missing_fields'] as List<String>).isNotEmpty,
             )
             .toList();
         if (unresolved.length == 1 || amount != null || facturable != null) {
@@ -418,6 +472,72 @@ class AiConversationContextService {
     final m = RegExp(r'(\d+(?:[.,]\d+)?)[ ]*€').firstMatch(text);
     if (m == null) return null;
     return double.tryParse(m.group(1)!.replaceAll(',', '.'));
+  }
+
+  String? _extractLabeledValue(String source, List<String> labels) {
+    for (final label in labels) {
+      final match = RegExp(
+        '^\\s*${RegExp.escape(label)}\\s*:\\s*(.+?)\\s*\$',
+        caseSensitive: false,
+        multiLine: true,
+      ).firstMatch(source);
+      final value = match?.group(1)?.trim();
+      if (value != null && value.isNotEmpty) return value;
+    }
+    return null;
+  }
+
+  DateTime? _resolveDateText(String text, {required DateTime now}) {
+    final relative = DateResolverService.instance.resolveExpression(
+      text,
+      now: now,
+    );
+    if (relative != null) return relative;
+
+    final normalized = text
+        .toLowerCase()
+        .replaceAll('á', 'a')
+        .replaceAll('é', 'e')
+        .replaceAll('í', 'i')
+        .replaceAll('ó', 'o')
+        .replaceAll('ú', 'u')
+        .trim();
+    const months = {
+      'enero': 1,
+      'febrero': 2,
+      'marzo': 3,
+      'abril': 4,
+      'mayo': 5,
+      'junio': 6,
+      'julio': 7,
+      'agosto': 8,
+      'septiembre': 9,
+      'setiembre': 9,
+      'octubre': 10,
+      'noviembre': 11,
+      'diciembre': 12,
+    };
+    final named = RegExp(
+      r'\b(\d{1,2})\s+de\s+([a-zñ]+)(?:\s+de\s+(\d{4}))?\b',
+    ).firstMatch(normalized);
+    if (named != null) {
+      final day = int.tryParse(named.group(1) ?? '');
+      final month = months[named.group(2)];
+      final year = int.tryParse(named.group(3) ?? '') ?? now.year;
+      if (day != null && month != null) return DateTime(year, month, day);
+    }
+
+    final slash = RegExp(
+      r'\b(\d{1,2})[\/.-](\d{1,2})(?:[\/.-](\d{2,4}))?\b',
+    ).firstMatch(normalized);
+    if (slash != null) {
+      final day = int.tryParse(slash.group(1) ?? '');
+      final month = int.tryParse(slash.group(2) ?? '');
+      final yearRaw = int.tryParse(slash.group(3) ?? '') ?? now.year;
+      final year = yearRaw < 100 ? yearRaw + 2000 : yearRaw;
+      if (day != null && month != null) return DateTime(year, month, day);
+    }
+    return null;
   }
 
   bool _looksLikeName(String text) {

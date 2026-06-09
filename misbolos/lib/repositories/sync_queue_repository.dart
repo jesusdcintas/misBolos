@@ -26,7 +26,7 @@ class SyncQueueRepository {
     );
   }
 
-  Future<List<SyncQueueItem>> pending({int maxAttempts = 8}) async {
+  Future<List<SyncQueueItem>> pending({int maxAttempts = 100}) async {
     final db = await DatabaseHelper.instance.database;
     final rows = await db.query(
       'sync_queue',
@@ -68,7 +68,7 @@ class SyncQueueRepository {
     );
   }
 
-  Future<int> countPending({int maxAttempts = 8}) async {
+  Future<int> countPending({int maxAttempts = 100}) async {
     final db = await DatabaseHelper.instance.database;
     final rows = await db.rawQuery(
       '''
