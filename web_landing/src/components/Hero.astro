@@ -27,6 +27,7 @@
         
         <div class="mockup-content">
           <video 
+            id="hero-video"
             src="/video/promo.mp4" 
             class="promo-video" 
             autoplay 
@@ -36,6 +37,22 @@
             aria-label="Vídeo de demostración de la aplicación MisBolos"
           >
           </video>
+
+          <!-- Controles de Video Sleek Glassmorphic -->
+          <div class="video-controls-overlay">
+            <button id="video-play-btn" class="control-btn" aria-label="Pausar video">
+              <!-- SVG de Pause (activo por defecto) -->
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="icon icon-pause"><path fill-rule="evenodd" d="M6.75 5.25a.75.75 0 0 1 .75-.75H9a.75.75 0 0 1 .75.75v13.5a.75.75 0 0 1-.75.75H7.5a.75.75 0 0 1-.75-.75V5.25Zm7.5 0A.75.75 0 0 1 15 4.5h1.5a.75.75 0 0 1 .75.75v13.5a.75.75 0 0 1-.75.75H15a.75.75 0 0 1-.75-.75V5.25Z" clip-rule="evenodd" /></svg>
+              <!-- SVG de Play (oculto por defecto) -->
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="icon icon-play hidden"><path fill-rule="evenodd" d="M4.5 5.653c0-1.427 1.529-2.33 2.779-1.643l11.54 6.347c1.295.712 1.295 2.573 0 3.286L7.28 19.99c-1.25.687-2.779-.217-2.779-1.643V5.653Z" clip-rule="evenodd" /></svg>
+            </button>
+            <button id="video-mute-btn" class="control-btn" aria-label="Activar sonido">
+              <!-- SVG de Mute (activo por defecto) -->
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="icon icon-mute"><path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.508c-1.141 0-2.063.922-2.063 2.063v4.875c0 1.141.922 2.062 2.063 2.062h1.932l4.5 4.5c.944.945 2.56.276 2.56-1.06V4.06ZM17.78 9.22a.75.75 0 1 0-1.06 1.06L18.44 12l-1.72 1.72a.75.75 0 0 0 1.06 1.06l1.72-1.72 1.72 1.72a.75.75 0 1 0 1.06-1.06L20.56 12l1.72-1.72a.75.75 0 0 0-1.06-1.06l-1.72 1.72-1.72-1.72Z" /></svg>
+              <!-- SVG de Volume Up (oculto por defecto) -->
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="icon icon-volume hidden"><path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.508c-1.141 0-2.063.922-2.063 2.063v4.875c0 1.141.922 2.062 2.063 2.062h1.932l4.5 4.5c.944.945 2.56.276 2.56-1.06V4.06Zm4.44 5.64a.75.75 0 0 1 1.06-.02 8.25 8.25 0 0 1 0 11.64.75.75 0 0 1-1.06-1.06 6.75 6.75 0 0 0 0-9.52.75.75 0 0 1 .02-1.06Z" /><path d="M20.128 7.372a.75.75 0 1 0-1.06 1.06 11.25 11.25 0 0 1 0 15.918.75.75 0 1 0 1.06 1.061 12.75 12.75 0 0 0 0-18.039Z" /></svg>
+            </button>
+          </div>
 
           <div class="video-fallback">
             <span class="video-fallback-title">Cargando presentación de MisBolos...</span>
@@ -207,4 +224,111 @@
     color: #718096;
     margin-top: 8px;
   }
+
+  /* Controles de Video */
+  .video-controls-overlay {
+    position: absolute;
+    bottom: 16px;
+    right: 16px;
+    display: flex;
+    gap: 8px;
+    z-index: 10;
+    background-color: rgba(15, 23, 42, 0.45);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    padding: 6px;
+    border-radius: var(--radius-md);
+    transition: opacity var(--transition-normal), transform var(--transition-normal);
+  }
+
+  .control-btn {
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.85);
+    cursor: pointer;
+    width: 34px;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+    transition: background-color var(--transition-fast), transform var(--transition-fast), color var(--transition-fast);
+  }
+
+  .control-btn:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+    transform: scale(1.05);
+    color: #ffffff;
+  }
+
+  .control-btn:active {
+    transform: scale(0.95);
+  }
+
+  .control-btn .icon {
+    width: 20px;
+    height: 20px;
+  }
+
+  .hidden {
+    display: none !important;
+  }
 </style>
+
+<script>
+  const video = document.getElementById('hero-video') as HTMLVideoElement;
+  const playBtn = document.getElementById('video-play-btn');
+  const muteBtn = document.getElementById('video-mute-btn');
+
+  if (video && playBtn && muteBtn) {
+    const iconPause = playBtn.querySelector('.icon-pause');
+    const iconPlay = playBtn.querySelector('.icon-play');
+    const iconMute = muteBtn.querySelector('.icon-mute');
+    const iconVolume = muteBtn.querySelector('.icon-volume');
+
+    // Sincronizar UI por si el vídeo autoplay empieza reproduciendo y silenciado
+    const syncIcons = () => {
+      if (video.paused) {
+        iconPause?.classList.add('hidden');
+        iconPlay?.classList.remove('hidden');
+        playBtn.setAttribute('aria-label', 'Reproducir video');
+      } else {
+        iconPlay?.classList.add('hidden');
+        iconPause?.classList.remove('hidden');
+        playBtn.setAttribute('aria-label', 'Pausar video');
+      }
+
+      if (video.muted) {
+        iconVolume?.classList.add('hidden');
+        iconMute?.classList.remove('hidden');
+        muteBtn.setAttribute('aria-label', 'Activar sonido');
+      } else {
+        iconMute?.classList.add('hidden');
+        iconVolume?.classList.remove('hidden');
+        muteBtn.setAttribute('aria-label', 'Silenciar video');
+      }
+    };
+
+    // Al hacer click en Play/Pause
+    playBtn.addEventListener('click', () => {
+      if (video.paused) {
+        video.play();
+      } else {
+        video.pause();
+      }
+      syncIcons();
+    });
+
+    // Al hacer click en Mute/Unmute
+    muteBtn.addEventListener('click', () => {
+      video.muted = !video.muted;
+      syncIcons();
+    });
+
+    // Eventos del propio video para sincronizar botones si hay autoplay
+    video.addEventListener('play', syncIcons);
+    video.addEventListener('pause', syncIcons);
+    video.addEventListener('volumechange', syncIcons);
+  }
+</script>
