@@ -46,12 +46,23 @@
               <!-- SVG de Play (oculto por defecto) -->
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="icon icon-play hidden"><path fill-rule="evenodd" d="M4.5 5.653c0-1.427 1.529-2.33 2.779-1.643l11.54 6.347c1.295.712 1.295 2.573 0 3.286L7.28 19.99c-1.25.687-2.779-.217-2.779-1.643V5.653Z" clip-rule="evenodd" /></svg>
             </button>
+
+            <!-- Botón de Reiniciar -->
+            <button id="video-restart-btn" class="control-btn" aria-label="Reiniciar video">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="icon"><path fill-rule="evenodd" d="M4.755 10.059a7.5 7.5 0 1 1 12.548 3.364l1.903 1.903h-5.183a.75.75 0 0 1-.75-.75v-5.183l1.902 1.902a5.25 5.25 0 1 0-8.783-2.355.75.75 0 0 1-1.488-.179Z" clip-rule="evenodd" /><path d="M18.75 16.75H21a.75.75 0 0 1 0 1.5h-3a.75.75 0 0 1-.75-.75v-3a.75.75 0 0 1 1.5 0v2.25Z" /></svg>
+            </button>
+
             <button id="video-mute-btn" class="control-btn" aria-label="Activar sonido">
               <!-- SVG de Mute (activo por defecto) -->
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="icon icon-mute"><path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.508c-1.141 0-2.063.922-2.063 2.063v4.875c0 1.141.922 2.062 2.063 2.062h1.932l4.5 4.5c.944.945 2.56.276 2.56-1.06V4.06ZM17.78 9.22a.75.75 0 1 0-1.06 1.06L18.44 12l-1.72 1.72a.75.75 0 0 0 1.06 1.06l1.72-1.72 1.72 1.72a.75.75 0 1 0 1.06-1.06L20.56 12l1.72-1.72a.75.75 0 0 0-1.06-1.06l-1.72 1.72-1.72-1.72Z" /></svg>
               <!-- SVG de Volume Up (oculto por defecto) -->
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="icon icon-volume hidden"><path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.508c-1.141 0-2.063.922-2.063 2.063v4.875c0 1.141.922 2.062 2.063 2.062h1.932l4.5 4.5c.944.945 2.56.276 2.56-1.06V4.06Zm4.44 5.64a.75.75 0 0 1 1.06-.02 8.25 8.25 0 0 1 0 11.64.75.75 0 0 1-1.06-1.06 6.75 6.75 0 0 0 0-9.52.75.75 0 0 1 .02-1.06Z" /><path d="M20.128 7.372a.75.75 0 1 0-1.06 1.06 11.25 11.25 0 0 1 0 15.918.75.75 0 1 0 1.06 1.061 12.75 12.75 0 0 0 0-18.039Z" /></svg>
             </button>
+          </div>
+
+          <!-- Barra de progreso (Seekbar) -->
+          <div id="video-progress-container" class="video-progress-container" title="Deslizar o hacer clic para avanzar/retroceder">
+            <div id="video-progress-bar" class="video-progress-bar"></div>
           </div>
 
           <div class="video-fallback">
@@ -225,6 +236,50 @@
     margin-top: 8px;
   }
 
+  /* Barra de progreso de video */
+  .video-progress-container {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 4px;
+    background-color: rgba(255, 255, 255, 0.2);
+    cursor: pointer;
+    z-index: 10;
+    transition: height var(--transition-fast) ease;
+  }
+
+  .video-progress-container:hover {
+    height: 8px;
+  }
+
+  .video-progress-bar {
+    height: 100%;
+    width: 0%;
+    background-color: var(--color-primary);
+    transition: width 0.1s linear;
+    position: relative;
+  }
+
+  .video-progress-bar::after {
+    content: '';
+    position: absolute;
+    right: -4px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 8px;
+    height: 8px;
+    background-color: #ffffff;
+    border-radius: 50%;
+    box-shadow: var(--shadow-sm);
+    opacity: 0;
+    transition: opacity var(--transition-fast) ease;
+  }
+
+  .video-progress-container:hover .video-progress-bar::after {
+    opacity: 1;
+  }
+
   /* Controles de Video */
   .video-controls-overlay {
     position: absolute;
@@ -280,38 +335,41 @@
   const video = document.getElementById('hero-video') as HTMLVideoElement;
   const playBtn = document.getElementById('video-play-btn');
   const muteBtn = document.getElementById('video-mute-btn');
+  const restartBtn = document.getElementById('video-restart-btn');
+  const progressContainer = document.getElementById('video-progress-container');
+  const progressBar = document.getElementById('video-progress-bar');
 
-  if (video && playBtn && muteBtn) {
-    const iconPause = playBtn.querySelector('.icon-pause');
-    const iconPlay = playBtn.querySelector('.icon-play');
-    const iconMute = muteBtn.querySelector('.icon-mute');
-    const iconVolume = muteBtn.querySelector('.icon-volume');
+  if (video) {
+    const iconPause = playBtn?.querySelector('.icon-pause');
+    const iconPlay = playBtn?.querySelector('.icon-play');
+    const iconMute = muteBtn?.querySelector('.icon-mute');
+    const iconVolume = muteBtn?.querySelector('.icon-volume');
 
     // Sincronizar UI por si el vídeo autoplay empieza reproduciendo y silenciado
     const syncIcons = () => {
       if (video.paused) {
         iconPause?.classList.add('hidden');
         iconPlay?.classList.remove('hidden');
-        playBtn.setAttribute('aria-label', 'Reproducir video');
+        playBtn?.setAttribute('aria-label', 'Reproducir video');
       } else {
         iconPlay?.classList.add('hidden');
         iconPause?.classList.remove('hidden');
-        playBtn.setAttribute('aria-label', 'Pausar video');
+        playBtn?.setAttribute('aria-label', 'Pausar video');
       }
 
       if (video.muted) {
         iconVolume?.classList.add('hidden');
         iconMute?.classList.remove('hidden');
-        muteBtn.setAttribute('aria-label', 'Activar sonido');
+        muteBtn?.setAttribute('aria-label', 'Activar sonido');
       } else {
         iconMute?.classList.add('hidden');
         iconVolume?.classList.remove('hidden');
-        muteBtn.setAttribute('aria-label', 'Silenciar video');
+        muteBtn?.setAttribute('aria-label', 'Silenciar video');
       }
     };
 
     // Al hacer click en Play/Pause
-    playBtn.addEventListener('click', () => {
+    playBtn?.addEventListener('click', () => {
       if (video.paused) {
         video.play();
       } else {
@@ -321,12 +379,55 @@
     });
 
     // Al hacer click en Mute/Unmute
-    muteBtn.addEventListener('click', () => {
+    muteBtn?.addEventListener('click', () => {
       video.muted = !video.muted;
       syncIcons();
     });
 
-    // Eventos del propio video para sincronizar botones si hay autoplay
+    // Al hacer click en Reiniciar
+    restartBtn?.addEventListener('click', () => {
+      video.currentTime = 0;
+      if (video.paused) {
+        video.play();
+      }
+      syncIcons();
+    });
+
+    // Actualizar barra de progreso
+    video.addEventListener('timeupdate', () => {
+      if (video.duration && progressBar) {
+        const percentage = (video.currentTime / video.duration) * 100;
+        progressBar.style.width = `${percentage}%`;
+      }
+    });
+
+    // Deslizar o hacer click en la barra de progreso
+    if (progressContainer) {
+      const seek = (e: MouseEvent) => {
+        const rect = progressContainer.getBoundingClientRect();
+        const pos = (e.clientX - rect.left) / rect.width;
+        video.currentTime = Math.max(0, Math.min(pos, 1)) * video.duration;
+      };
+
+      let isDragging = false;
+
+      progressContainer.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        seek(e);
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if (isDragging) {
+          seek(e);
+        }
+      });
+
+      window.addEventListener('mouseup', () => {
+        isDragging = false;
+      });
+    }
+
+    // Eventos del propio video para sincronizar botones
     video.addEventListener('play', syncIcons);
     video.addEventListener('pause', syncIcons);
     video.addEventListener('volumechange', syncIcons);
