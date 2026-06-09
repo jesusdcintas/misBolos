@@ -498,7 +498,7 @@ class PdfService {
                             ),
                             pw.SizedBox(height: 6),
                             pw.Text(
-                              'Factura generada por sistema con modo fiscal estricto',
+                              'Factura registrada con control fiscal activo',
                               style: const pw.TextStyle(fontSize: 9),
                             ),
                             pw.SizedBox(height: 8),
@@ -524,7 +524,7 @@ class PdfService {
                             if (invoice.isFiscallyIssued) ...[
                               pw.SizedBox(height: 8),
                               pw.Text(
-                                'Factura emitida y bloqueada por modo fiscal estricto.',
+                                'Factura emitida con registro fiscal interno.',
                                 style: pw.TextStyle(
                                   fontSize: 9,
                                   fontWeight: pw.FontWeight.bold,
@@ -682,16 +682,14 @@ class PdfService {
   static String _buildFiscalQrData(Invoice invoice) {
     final payload = <String, dynamic>{
       'app': 'MisBolos',
-      'invoice_id': invoice.id,
-      'invoice_series': invoice.visualSeries,
-      'invoice_number': invoice.numero,
-      'invoice_type': invoice.invoiceType.dbValue,
-      'issued_at': invoice.fecha.toIso8601String(),
-      'invoice_date': DateFormat('yyyy-MM-dd').format(invoice.fecha),
+      'tipo_qr': 'factura_fiscal',
+      'numero_factura': invoice.visualNumber,
+      'tipo_factura': invoice.isRectifying ? 'rectificativa' : 'normal',
+      'fecha_factura': DateFormat('yyyy-MM-dd').format(invoice.fecha),
       'total': invoice.total,
-      'fiscal_hash': invoice.fiscalHash,
-      'original_invoice_number': invoice.originalInvoiceNumber,
-      'rectifies_invoice_id': invoice.rectifiesInvoiceId,
+      'hash_fiscal': invoice.fiscalHash,
+      if (invoice.originalInvoiceNumber?.trim().isNotEmpty ?? false)
+        'factura_rectificada': invoice.originalInvoiceNumber,
     };
     return jsonEncode(payload);
   }
