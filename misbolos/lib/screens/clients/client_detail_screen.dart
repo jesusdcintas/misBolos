@@ -5,9 +5,11 @@ import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../core/utils/date_formatter.dart';
+import '../../models/client.dart';
 import '../../models/gig.dart';
 import '../../providers/client_provider.dart';
 import '../../providers/gig_provider.dart';
+import '../../services/whatsapp_service.dart';
 import '../../widgets/common/status_badge.dart';
 import '../../widgets/common/facturable_badge.dart';
 
@@ -95,6 +97,17 @@ class ClientDetailScreen extends ConsumerWidget {
                         ),
                       if (client.notas.isNotEmpty)
                         _InfoRow(label: 'Notas', value: client.notas),
+                      if (_contactPhone(client) != null) ...[
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            onPressed: () => _openWhatsApp(context, client),
+                            icon: const Icon(Icons.chat_bubble_outline),
+                            label: const Text('Contactar por WhatsApp'),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -304,6 +317,28 @@ class ClientDetailScreen extends ConsumerWidget {
         context,
       ).showSnackBar(SnackBar(content: Text('No se pudo eliminar: $e')));
     }
+  }
+
+  String? _contactPhone(Client client) {
+    final whatsappPhone = client.whatsappPhone?.trim();
+    if (whatsappPhone != null && whatsappPhone.isNotEmpty) {
+      return whatsappPhone;
+    }
+    final phone = client.telefono?.trim();
+    return phone == null || phone.isEmpty ? null : phone;
+  }
+
+  Future<void> _openWhatsApp(BuildContext context, Client client) async {
+    final opened = await const WhatsAppService().openChat(
+      phone: _contactPhone(client),
+      message: '',
+    );
+    if (opened || !context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('No se pudo abrir WhatsApp con este número.'),
+      ),
+    );
   }
 }
 

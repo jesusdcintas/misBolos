@@ -73,32 +73,54 @@ class PdfService {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              // Header: Logo + FACTURA
-              pw.Row(
-                crossAxisAlignment: pw.CrossAxisAlignment.center,
-                children: [
-                  pw.Expanded(
-                    child: pw.Align(
-                      alignment: pw.Alignment.centerLeft,
-                      child: logoImage != null
-                          ? pw.Image(
-                              logoImage,
-                              height: settings.logoSize,
-                              fit: pw.BoxFit.contain,
-                            )
-                          : pw.SizedBox(height: settings.logoSize),
-                    ),
+              // En rectificativas el título largo va separado para no
+              // comprimir el logo configurado.
+              if (isRectifying) ...[
+                pw.Align(
+                  alignment: pw.Alignment.centerLeft,
+                  child: logoImage != null
+                      ? pw.Image(
+                          logoImage,
+                          height: settings.logoSize,
+                          fit: pw.BoxFit.contain,
+                        )
+                      : pw.SizedBox(height: settings.logoSize),
+                ),
+                pw.SizedBox(height: 8),
+                pw.Text(
+                  titleText,
+                  style: pw.TextStyle(
+                    fontSize: 36,
+                    fontWeight: pw.FontWeight.bold,
+                    color: primaryColor,
                   ),
-                  pw.Text(
-                    titleText,
-                    style: pw.TextStyle(
-                      fontSize: 36,
-                      fontWeight: pw.FontWeight.bold,
-                      color: primaryColor,
+                ),
+              ] else
+                pw.Row(
+                  crossAxisAlignment: pw.CrossAxisAlignment.center,
+                  children: [
+                    pw.Expanded(
+                      child: pw.Align(
+                        alignment: pw.Alignment.centerLeft,
+                        child: logoImage != null
+                            ? pw.Image(
+                                logoImage,
+                                height: settings.logoSize,
+                                fit: pw.BoxFit.contain,
+                              )
+                            : pw.SizedBox(height: settings.logoSize),
+                      ),
                     ),
-                  ),
-                ],
-              ),
+                    pw.Text(
+                      titleText,
+                      style: pw.TextStyle(
+                        fontSize: 36,
+                        fontWeight: pw.FontWeight.bold,
+                        color: primaryColor,
+                      ),
+                    ),
+                  ],
+                ),
               pw.SizedBox(height: 4),
               pw.Divider(color: PdfColors.grey400, thickness: 1),
               pw.SizedBox(height: 8),
@@ -476,7 +498,7 @@ class PdfService {
                             ),
                             pw.SizedBox(height: 6),
                             pw.Text(
-                              'Factura generada por sistema preparado para VeriFactu',
+                              'Factura generada por sistema con modo fiscal estricto',
                               style: const pw.TextStyle(fontSize: 9),
                             ),
                             pw.SizedBox(height: 8),
@@ -502,7 +524,7 @@ class PdfService {
                             if (invoice.isFiscallyIssued) ...[
                               pw.SizedBox(height: 8),
                               pw.Text(
-                                'Factura emitida y bloqueada por VeriFactu.',
+                                'Factura emitida y bloqueada por modo fiscal estricto.',
                                 style: pw.TextStyle(
                                   fontSize: 9,
                                   fontWeight: pw.FontWeight.bold,

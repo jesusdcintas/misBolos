@@ -637,7 +637,7 @@ class _InvoiceDetailContent extends ConsumerWidget {
               border: Border.all(color: AppColors.warning),
             ),
             child: const Text(
-              'Factura bloqueada por modo VeriFactu',
+              'Factura bloqueada por modo fiscal estricto',
               style: TextStyle(
                 color: AppColors.warning,
                 fontWeight: FontWeight.w700,

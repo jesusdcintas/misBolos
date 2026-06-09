@@ -589,7 +589,9 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
               fiscalRecord,
             );
           } catch (e) {
-            debugPrint('[VeriFactu] No se pudo subir registro fiscal: $e');
+            debugPrint(
+              '[Modo fiscal estricto] No se pudo subir registro fiscal: $e',
+            );
           }
         }
       }

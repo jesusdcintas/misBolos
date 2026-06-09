@@ -89,7 +89,7 @@ Pendiente opcional:
 - [x] Cerrar unificación UX de Perfil (cuentas y conexiones, sin estados duplicados).
 - [x] Terminar homogeneidad visual dark/light donde aún hay inconsistencias de contraste.
 - [x] Validar migraciones SQLite locales pendientes en instalaciones antiguas (caso `deleted_at`).
-- [ ] Implementar integración VeriFactu (cumplimiento y envío fiscal según normativa vigente).
+- [ ] Implementar modo fiscal estricto (cumplimiento y envío fiscal según normativa vigente).
 
 ### Prioridad media
 - [ ] Exponer funcionalidades IA clave en pantallas de trabajo diario.

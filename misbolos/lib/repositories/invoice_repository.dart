@@ -221,7 +221,7 @@ class InvoiceRepository {
               true;
       if (locked) {
         throw StateError(
-          'Factura bloqueada por modo VeriFactu. Crea una rectificativa.',
+          'Factura bloqueada por modo fiscal estricto. Crea una rectificativa.',
         );
       }
       if (currentNumber != invoice.numero) {
@@ -257,7 +257,7 @@ class InvoiceRepository {
       final invoice = Invoice.fromMap(rows.first);
       if (invoice.isFiscallyLocked && status == InvoiceStatus.borrador) {
         throw StateError(
-          'Factura bloqueada por modo VeriFactu. Crea una rectificativa.',
+          'Factura bloqueada por modo fiscal estricto. Crea una rectificativa.',
         );
       }
 
@@ -341,7 +341,7 @@ class InvoiceRepository {
     final invoice = await getById(id);
     if (invoice?.isFiscallyLocked == true) {
       throw StateError(
-        'Factura bloqueada por modo VeriFactu. Crea una rectificativa.',
+        'Factura bloqueada por modo fiscal estricto. Crea una rectificativa.',
       );
     }
     final rectifyingChildren = await db.rawQuery(
@@ -381,7 +381,7 @@ class InvoiceRepository {
       final invoice = Invoice.fromMap(rows.first);
       if (invoice.isFiscallyLocked) {
         throw StateError(
-          'Factura bloqueada por modo VeriFactu. Crea una rectificativa.',
+          'Factura bloqueada por modo fiscal estricto. Crea una rectificativa.',
         );
       }
       final rectifyingChildren = await txn.rawQuery(

@@ -193,7 +193,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                     const Icon(Icons.lock_outline, size: 42),
                     const SizedBox(height: 12),
                     Text(
-                      'Factura bloqueada por modo VeriFactu',
+                      'Factura bloqueada por modo fiscal estricto',
                       style: Theme.of(context).textTheme.titleMedium,
                       textAlign: TextAlign.center,
                     ),
@@ -727,7 +727,9 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
     if (_existingInvoice?.isFiscallyLocked == true) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Factura bloqueada por modo VeriFactu')),
+          const SnackBar(
+            content: Text('Factura bloqueada por modo fiscal estricto'),
+          ),
         );
       }
       return;

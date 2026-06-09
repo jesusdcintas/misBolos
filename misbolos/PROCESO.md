@@ -295,7 +295,7 @@ sin romper la arquitectura actual: `models`, `repositories`, `providers`,
 - `InvoiceStatus.enviada` se usa en la práctica como factura pendiente de
   cobro. Hay que mantenerlo documentado para evitar confusión en UI y lógica.
 - No existen logs de envío de factura ni eventos inalterables. Son necesarios
-  para email, trazabilidad, asistente IA y preparación Verifactu.
+  para email, trazabilidad, asistente IA y modo fiscal estricto.
 - `supabase/schema.sql` debe revisarse: aún conserva comentarios/campos antiguos
   sobre bolos en B y nombres históricos.
 - No se deben exponer claves de IA/email en cliente Flutter. Deben ir en `.env`
@@ -642,7 +642,7 @@ SQLite/Supabase mediante tools internas.
 5. Añadir confirmaciones.
 6. Tests de tools sin IA.
 
-### Fase 6 — Preparación Verifactu
+### Fase 6 — Modo fiscal estricto
 **Objetivo:** reservar compatibilidad futura sin implementar todavía el envío
 AEAT completo.
 
@@ -663,7 +663,7 @@ AEAT completo.
 - `lib/models/invoice_fiscal_record.dart`
 - `lib/models/invoice_event.dart`
 - `lib/repositories/invoice_fiscal_record_repository.dart`
-- `lib/services/verifactu_service.dart`
+- Servicio de modo fiscal estricto
 
 **Migración**
 - `v18_invoice_fiscal_fields.dart`
@@ -692,7 +692,7 @@ AEAT completo.
 3. Crear servicio de hash local.
 4. Preparar payload QR.
 5. Añadir advertencias/bloqueos de edición.
-6. Documentar que no es implementación Verifactu completa.
+6. Documentar el alcance del modo fiscal estricto.
 
 ## Variables de entorno (.env)
 ```
