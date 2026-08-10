@@ -17,8 +17,24 @@ import '../core/utils/invoice_file_name.dart';
 import '../providers/stats_provider.dart';
 import '../repositories/app_event_repository.dart';
 
+class _InvoicePagePlan {
+  final int pageNumber;
+  final int totalPages;
+  final List<InvoiceLineItem> items;
+
+  const _InvoicePagePlan({
+    required this.pageNumber,
+    required this.totalPages,
+    required this.items,
+  });
+}
+
 class PdfService {
   static const _white = PdfColors.white;
+  static const _pageMarginTop = 34.0;
+  static const _pageMarginBottom = 28.0;
+  static const _pageMarginSide = 42.5;
+  static const _compactSectionSpacing = 6.0;
 
   static pw.Font? _regularFont;
   static pw.Font? _boldFont;
@@ -47,13 +63,16 @@ class PdfService {
     final theme = PdfTheme.fromName(settings.pdfTheme);
     final primaryColor = theme.primaryColor;
     final headerBg = theme.headerBg;
-    final rowAlt = theme.rowAlt;
     final isRectifying = invoice.isRectifying;
     final hasFiscalData =
         invoice.isFiscallyIssued ||
         (invoice.fiscalHash?.trim().isNotEmpty ?? false);
     final titleText = isRectifying ? 'FACTURA RECTIFICATIVA' : 'FACTURA';
     final dateFormat = DateFormat('dd/MM/yyyy');
+    final pagePlans = _buildInvoicePagePlans(
+      invoice: invoice,
+      hasFiscalData: hasFiscalData,
+    );
 
     pw.ImageProvider? logoImage;
     if (settings.logoPath.isNotEmpty) {
@@ -64,517 +83,37 @@ class PdfService {
       }
     }
 
-    pdf.addPage(
-      pw.Page(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(56.7), // ~2cm
-        theme: pw.ThemeData.withFont(base: _regularFont, bold: _boldFont),
-        build: (context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              // En rectificativas el título largo va separado para no
-              // comprimir el logo configurado.
-              if (isRectifying) ...[
-                pw.Align(
-                  alignment: pw.Alignment.centerLeft,
-                  child: logoImage != null
-                      ? pw.Image(
-                          logoImage,
-                          height: settings.logoSize,
-                          fit: pw.BoxFit.contain,
-                        )
-                      : pw.SizedBox(height: settings.logoSize),
-                ),
-                pw.SizedBox(height: 8),
-                pw.Text(
-                  titleText,
-                  style: pw.TextStyle(
-                    fontSize: 36,
-                    fontWeight: pw.FontWeight.bold,
-                    color: primaryColor,
-                  ),
-                ),
-              ] else
-                pw.Row(
-                  crossAxisAlignment: pw.CrossAxisAlignment.center,
-                  children: [
-                    pw.Expanded(
-                      child: pw.Align(
-                        alignment: pw.Alignment.centerLeft,
-                        child: logoImage != null
-                            ? pw.Image(
-                                logoImage,
-                                height: settings.logoSize,
-                                fit: pw.BoxFit.contain,
-                              )
-                            : pw.SizedBox(height: settings.logoSize),
-                      ),
-                    ),
-                    pw.Text(
-                      titleText,
-                      style: pw.TextStyle(
-                        fontSize: 36,
-                        fontWeight: pw.FontWeight.bold,
-                        color: primaryColor,
-                      ),
-                    ),
-                  ],
-                ),
-              pw.SizedBox(height: 4),
-              pw.Divider(color: PdfColors.grey400, thickness: 1),
-              pw.SizedBox(height: 8),
-
-              // Emisor / Facturar a
-              pw.Row(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Expanded(
-                    flex: 2,
-                    child: pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.start,
-                      children: [
-                        pw.Text(
-                          'EMISOR',
-                          style: pw.TextStyle(
-                            fontSize: 12,
-                            fontWeight: pw.FontWeight.bold,
-                            color: primaryColor,
-                          ),
-                        ),
-                        pw.SizedBox(height: 6),
-                        pw.Text(
-                          settings.emisorNombre,
-                          style: const pw.TextStyle(fontSize: 10),
-                        ),
-                        pw.Text(
-                          settings.emisorNIF,
-                          style: const pw.TextStyle(fontSize: 10),
-                        ),
-                        if (settings.emisorDireccion.isNotEmpty)
-                          pw.Text(
-                            settings.emisorDireccion,
-                            style: const pw.TextStyle(fontSize: 10),
-                          ),
-                        pw.Text(
-                          [
-                            settings.emisorCiudad,
-                            if (settings.emisorProvincia.isNotEmpty)
-                              settings.emisorProvincia,
-                            if (settings.emisorCodigoPostal.isNotEmpty)
-                              settings.emisorCodigoPostal,
-                          ].where((s) => s.isNotEmpty).join(', '),
-                          style: const pw.TextStyle(fontSize: 10),
-                        ),
-                        if (settings.emisorEmail.isNotEmpty)
-                          pw.Text(
-                            settings.emisorEmail,
-                            style: pw.TextStyle(
-                              fontSize: 10,
-                              color: PdfColors.blue800,
-                            ),
-                          ),
-                        if (settings.emisorTelefono.isNotEmpty)
-                          pw.Text(
-                            settings.emisorTelefono,
-                            style: const pw.TextStyle(fontSize: 10),
-                          ),
-                      ],
-                    ),
-                  ),
-                  pw.SizedBox(width: 40),
-                  pw.Expanded(
-                    flex: 2,
-                    child: pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.start,
-                      children: [
-                        pw.Text(
-                          'FACTURAR A',
-                          style: pw.TextStyle(
-                            fontSize: 12,
-                            fontWeight: pw.FontWeight.bold,
-                            color: primaryColor,
-                          ),
-                        ),
-                        pw.SizedBox(height: 6),
-                        pw.Text(
-                          client.nombre,
-                          style: const pw.TextStyle(fontSize: 10),
-                        ),
-                        pw.Text(
-                          client.cifNif,
-                          style: const pw.TextStyle(fontSize: 10),
-                        ),
-                        pw.Text(
-                          client.direccion,
-                          style: const pw.TextStyle(fontSize: 10),
-                        ),
-                        pw.Text(
-                          [
-                            client.ciudad,
-                            if (client.provincia.isNotEmpty) client.provincia,
-                            if (client.codigoPostal.isNotEmpty)
-                              client.codigoPostal,
-                          ].where((s) => s.isNotEmpty).join(', '),
-                          style: const pw.TextStyle(fontSize: 10),
-                        ),
-                        if (client.email != null && client.email!.isNotEmpty)
-                          pw.Text(
-                            client.email!,
-                            style: pw.TextStyle(
-                              fontSize: 10,
-                              color: PdfColors.blue800,
-                            ),
-                          ),
-                        if (client.telefono != null &&
-                            client.telefono!.isNotEmpty)
-                          pw.Text(
-                            client.telefono!,
-                            style: const pw.TextStyle(fontSize: 10),
-                          ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              pw.SizedBox(height: 8),
-
-              if (isRectifying) ...[
-                pw.Container(
-                  width: double.infinity,
-                  padding: const pw.EdgeInsets.all(12),
-                  decoration: pw.BoxDecoration(
-                    color: PdfColors.amber50,
-                    border: pw.Border.all(color: PdfColors.amber200, width: 1),
-                    borderRadius: pw.BorderRadius.circular(8),
-                  ),
-                  child: pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Text(
-                        'Factura rectificativa',
-                        style: pw.TextStyle(
-                          fontSize: 11,
-                          fontWeight: pw.FontWeight.bold,
-                          color: PdfColors.orange800,
-                        ),
-                      ),
-                      pw.SizedBox(height: 4),
-                      pw.Text(
-                        'Rectifica la factura nº ${invoice.originalInvoiceNumber ?? '-'}'
-                        '${invoice.originalInvoiceDate != null ? ' de ${dateFormat.format(invoice.originalInvoiceDate!)}' : ''}.',
-                        style: const pw.TextStyle(fontSize: 10),
-                      ),
-                      if ((invoice.rectificationReason ?? '')
-                          .trim()
-                          .isNotEmpty) ...[
-                        pw.SizedBox(height: 4),
-                        pw.Text(
-                          'Motivo: ${invoice.rectificationReason!.trim()}',
-                          style: const pw.TextStyle(fontSize: 10),
-                        ),
-                      ],
-                      pw.SizedBox(height: 4),
-                      pw.Text(
-                        'Tipo de rectificación: ${invoice.rectificationType == RectificationType.difference ? 'Por diferencia' : 'Por sustitución'}',
-                        style: const pw.TextStyle(fontSize: 10),
-                      ),
-                    ],
-                  ),
-                ),
-                pw.SizedBox(height: 12),
-              ],
-
-              // Fecha, nº factura, IBAN
-              pw.Row(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Expanded(
-                    flex: 2,
-                    child: pw.Row(
-                      children: [
-                        pw.Text(
-                          'Fecha:       ',
-                          style: const pw.TextStyle(fontSize: 10),
-                        ),
-                        pw.Text(
-                          dateFormat.format(invoice.fecha),
-                          style: pw.TextStyle(
-                            fontSize: 10,
-                            fontWeight: pw.FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  pw.SizedBox(width: 40),
-                  pw.Expanded(
-                    flex: 2,
-                    child: pw.Row(
-                      children: [
-                        pw.Text(
-                          isRectifying ? 'N.º rectificativa' : 'N.º de factura',
-                          style: const pw.TextStyle(fontSize: 10),
-                        ),
-                        pw.SizedBox(width: 30),
-                        pw.Text(
-                          invoice.visualNumber,
-                          style: pw.TextStyle(
-                            fontSize: 10,
-                            fontWeight: pw.FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              pw.SizedBox(height: 4),
-              pw.Row(
-                children: [
-                  pw.Text(
-                    'Información de pago: ',
-                    style: const pw.TextStyle(fontSize: 10),
-                  ),
-                  pw.Text(
-                    settings.iban,
-                    style: pw.TextStyle(
-                      fontSize: 10,
-                      fontWeight: pw.FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-              pw.SizedBox(height: 20),
-
-              // Table
-              _buildInvoiceTable(invoice, headerBg, rowAlt),
-              pw.SizedBox(height: 12),
-
-              // Totals
-              pw.Align(
-                alignment: pw.Alignment.centerRight,
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.end,
-                  children: [
-                    pw.Row(
-                      mainAxisSize: pw.MainAxisSize.min,
-                      children: [
-                        pw.SizedBox(
-                          width: 180,
-                          child: pw.Text(
-                            'Subtotal',
-                            textAlign: pw.TextAlign.right,
-                            style: const pw.TextStyle(fontSize: 10),
-                          ),
-                        ),
-                        pw.SizedBox(width: 20),
-                        pw.SizedBox(
-                          width: 80,
-                          child: pw.Text(
-                            _formatCurrency(invoice.subtotal),
-                            textAlign: pw.TextAlign.right,
-                            style: const pw.TextStyle(fontSize: 10),
-                          ),
-                        ),
-                      ],
-                    ),
-                    pw.SizedBox(height: 4),
-                    pw.Row(
-                      mainAxisSize: pw.MainAxisSize.min,
-                      children: [
-                        pw.SizedBox(
-                          width: 180,
-                          child: pw.Text(
-                            'Impuesto sobre las ventas al ${(invoice.ivaRate * 100).round()}%',
-                            textAlign: pw.TextAlign.right,
-                            style: const pw.TextStyle(fontSize: 10),
-                          ),
-                        ),
-                        pw.SizedBox(width: 20),
-                        pw.SizedBox(
-                          width: 80,
-                          child: pw.Text(
-                            _formatCurrency(invoice.ivaAmount),
-                            textAlign: pw.TextAlign.right,
-                            style: const pw.TextStyle(fontSize: 10),
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (invoice.irpfRate > 0) ...[
-                      pw.SizedBox(height: 4),
-                      pw.Row(
-                        mainAxisSize: pw.MainAxisSize.min,
-                        children: [
-                          pw.SizedBox(
-                            width: 180,
-                            child: pw.Text(
-                              'Retención IRPF (${(invoice.irpfRate * 100).toStringAsFixed(0)}%)',
-                              textAlign: pw.TextAlign.right,
-                              style: const pw.TextStyle(fontSize: 10),
-                            ),
-                          ),
-                          pw.SizedBox(width: 20),
-                          pw.SizedBox(
-                            width: 80,
-                            child: pw.Text(
-                              '-${_formatCurrency(invoice.irpfAmount)}',
-                              textAlign: pw.TextAlign.right,
-                              style: const pw.TextStyle(fontSize: 10),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                    pw.SizedBox(height: 8),
-                    pw.Container(
-                      padding: const pw.EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 10,
-                      ),
-                      decoration: pw.BoxDecoration(
-                        color: headerBg,
-                        borderRadius: pw.BorderRadius.circular(4),
-                      ),
-                      child: pw.Row(
-                        mainAxisSize: pw.MainAxisSize.min,
-                        children: [
-                          pw.SizedBox(
-                            width: 100,
-                            child: pw.Text(
-                              'TOTAL',
-                              textAlign: pw.TextAlign.center,
-                              style: pw.TextStyle(
-                                fontSize: 12,
-                                fontWeight: pw.FontWeight.bold,
-                                color: _white,
-                              ),
-                            ),
-                          ),
-                          pw.SizedBox(width: 20),
-                          pw.SizedBox(
-                            width: 80,
-                            child: pw.Text(
-                              _formatCurrency(invoice.total),
-                              textAlign: pw.TextAlign.right,
-                              style: pw.TextStyle(
-                                fontSize: 14,
-                                fontWeight: pw.FontWeight.bold,
-                                color: _white,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (hasFiscalData) ...[
-                pw.SizedBox(height: 16),
-                pw.Container(
-                  width: double.infinity,
-                  padding: const pw.EdgeInsets.all(14),
-                  decoration: pw.BoxDecoration(
-                    color: PdfColors.grey100,
-                    borderRadius: pw.BorderRadius.circular(10),
-                    border: pw.Border.all(color: PdfColors.grey300, width: 0.8),
-                  ),
-                  child: pw.Row(
-                    crossAxisAlignment: pw.CrossAxisAlignment.center,
-                    children: [
-                      pw.Expanded(
-                        child: pw.Column(
-                          crossAxisAlignment: pw.CrossAxisAlignment.start,
-                          children: [
-                            pw.Text(
-                              'INFORMACIÓN FISCAL',
-                              style: pw.TextStyle(
-                                fontSize: 11,
-                                fontWeight: pw.FontWeight.bold,
-                                color: primaryColor,
-                              ),
-                            ),
-                            pw.SizedBox(height: 6),
-                            pw.Text(
-                              'Factura registrada con control fiscal activo',
-                              style: const pw.TextStyle(fontSize: 9),
-                            ),
-                            pw.SizedBox(height: 8),
-                            pw.Text(
-                              'Hash fiscal:',
-                              style: pw.TextStyle(
-                                fontSize: 9,
-                                fontWeight: pw.FontWeight.bold,
-                                color: primaryColor,
-                              ),
-                            ),
-                            pw.Text(
-                              invoice.fiscalHash == null
-                                  ? '-'
-                                  : invoice.fiscalHash!.substring(
-                                      0,
-                                      invoice.fiscalHash!.length < 12
-                                          ? invoice.fiscalHash!.length
-                                          : 12,
-                                    ),
-                              style: const pw.TextStyle(fontSize: 8),
-                            ),
-                            if (invoice.isFiscallyIssued) ...[
-                              pw.SizedBox(height: 8),
-                              pw.Text(
-                                'Factura emitida con registro fiscal interno.',
-                                style: pw.TextStyle(
-                                  fontSize: 9,
-                                  fontWeight: pw.FontWeight.bold,
-                                  color: PdfColors.orange800,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                      pw.SizedBox(width: 16),
-                      pw.Container(
-                        padding: const pw.EdgeInsets.all(8),
-                        decoration: pw.BoxDecoration(
-                          color: _white,
-                          borderRadius: pw.BorderRadius.circular(8),
-                          border: pw.Border.all(
-                            color: PdfColors.grey300,
-                            width: 0.8,
-                          ),
-                        ),
-                        child: pw.Column(
-                          children: [
-                            pw.Text(
-                              'QR fiscal',
-                              style: pw.TextStyle(
-                                fontSize: 9,
-                                fontWeight: pw.FontWeight.bold,
-                                color: primaryColor,
-                              ),
-                            ),
-                            pw.SizedBox(height: 6),
-                            pw.BarcodeWidget(
-                              barcode: pw.Barcode.qrCode(),
-                              data: _buildFiscalQrData(invoice),
-                              width: 78,
-                              height: 78,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ],
-          );
-        },
-      ),
-    );
+    for (final pagePlan in pagePlans) {
+      pdf.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.fromLTRB(
+            _pageMarginSide,
+            _pageMarginTop,
+            _pageMarginSide,
+            _pageMarginBottom,
+          ),
+          theme: pw.ThemeData.withFont(base: _regularFont, bold: _boldFont),
+          build: (context) {
+            return _buildInvoicePage(
+              invoice: invoice,
+              client: client,
+              settings: settings,
+              primaryColor: primaryColor,
+              headerBg: headerBg,
+              isRectifying: isRectifying,
+              hasFiscalData: hasFiscalData,
+              titleText: titleText,
+              dateFormat: dateFormat,
+              logoImage: logoImage,
+              items: pagePlan.items,
+              pageNumber: pagePlan.pageNumber,
+              totalPages: pagePlan.totalPages,
+            );
+          },
+        ),
+      );
+    }
 
     final dir = await getApplicationDocumentsDirectory();
     final fileName = buildInvoicePdfFileName(
@@ -598,13 +137,570 @@ class PdfService {
     return file;
   }
 
-  static pw.Widget _buildInvoiceTable(
-    Invoice invoice,
-    PdfColor headerBg,
-    PdfColor rowAlt,
-  ) {
-    final items = invoice.items;
+  static pw.Widget _buildInvoicePage({
+    required Invoice invoice,
+    required Client client,
+    required AppSettings settings,
+    required PdfColor primaryColor,
+    required PdfColor headerBg,
+    required bool isRectifying,
+    required bool hasFiscalData,
+    required String titleText,
+    required DateFormat dateFormat,
+    required pw.ImageProvider? logoImage,
+    required List<InvoiceLineItem> items,
+    required int pageNumber,
+    required int totalPages,
+  }) {
+    final isContinuationPage = pageNumber > 1;
 
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        if (isContinuationPage) ...[
+          pw.Text(
+            'Factura Nº ${invoice.visualNumber} (continuación)',
+            style: const pw.TextStyle(
+              fontSize: 9,
+              color: PdfColors.grey700,
+            ),
+          ),
+          pw.SizedBox(height: 6),
+        ] else if (isRectifying) ...[
+          pw.Align(
+            alignment: pw.Alignment.centerLeft,
+            child: logoImage != null
+                ? pw.Image(
+                    logoImage,
+                    height: settings.logoSize,
+                    fit: pw.BoxFit.contain,
+                  )
+                : pw.SizedBox(height: settings.logoSize),
+          ),
+          pw.SizedBox(height: 8),
+          pw.Text(
+            titleText,
+            style: pw.TextStyle(
+              fontSize: 36,
+              fontWeight: pw.FontWeight.bold,
+              color: primaryColor,
+            ),
+          ),
+        ] else
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.center,
+            children: [
+              pw.Expanded(
+                child: pw.Align(
+                  alignment: pw.Alignment.centerLeft,
+                  child: logoImage != null
+                      ? pw.Image(
+                          logoImage,
+                          height: settings.logoSize,
+                          fit: pw.BoxFit.contain,
+                        )
+                      : pw.SizedBox(height: settings.logoSize),
+                ),
+              ),
+              pw.Text(
+                titleText,
+                style: pw.TextStyle(
+                  fontSize: 36,
+                  fontWeight: pw.FontWeight.bold,
+                  color: primaryColor,
+                ),
+              ),
+            ],
+          ),
+        pw.SizedBox(height: 3),
+        pw.Divider(color: PdfColors.grey400, thickness: 1),
+        pw.SizedBox(height: 6),
+
+        if (!isContinuationPage) ...[
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Expanded(
+                flex: 2,
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'EMISOR',
+                      style: pw.TextStyle(
+                        fontSize: 12,
+                        fontWeight: pw.FontWeight.bold,
+                        color: primaryColor,
+                      ),
+                    ),
+                    pw.SizedBox(height: 6),
+                    pw.Text(
+                      settings.emisorNombre,
+                      style: const pw.TextStyle(fontSize: 10),
+                    ),
+                    pw.Text(
+                      settings.emisorNIF,
+                      style: const pw.TextStyle(fontSize: 10),
+                    ),
+                    if (settings.emisorDireccion.isNotEmpty)
+                      pw.Text(
+                        settings.emisorDireccion,
+                        style: const pw.TextStyle(fontSize: 10),
+                      ),
+                    pw.Text(
+                      [
+                        settings.emisorCiudad,
+                        if (settings.emisorProvincia.isNotEmpty)
+                          settings.emisorProvincia,
+                        if (settings.emisorCodigoPostal.isNotEmpty)
+                          settings.emisorCodigoPostal,
+                      ].where((s) => s.isNotEmpty).join(', '),
+                      style: const pw.TextStyle(fontSize: 10),
+                    ),
+                    if (settings.emisorEmail.isNotEmpty)
+                      pw.Text(
+                        settings.emisorEmail,
+                        style: pw.TextStyle(
+                          fontSize: 10,
+                          color: PdfColors.blue800,
+                        ),
+                      ),
+                    if (settings.emisorTelefono.isNotEmpty)
+                      pw.Text(
+                        settings.emisorTelefono,
+                        style: const pw.TextStyle(fontSize: 10),
+                      ),
+                  ],
+                ),
+              ),
+              pw.SizedBox(width: 40),
+              pw.Expanded(
+                flex: 2,
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'FACTURAR A',
+                      style: pw.TextStyle(
+                        fontSize: 12,
+                        fontWeight: pw.FontWeight.bold,
+                        color: primaryColor,
+                      ),
+                    ),
+                    pw.SizedBox(height: 6),
+                    pw.Text(
+                      client.nombre,
+                      style: const pw.TextStyle(fontSize: 10),
+                    ),
+                    pw.Text(
+                      client.cifNif,
+                      style: const pw.TextStyle(fontSize: 10),
+                    ),
+                    pw.Text(
+                      client.direccion,
+                      style: const pw.TextStyle(fontSize: 10),
+                    ),
+                    pw.Text(
+                      [
+                        client.ciudad,
+                        if (client.provincia.isNotEmpty) client.provincia,
+                        if (client.codigoPostal.isNotEmpty) client.codigoPostal,
+                      ].where((s) => s.isNotEmpty).join(', '),
+                      style: const pw.TextStyle(fontSize: 10),
+                    ),
+                    if (client.email != null && client.email!.isNotEmpty)
+                      pw.Text(
+                        client.email!,
+                        style: pw.TextStyle(
+                          fontSize: 10,
+                          color: PdfColors.blue800,
+                        ),
+                      ),
+                    if (client.telefono != null && client.telefono!.isNotEmpty)
+                      pw.Text(
+                        client.telefono!,
+                        style: const pw.TextStyle(fontSize: 10),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          pw.SizedBox(height: 6),
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Expanded(
+                flex: 2,
+                child: pw.Row(
+                  children: [
+                    pw.Text(
+                      'Fecha:       ',
+                      style: const pw.TextStyle(fontSize: 10),
+                    ),
+                    pw.Text(
+                      dateFormat.format(invoice.fecha),
+                      style: pw.TextStyle(
+                        fontSize: 10,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              pw.SizedBox(width: 40),
+              pw.Expanded(
+                flex: 2,
+                child: pw.Row(
+                  children: [
+                    pw.Text(
+                      isRectifying ? 'N.º rectificativa' : 'N.º de factura',
+                      style: const pw.TextStyle(fontSize: 10),
+                    ),
+                    pw.SizedBox(width: 30),
+                    pw.Text(
+                      invoice.visualNumber,
+                      style: pw.TextStyle(
+                        fontSize: 10,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          pw.SizedBox(height: 4),
+          pw.Row(
+            children: [
+              pw.Text(
+                'Información de pago: ',
+                style: const pw.TextStyle(fontSize: 10),
+              ),
+              pw.Text(
+                settings.iban,
+                style: pw.TextStyle(
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          pw.SizedBox(height: 8),
+        ],
+
+        _buildInvoiceTable(items, headerBg),
+        pw.SizedBox(height: 8),
+        if (pageNumber == totalPages) ...[
+          pw.SizedBox(height: 8),
+          pw.Align(
+            alignment: pw.Alignment.centerRight,
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.end,
+              children: [
+                pw.Row(
+                  mainAxisSize: pw.MainAxisSize.min,
+                  children: [
+                    pw.SizedBox(
+                      width: 180,
+                      child: pw.Text(
+                        'Subtotal',
+                        textAlign: pw.TextAlign.right,
+                        style: const pw.TextStyle(fontSize: 10),
+                      ),
+                    ),
+                    pw.SizedBox(width: 20),
+                    pw.SizedBox(
+                      width: 80,
+                      child: pw.Text(
+                        _formatCurrency(invoice.subtotal),
+                        textAlign: pw.TextAlign.right,
+                        style: const pw.TextStyle(fontSize: 10),
+                      ),
+                    ),
+                  ],
+                ),
+                pw.SizedBox(height: 4),
+                pw.Row(
+                  mainAxisSize: pw.MainAxisSize.min,
+                  children: [
+                    pw.SizedBox(
+                      width: 180,
+                      child: pw.Text(
+                        'Impuesto sobre las ventas al ${(invoice.ivaRate * 100).round()}%',
+                        textAlign: pw.TextAlign.right,
+                        style: const pw.TextStyle(fontSize: 10),
+                      ),
+                    ),
+                    pw.SizedBox(width: 20),
+                    pw.SizedBox(
+                      width: 80,
+                      child: pw.Text(
+                        _formatCurrency(invoice.ivaAmount),
+                        textAlign: pw.TextAlign.right,
+                        style: const pw.TextStyle(fontSize: 10),
+                      ),
+                    ),
+                  ],
+                ),
+                if (invoice.irpfRate > 0) ...[
+                  pw.SizedBox(height: 4),
+                  pw.Row(
+                    mainAxisSize: pw.MainAxisSize.min,
+                    children: [
+                      pw.SizedBox(
+                        width: 180,
+                        child: pw.Text(
+                          'Retención IRPF (${(invoice.irpfRate * 100).toStringAsFixed(0)}%)',
+                          textAlign: pw.TextAlign.right,
+                          style: const pw.TextStyle(fontSize: 10),
+                        ),
+                      ),
+                      pw.SizedBox(width: 20),
+                      pw.SizedBox(
+                        width: 80,
+                        child: pw.Text(
+                          '-${_formatCurrency(invoice.irpfAmount)}',
+                          textAlign: pw.TextAlign.right,
+                          style: const pw.TextStyle(fontSize: 10),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                pw.SizedBox(height: 8),
+                pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  decoration: pw.BoxDecoration(
+                    color: headerBg,
+                    borderRadius: pw.BorderRadius.circular(4),
+                  ),
+                  child: pw.Row(
+                    mainAxisSize: pw.MainAxisSize.min,
+                    children: [
+                      pw.SizedBox(
+                        width: 100,
+                        child: pw.Text(
+                          'TOTAL',
+                          textAlign: pw.TextAlign.center,
+                          style: pw.TextStyle(
+                            fontSize: 12,
+                            fontWeight: pw.FontWeight.bold,
+                            color: _white,
+                          ),
+                        ),
+                      ),
+                      pw.SizedBox(width: 20),
+                      pw.SizedBox(
+                        width: 80,
+                        child: pw.Text(
+                          _formatCurrency(invoice.total),
+                          textAlign: pw.TextAlign.right,
+                          style: pw.TextStyle(
+                            fontSize: 14,
+                            fontWeight: pw.FontWeight.bold,
+                            color: _white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (hasFiscalData) ...[
+            pw.SizedBox(height: 8),
+            pw.Container(
+              width: double.infinity,
+              padding: const pw.EdgeInsets.all(14),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.grey100,
+                borderRadius: pw.BorderRadius.circular(10),
+                border: pw.Border.all(color: PdfColors.grey300, width: 0.8),
+              ),
+              child: pw.Row(
+                crossAxisAlignment: pw.CrossAxisAlignment.center,
+                children: [
+                  pw.Expanded(
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(
+                          'INFORMACIÓN FISCAL',
+                          style: pw.TextStyle(
+                            fontSize: 11,
+                            fontWeight: pw.FontWeight.bold,
+                            color: primaryColor,
+                          ),
+                        ),
+                        pw.SizedBox(height: 6),
+                        pw.Text(
+                          'Factura registrada con control fiscal activo',
+                          style: const pw.TextStyle(fontSize: 9),
+                        ),
+                        pw.SizedBox(height: 8),
+                        pw.Text(
+                          'Hash fiscal:',
+                          style: pw.TextStyle(
+                            fontSize: 9,
+                            fontWeight: pw.FontWeight.bold,
+                            color: primaryColor,
+                          ),
+                        ),
+                        pw.Text(
+                          invoice.fiscalHash == null
+                              ? '-'
+                              : invoice.fiscalHash!.substring(
+                                  0,
+                                  invoice.fiscalHash!.length < 12
+                                      ? invoice.fiscalHash!.length
+                                      : 12,
+                                ),
+                          style: const pw.TextStyle(fontSize: 8),
+                        ),
+                        if (invoice.isFiscallyIssued) ...[
+                          pw.SizedBox(height: 8),
+                          pw.Text(
+                            'Factura emitida con registro fiscal interno.',
+                            style: pw.TextStyle(
+                              fontSize: 9,
+                              fontWeight: pw.FontWeight.bold,
+                              color: PdfColors.orange800,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  pw.SizedBox(width: 16),
+                  pw.Container(
+                    padding: const pw.EdgeInsets.all(8),
+                    decoration: pw.BoxDecoration(
+                      color: _white,
+                      borderRadius: pw.BorderRadius.circular(8),
+                      border: pw.Border.all(
+                        color: PdfColors.grey300,
+                        width: 0.8,
+                      ),
+                    ),
+                    child: pw.Column(
+                      children: [
+                        pw.Text(
+                          'QR fiscal',
+                          style: pw.TextStyle(
+                            fontSize: 9,
+                            fontWeight: pw.FontWeight.bold,
+                            color: primaryColor,
+                          ),
+                        ),
+                        pw.SizedBox(height: 6),
+                        pw.BarcodeWidget(
+                          barcode: pw.Barcode.qrCode(),
+                          data: _buildFiscalQrData(invoice),
+                          width: 78,
+                          height: 78,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+        pw.SizedBox(height: 8),
+        pw.Divider(color: PdfColors.grey400, thickness: 0.5),
+        pw.SizedBox(height: 6),
+        pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Text(
+              settings.emisorNombre.isNotEmpty
+                  ? settings.emisorNombre
+                  : 'Mis Bolos',
+              style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
+            ),
+            pw.Text(
+              'Página $pageNumber de $totalPages',
+              style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  static List<_InvoicePagePlan> _buildInvoicePagePlans({
+    required Invoice invoice,
+    required bool hasFiscalData,
+  }) {
+    final items = invoice.items;
+    if (items.isEmpty) {
+      return [
+        _InvoicePagePlan(pageNumber: 1, totalPages: 1, items: const []),
+      ];
+    }
+
+    final plans = <_InvoicePagePlan>[];
+    int index = 0;
+    int pageNumber = 0;
+    while (index < items.length) {
+      pageNumber += 1;
+      final pageItems = <InvoiceLineItem>[];
+      double usedHeight = pageNumber == 1 ? 170.0 : 70.0;
+      const maxContentHeight = 720.0;
+      const extraHeight = 70.0;
+
+      while (index < items.length) {
+        final item = items[index];
+        final projectedHeight =
+            usedHeight +
+            _estimateInvoiceRowHeight(item.descripcion) +
+            24.0 +
+            extraHeight;
+
+        if (pageItems.isNotEmpty && projectedHeight > maxContentHeight) {
+          break;
+        }
+
+        pageItems.add(item);
+        usedHeight += _estimateInvoiceRowHeight(item.descripcion) + 24.0;
+        index += 1;
+      }
+
+      plans.add(
+        _InvoicePagePlan(
+          pageNumber: pageNumber,
+          totalPages: 0,
+          items: pageItems,
+        ),
+      );
+    }
+
+    final totalPages = plans.length;
+    return [
+      for (final plan in plans)
+        _InvoicePagePlan(
+          pageNumber: plan.pageNumber,
+          totalPages: totalPages,
+          items: plan.items,
+        ),
+    ];
+  }
+
+  static double _estimateInvoiceRowHeight(String description) {
+    final lineCount = (description.length / 70).ceil();
+    return 18.0 + (lineCount - 1) * 8.0;
+  }
+
+  static pw.Widget _buildInvoiceTable(
+    List<InvoiceLineItem> items,
+    PdfColor headerBg,
+  ) {
     return pw.Table(
       border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
       columnWidths: {
@@ -627,7 +723,6 @@ class PdfService {
         // Data rows only (no empty rows)
         for (int i = 0; i < items.length; i++)
           pw.TableRow(
-            decoration: pw.BoxDecoration(color: i % 2 == 1 ? rowAlt : _white),
             children: [
               _dataCell('${items[i].cantidad}', pw.TextAlign.center),
               _dataCell(items[i].descripcion, pw.TextAlign.left),
@@ -647,11 +742,11 @@ class PdfService {
 
   static pw.Widget _headerCell(String text) {
     return pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 5),
       child: pw.Text(
         text,
         style: pw.TextStyle(
-          fontSize: 10,
+          fontSize: 9,
           fontWeight: pw.FontWeight.bold,
           color: _white,
         ),
@@ -662,11 +757,12 @@ class PdfService {
 
   static pw.Widget _dataCell(String text, pw.TextAlign align) {
     return pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
       child: pw.Text(
         text,
-        style: const pw.TextStyle(fontSize: 10),
+        style: const pw.TextStyle(fontSize: 9, lineSpacing: 0.8),
         textAlign: align,
+        softWrap: true,
       ),
     );
   }
