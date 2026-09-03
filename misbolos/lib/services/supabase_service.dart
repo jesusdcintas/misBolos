@@ -30,6 +30,9 @@ class SupabaseService {
       _client?.auth.currentSession?.providerToken;
   String? get providerRefreshToken =>
       _client?.auth.currentSession?.providerRefreshToken;
+  bool get hasGoogleProviderSession =>
+      (providerAccessToken?.trim().isNotEmpty ?? false) ||
+      (providerRefreshToken?.trim().isNotEmpty ?? false);
   User? get currentUser => _client?.auth.currentUser;
 
   /// Stream de cambios de estado de autenticación

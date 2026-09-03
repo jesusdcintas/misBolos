@@ -9,7 +9,6 @@ import '../../models/client.dart';
 import '../../models/invoice.dart';
 import '../../models/invoice_email_log.dart';
 import '../../models/gig.dart';
-import '../../providers/invoice_list_ui_provider.dart';
 import '../../providers/invoice_provider.dart';
 import '../../providers/invoice_email_log_provider.dart';
 import '../../providers/client_provider.dart';
@@ -19,6 +18,7 @@ import '../../services/pdf_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/google_auth_service.dart';
 import '../../services/google_calendar_service.dart';
+import '../../widgets/common/serpentina_celebration.dart';
 import 'package:share_plus/share_plus.dart';
 
 class InvoiceDetailScreen extends ConsumerStatefulWidget {
@@ -44,12 +44,14 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final visibleInvoices = ref.watch(filteredSortedInvoicesProvider);
     final allInvoices =
         ref.watch(invoicesProvider).valueOrNull ?? const <Invoice>[];
-    final invoices = visibleInvoices.isNotEmpty
-        ? visibleInvoices
-        : ([...allInvoices]..sort((a, b) => b.numero.compareTo(a.numero)));
+    final invoices = [...allInvoices]
+      ..sort((a, b) {
+        final byNumber = b.numero.compareTo(a.numero);
+        if (byNumber != 0) return byNumber;
+        return b.fecha.compareTo(a.fecha);
+      });
 
     if (invoices.isEmpty) {
       return Scaffold(
@@ -58,8 +60,15 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
       );
     }
 
-    var currentIndex = invoices.indexWhere((inv) => inv.id == widget.invoiceId);
-    if (currentIndex < 0) currentIndex = 0;
+    final currentIndex = invoices.indexWhere(
+      (inv) => inv.id == widget.invoiceId,
+    );
+    if (currentIndex < 0) {
+      return Scaffold(
+        appBar: AppBar(),
+        body: const Center(child: Text('Factura no encontrada')),
+      );
+    }
     final currentInvoice = invoices[currentIndex];
     final currentInvoiceId = currentInvoice.id;
 
@@ -985,6 +994,10 @@ class _InvoiceDetailContent extends ConsumerWidget {
         ref,
         gig.copyWith(status: newGigStatus),
       );
+    }
+
+    if (status == InvoiceStatus.pagada && context.mounted) {
+      await showCobradoSerpentina(context);
     }
 
     if (context.mounted) {

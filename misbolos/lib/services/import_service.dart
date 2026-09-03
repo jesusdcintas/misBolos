@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'dart:convert';
+import 'package:archive/archive.dart';
 import 'package:csv/csv.dart';
 import 'package:excel/excel.dart';
 import 'package:intl/intl.dart';
@@ -132,13 +133,23 @@ class ImportService {
 
   /// Parse an Excel file and return rows as `List<List<String>>`
   static List<List<String>> parseExcel(Uint8List bytes) {
-    final excel = Excel.decodeBytes(bytes);
-    final sheet = excel.tables[excel.tables.keys.first]!;
-    final rows = <List<String>>[];
-    for (final row in sheet.rows) {
-      rows.add(row.map((cell) => cell?.value?.toString() ?? '').toList());
+    try {
+      final excel = Excel.decodeBytes(bytes);
+      final sheets = excel.tables.values;
+      final parsedSheets = sheets.map((sheet) {
+        return _normalizeRows(
+          sheet.rows
+              .map((row) => row.map((cell) => _cellToString(cell)).toList())
+              .toList(),
+        );
+      }).toList();
+      parsedSheets.sort(
+        (a, b) => _filledCellCount(b).compareTo(_filledCellCount(a)),
+      );
+      return parsedSheets.isEmpty ? [] : parsedSheets.first;
+    } catch (_) {
+      return _parseExcelXmlFallback(bytes);
     }
-    return rows;
   }
 
   /// Parse a CSV file and return rows as `List<List<String>>`
@@ -181,12 +192,40 @@ class ImportService {
 
   /// Try to auto-detect column mapping for Jesús's Excel format
   static Map<int, ColumnRole>? autoDetectJesusFormat(List<List<String>> rows) {
-    if (rows.isEmpty || rows.first.length < 7) return null;
+    if (rows.isEmpty) return null;
 
     final dataRows = rows.length > 1
         ? rows.sublist(1, (rows.length).clamp(0, 10))
         : <List<String>>[];
     if (dataRows.isEmpty) return null;
+
+    final headers = rows.first.map((h) => h.trim().toLowerCase()).toList();
+    final fiveColumnFormat =
+        headers.length >= 5 &&
+        headers[0].contains('factura') &&
+        headers[1].contains('fecha') &&
+        (headers[2].contains('evento') || headers[2].contains('cliente')) &&
+        headers[3] == 'a' &&
+        headers[4] == 'b';
+    final fiveColumnDataLooksValid =
+        dataRows.any((r) => r.length > 1 && _tryParseDate(r[1]) != null) &&
+        dataRows.any((r) => r.length > 2 && r[2].trim().isNotEmpty) &&
+        dataRows.any(
+          (r) =>
+              (r.length > 3 && _isNumeric(r[3])) ||
+              (r.length > 4 && _isNumeric(r[4])),
+        );
+    if (fiveColumnFormat && fiveColumnDataLooksValid) {
+      return {
+        0: ColumnRole.numeroFactura,
+        1: ColumnRole.fecha,
+        2: ColumnRole.cliente,
+        3: ColumnRole.importeFacturable,
+        4: ColumnRole.importeEnB,
+      };
+    }
+
+    if (rows.first.length < 7) return null;
 
     // Jesús format: Col C(2)=nº factura, D(3)=fecha, E(4)=venue, F(5)=importe A, G(6)=importe B
     bool colCNumeric = dataRows.any((r) => r.length > 2 && _isNumeric(r[2]));
@@ -305,8 +344,10 @@ class ImportService {
             SELECT MAX(numero) as max_num
             FROM invoices
             WHERE CAST(strftime('%Y', fecha) AS INTEGER) = ?
+              AND deleted_at IS NULL
+              AND invoice_type = ?
             ''',
-            [year],
+            [year, InvoiceType.normal.dbValue],
           );
           final maxNum = result.first['max_num'] as int?;
           return (maxNum ?? 0) + 1;
@@ -386,10 +427,10 @@ class ImportService {
 
           if (!isEnB) {
             final desiredInvoiceStatus = switch (status) {
-              GigStatus.facturado => mapping.defaultStatus ==
-                      ImportDefaultStatus.borrador
-                  ? InvoiceStatus.borrador
-                  : InvoiceStatus.enviada,
+              GigStatus.facturado =>
+                mapping.defaultStatus == ImportDefaultStatus.borrador
+                    ? InvoiceStatus.borrador
+                    : InvoiceStatus.enviada,
               GigStatus.cobrado => InvoiceStatus.pagada,
               _ => InvoiceStatus.borrador,
             };
@@ -586,6 +627,169 @@ class ImportService {
 
   static bool _isNumeric(String s) {
     return _tryParseDouble(s) != null;
+  }
+
+  static String _cellToString(Data? cell) {
+    final value = cell?.value;
+    if (value == null) return '';
+    return value.toString();
+  }
+
+  static List<List<String>> _parseExcelXmlFallback(Uint8List bytes) {
+    final archive = ZipDecoder().decodeBytes(bytes);
+    final sharedStrings = _parseSharedStrings(archive);
+    final sheetFiles =
+        archive.files
+            .where(
+              (file) =>
+                  file.isFile &&
+                  RegExp(r'^xl/worksheets/sheet\d+\.xml$').hasMatch(file.name),
+            )
+            .toList()
+          ..sort((a, b) => a.name.compareTo(b.name));
+
+    final parsedSheets = <List<List<String>>>[];
+    for (final file in sheetFiles) {
+      parsedSheets.add(
+        _parseWorksheetXml(_archiveText(file), sharedStrings: sharedStrings),
+      );
+    }
+    parsedSheets.sort(
+      (a, b) => _filledCellCount(b).compareTo(_filledCellCount(a)),
+    );
+    return parsedSheets.isEmpty ? [] : _normalizeRows(parsedSheets.first);
+  }
+
+  static List<String> _parseSharedStrings(Archive archive) {
+    final file = archive.files.where((f) => f.name == 'xl/sharedStrings.xml');
+    if (file.isEmpty) return const [];
+    final xml = _archiveText(file.first);
+    return RegExp(r'<si\b[^>]*>(.*?)</si>', dotAll: true).allMatches(xml).map((
+      match,
+    ) {
+      final body = match.group(1) ?? '';
+      return RegExp(
+        r'<t\b[^>]*>(.*?)</t>',
+        dotAll: true,
+      ).allMatches(body).map((m) => _xmlUnescape(m.group(1) ?? '')).join();
+    }).toList();
+  }
+
+  static List<List<String>> _parseWorksheetXml(
+    String xml, {
+    required List<String> sharedStrings,
+  }) {
+    final rows = <List<String>>[];
+    final rowMatches = RegExp(
+      r'<row\b[^>]*>(.*?)</row>',
+      dotAll: true,
+    ).allMatches(xml);
+
+    for (final rowMatch in rowMatches) {
+      final cells = <String>[];
+      final rowXml = rowMatch.group(1) ?? '';
+      final cellMatches = RegExp(
+        r'<c\b([^>]*)>(.*?)</c>',
+        dotAll: true,
+      ).allMatches(rowXml);
+
+      for (final cellMatch in cellMatches) {
+        final attrs = cellMatch.group(1) ?? '';
+        final body = cellMatch.group(2) ?? '';
+        final columnIndex = _cellColumnIndex(attrs);
+        if (columnIndex == null) continue;
+        while (cells.length <= columnIndex) {
+          cells.add('');
+        }
+        cells[columnIndex] = _parseCellValue(
+          attrs,
+          body,
+          sharedStrings: sharedStrings,
+        );
+      }
+      rows.add(cells);
+    }
+    return _normalizeRows(rows);
+  }
+
+  static int? _cellColumnIndex(String attrs) {
+    final ref = RegExp(r'\br="([A-Z]+)\d+"').firstMatch(attrs)?.group(1);
+    if (ref == null) return null;
+    var index = 0;
+    for (final code in ref.codeUnits) {
+      index = index * 26 + (code - 64);
+    }
+    return index - 1;
+  }
+
+  static String _parseCellValue(
+    String attrs,
+    String body, {
+    required List<String> sharedStrings,
+  }) {
+    final type = RegExp(r'\bt="([^"]+)"').firstMatch(attrs)?.group(1);
+    if (type == 'inlineStr') {
+      return RegExp(
+        r'<t\b[^>]*>(.*?)</t>',
+        dotAll: true,
+      ).allMatches(body).map((m) => _xmlUnescape(m.group(1) ?? '')).join();
+    }
+    final raw = RegExp(
+      r'<v\b[^>]*>(.*?)</v>',
+      dotAll: true,
+    ).firstMatch(body)?.group(1);
+    if (raw == null) return '';
+    if (type == 's') {
+      final index = int.tryParse(raw.trim());
+      if (index != null && index >= 0 && index < sharedStrings.length) {
+        return sharedStrings[index];
+      }
+    }
+    return _xmlUnescape(raw);
+  }
+
+  static String _archiveText(ArchiveFile file) {
+    final content = file.content;
+    if (content is List<int>) return utf8.decode(content);
+    return content.toString();
+  }
+
+  static List<List<String>> _normalizeRows(List<List<String>> rows) {
+    return rows
+        .map((row) {
+          final normalized = row.map((cell) => cell.trim()).toList();
+          while (normalized.isNotEmpty && normalized.last.isEmpty) {
+            normalized.removeLast();
+          }
+          return normalized;
+        })
+        .where((row) => row.any((cell) => cell.trim().isNotEmpty))
+        .toList();
+  }
+
+  static int _filledCellCount(List<List<String>> rows) {
+    return rows.fold<int>(
+      0,
+      (total, row) =>
+          total + row.where((cell) => cell.trim().isNotEmpty).length,
+    );
+  }
+
+  static String _xmlUnescape(String value) {
+    return value
+        .replaceAllMapped(RegExp(r'&#x([0-9A-Fa-f]+);'), (match) {
+          final code = int.tryParse(match.group(1)!, radix: 16);
+          return code == null ? match.group(0)! : String.fromCharCode(code);
+        })
+        .replaceAllMapped(RegExp(r'&#(\d+);'), (match) {
+          final code = int.tryParse(match.group(1)!);
+          return code == null ? match.group(0)! : String.fromCharCode(code);
+        })
+        .replaceAll('&quot;', '"')
+        .replaceAll('&apos;', "'")
+        .replaceAll('&gt;', '>')
+        .replaceAll('&lt;', '<')
+        .replaceAll('&amp;', '&');
   }
 
   static String _capitalizeVenue(String name) {

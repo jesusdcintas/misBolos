@@ -71,10 +71,21 @@ Page<void> _slideUpPage(Widget child, GoRouterState state) {
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
+DateTime? _lastRouterSessionSeenAt;
+bool _routerExplicitSignedOut = false;
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authRefresh = GoRouterRefreshStream(
-    Supabase.instance.client.auth.onAuthStateChange.map((_) => null),
+    Supabase.instance.client.auth.onAuthStateChange.map((event) {
+      if (event.session != null) {
+        _lastRouterSessionSeenAt = DateTime.now();
+        _routerExplicitSignedOut = false;
+      } else if (event.event == AuthChangeEvent.signedOut) {
+        _lastRouterSessionSeenAt = null;
+        _routerExplicitSignedOut = true;
+      }
+      return null;
+    }),
   );
   ref.onDispose(authRefresh.dispose);
 
@@ -84,6 +95,10 @@ final routerProvider = Provider<GoRouter>((ref) {
     initialLocation: '/',
     redirect: (context, state) {
       final session = Supabase.instance.client.auth.currentSession;
+      if (session != null) {
+        _lastRouterSessionSeenAt = DateTime.now();
+        _routerExplicitSignedOut = false;
+      }
       final isResetPassword = state.matchedLocation == '/reset-password';
       final loggingIn =
           state.matchedLocation == '/login' ||
@@ -91,7 +106,15 @@ final routerProvider = Provider<GoRouter>((ref) {
           state.matchedLocation == '/register' ||
           state.matchedLocation == '/forgot-password';
 
-      if (session == null && !loggingIn && !isResetPassword) return '/login';
+      if (session == null && !loggingIn && !isResetPassword) {
+        if (_routerExplicitSignedOut) return '/login';
+        final lastSeen = _lastRouterSessionSeenAt;
+        if (lastSeen != null &&
+            DateTime.now().difference(lastSeen) < const Duration(seconds: 15)) {
+          return null;
+        }
+        return '/login';
+      }
       if (isResetPassword) return null;
       if (session != null && loggingIn) return '/';
       return null;
@@ -357,6 +380,9 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp>
   bool _sessionSwitching = false;
   String _sessionMessage = 'Preparando tu espacio seguro…';
   String? _activeUserId;
+  String? _lastLoginSyncUserId;
+  DateTime? _lastAutoCloudSyncStartedAt;
+  DateTime? _lastResumeSyncStartedAt;
 
   @override
   void initState() {
@@ -377,7 +403,10 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp>
       }
       _lockManager.onAuthStateChanged(authState);
       unawaited(_ensureSessionScope(authState.session));
-      if (authState.session == null) return;
+      if (authState.session == null) {
+        _lastLoginSyncUserId = null;
+        return;
+      }
       unawaited(_syncAfterLogin());
     });
     unawaited(
@@ -409,6 +438,9 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp>
     });
     _autoCloudSyncTimer?.cancel();
     _synced = false;
+    _lastLoginSyncUserId = null;
+    _lastAutoCloudSyncStartedAt = null;
+    _lastResumeSyncStartedAt = null;
     await DatabaseHelper.instance.switchToUserDatabase(nextUserId);
     _invalidateSessionDataProviders();
     _activeUserId = nextUserId;
@@ -447,6 +479,10 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp>
     if (!_sessionReady) return;
     final notifier = ref.read(syncProvider.notifier);
     if (!notifier.isAuthenticated) return;
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null || _lastLoginSyncUserId == userId) return;
+    if (notifier.isSyncInFlight) return;
+    _lastLoginSyncUserId = userId;
     await notifier.syncAll(reason: 'auth_signed_in');
   }
 
@@ -467,11 +503,28 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp>
   }
 
   Future<void> _autoCloudSyncTick() async {
+    await _requestCloudSync(
+      reason: 'periodic_auto',
+      minInterval: _autoCloudSyncInterval,
+    );
+  }
+
+  Future<void> _requestCloudSync({
+    required String reason,
+    required Duration minInterval,
+  }) async {
     if (!_autoCloudSyncEnabled) return;
     if (!mounted) return;
     final notifier = ref.read(syncProvider.notifier);
     if (!notifier.isAuthenticated) return;
-    await notifier.syncAll(reason: 'periodic_auto');
+    if (notifier.isSyncInFlight) return;
+    final now = DateTime.now();
+    final lastStarted = _lastAutoCloudSyncStartedAt;
+    if (lastStarted != null && now.difference(lastStarted) < minInterval) {
+      return;
+    }
+    _lastAutoCloudSyncStartedAt = now;
+    await notifier.syncAll(reason: reason);
   }
 
   void _applyRuntimeSettings(AppSettings settings) {
@@ -498,6 +551,13 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _lockManager.onLifecycleChanged(state);
     if (state != AppLifecycleState.resumed) return;
+    final now = DateTime.now();
+    final lastResume = _lastResumeSyncStartedAt;
+    if (lastResume != null &&
+        now.difference(lastResume) < const Duration(seconds: 30)) {
+      return;
+    }
+    _lastResumeSyncStartedAt = now;
     unawaited(
       SyncQueueProcessor.instance.processPending(reason: 'app_resumed'),
     );
@@ -506,7 +566,12 @@ class _MisBolosAppState extends ConsumerState<MisBolosApp>
         reason: 'app_resumed',
       ),
     );
-    unawaited(_autoCloudSyncTick());
+    unawaited(
+      _requestCloudSync(
+        reason: 'app_resume',
+        minInterval: const Duration(seconds: 30),
+      ),
+    );
   }
 
   @override

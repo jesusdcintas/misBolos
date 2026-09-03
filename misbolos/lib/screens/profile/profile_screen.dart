@@ -36,6 +36,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   bool _driveConnectionError = false;
   bool _calendarBusy = false;
   bool _calendarError = false;
+  Future<DriveConnectionCheck>? _driveConnectionFuture;
+  String? _driveConnectionKey;
 
   @override
   void initState() {
@@ -243,20 +245,25 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   ) {
     final driveState = _driveState(settings, googleAuth);
     final calendarState = _calendarState(googleAuth);
+    final driveConnectionFuture = _getDriveConnectionFuture(
+      settings,
+      googleAuth,
+    );
     final cards = [
       _serviceStatusCard(
         title: 'Cuenta Google',
         icon: Icons.account_circle_outlined,
         status: googleAuth.isSignedIn ? 'Conectada' : 'No conectada',
-        subtitle:
-            googleAuth.email ?? 'Inicia sesión para activar servicios cloud.',
+        subtitle: googleAuth.isSignedIn
+            ? (googleAuth.email ?? 'Cuenta Google conectada')
+            : 'Conecta Google para Drive y Calendar.',
         tone: googleAuth.isSignedIn ? _ServiceTone.ready : _ServiceTone.neutral,
         onTap: () => googleAuth.isSignedIn
             ? _showGoogleAccountSheet(googleAuth)
             : ref.read(googleAuthProvider.notifier).signIn(),
       ),
       FutureBuilder<DriveConnectionCheck>(
-        future: GoogleDriveService.instance.checkDriveConnectionStatus(),
+        future: driveConnectionFuture,
         builder: (context, snapshot) {
           final check = snapshot.data;
           final effectiveState = check == null
@@ -305,6 +312,30 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         cards[2],
       ],
     );
+  }
+
+  Future<DriveConnectionCheck> _getDriveConnectionFuture(
+    AppSettings settings,
+    GoogleAuthState googleAuth,
+  ) {
+    final key = [
+      googleAuth.isSignedIn,
+      googleAuth.email ?? '',
+      settings.driveConnected,
+      settings.driveRootFolderId ?? '',
+      settings.driveRootFolderName ?? '',
+    ].join('|');
+    if (_driveConnectionFuture == null || _driveConnectionKey != key) {
+      _driveConnectionKey = key;
+      _driveConnectionFuture = GoogleDriveService.instance
+          .checkDriveConnectionStatus();
+    }
+    return _driveConnectionFuture!;
+  }
+
+  void _refreshDriveConnectionStatus() {
+    _driveConnectionKey = null;
+    _driveConnectionFuture = null;
   }
 
   Widget _serviceStatusCard({
@@ -1020,6 +1051,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   Widget _buildGoogleDriveSection(AppSettings settings) {
+    final googleAuth = ref.watch(googleAuthProvider);
     final connected = settings.driveConnected;
     final hasFolder =
         (settings.driveRootFolderId?.trim().isNotEmpty ?? false) &&
@@ -1141,7 +1173,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             ),
             const SizedBox(height: 8),
             FutureBuilder<DriveConnectionCheck>(
-              future: GoogleDriveService.instance.checkDriveConnectionStatus(),
+              future: _getDriveConnectionFuture(settings, googleAuth),
               builder: (context, snapshot) {
                 final check = snapshot.data;
                 if (check == null) {
@@ -1776,6 +1808,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         _showDriveMessage('$errorPrefix: $e');
       }
     } finally {
+      _refreshDriveConnectionStatus();
       if (mounted) {
         setState(() {
           _driveBusy = false;
@@ -2806,16 +2839,16 @@ class _SyncSection extends ConsumerWidget {
                     ),
                   ),
                 ),
-                const SizedBox(height: 8),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    icon: const Icon(Icons.logout),
-                    label: const Text('Cerrar sesión (MisBolos)'),
-                    onPressed: () => _signOut(context, ref),
-                  ),
-                ),
               ],
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.logout),
+                  label: const Text('Cerrar sesión (MisBolos)'),
+                  onPressed: () => _signOut(context, ref),
+                ),
+              ),
 
               // Estado de sincronización
               if (safeMessage != null) ...[
@@ -2902,6 +2935,7 @@ class _SyncSection extends ConsumerWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Sesión de MisBolos cerrada')),
       );
+      context.go('/login');
     } else {
       ScaffoldMessenger.of(
         context,

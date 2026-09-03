@@ -21,6 +21,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
 
   // Step 1: file data
   String? _fileName;
+  String? _fileError;
   List<List<String>> _rows = [];
   List<ImportColumn> _columns = [];
   String _csvSeparator = ',';
@@ -125,6 +126,35 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                 ),
               ),
             ],
+          ),
+        ],
+        if (_fileError != null) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppColors.errorBg,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.error_outline,
+                  color: AppColors.error,
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _fileError!,
+                    style: const TextStyle(
+                      color: AppColors.error,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
         if (_isCsv && _rows.isEmpty) ...[
@@ -627,7 +657,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
   // ─── File picking ──────────────────────────────────────
 
   Future<void> _pickFile() async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['xlsx', 'xls', 'csv'],
     );
@@ -640,20 +670,27 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
 
     setState(() {
       _fileName = file.name;
+      _fileError = null;
       _isCsv = file.extension?.toLowerCase() == 'csv';
       _rows = [];
       _columns = [];
       _columnRoles = {};
     });
 
-    if (_isCsv) {
-      final content = await File(path).readAsString();
-      final rows = ImportService.parseCsv(content, separator: _csvSeparator);
-      _applyRows(rows);
-    } else {
-      final bytes = await File(path).readAsBytes();
-      final rows = ImportService.parseExcel(bytes);
-      _applyRows(rows);
+    try {
+      if (_isCsv) {
+        final content = await File(path).readAsString();
+        final rows = ImportService.parseCsv(content, separator: _csvSeparator);
+        _applyRows(rows);
+      } else {
+        final bytes = await File(path).readAsBytes();
+        final rows = ImportService.parseExcel(bytes);
+        _applyRows(rows);
+      }
+    } catch (e) {
+      setState(() {
+        _fileError = 'No se pudo leer el archivo seleccionado: $e';
+      });
     }
   }
 
@@ -664,6 +701,9 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
     setState(() {
       _rows = rows;
       _columns = columns;
+      _fileError = rows.isEmpty
+          ? 'No se han encontrado filas importables en este archivo.'
+          : null;
       if (autoMapping != null) {
         _columnRoles = autoMapping;
       }

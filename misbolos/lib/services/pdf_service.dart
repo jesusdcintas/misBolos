@@ -34,7 +34,6 @@ class PdfService {
   static const _pageMarginTop = 34.0;
   static const _pageMarginBottom = 28.0;
   static const _pageMarginSide = 42.5;
-  static const _compactSectionSpacing = 6.0;
 
   static pw.Font? _regularFont;
   static pw.Font? _boldFont;

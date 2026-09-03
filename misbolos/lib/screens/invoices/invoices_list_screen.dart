@@ -21,6 +21,7 @@ import '../../services/pdf_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/google_auth_service.dart';
 import '../../services/google_calendar_service.dart';
+import '../../widgets/common/serpentina_celebration.dart';
 import '../../widgets/common/empty_state.dart';
 import '../../widgets/common/skeleton_loading.dart';
 import '../../core/utils/app_haptics.dart';
@@ -1113,6 +1114,10 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
               .updateStatus(gig.id, newGigStatus);
           await _syncGigToCalendar(ref, gig.copyWith(status: newGigStatus));
         }
+      }
+
+      if (status == InvoiceStatus.pagada && ids.isNotEmpty && context.mounted) {
+        await showCobradoSerpentina(context);
       }
 
       ref.read(_selectionModeProvider.notifier).state = false;

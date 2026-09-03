@@ -10,12 +10,6 @@ import 'package:path_provider_platform_interface/path_provider_platform_interfac
 
 class _FakePathProviderPlatform extends PathProviderPlatform {
   @override
-  Future<Directory> getApplicationDocumentsDirectory() async {
-    final dir = Directory.systemTemp.createTempSync('misbolos_pdf_test');
-    return dir;
-  }
-
-  @override
   Future<String?> getApplicationDocumentsPath() async {
     return Directory.systemTemp.createTempSync('misbolos_pdf_test').path;
   }

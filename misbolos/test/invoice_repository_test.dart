@@ -3,7 +3,9 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:misbolos/database/database_helper.dart';
+import 'package:misbolos/models/gig.dart';
 import 'package:misbolos/models/invoice.dart';
+import 'package:misbolos/repositories/gig_repository.dart';
 import 'package:misbolos/repositories/invoice_repository.dart';
 
 void main() {
@@ -15,7 +17,7 @@ void main() {
   });
 
   setUp(() async {
-    dbPath = p.join(await getDatabasesPath(), 'misbolos.db');
+    dbPath = p.join(await getDatabasesPath(), 'misbolos_guest.db');
     await DatabaseHelper.instance.close();
     await deleteDatabase(dbPath);
   });
@@ -316,6 +318,88 @@ void main() {
       expect((await InvoiceRepository.instance.getById('inv-c'))?.numero, 2);
     },
   );
+
+  test(
+    'una factura borrada no bloquea la numeración de nuevas facturas activas',
+    () async {
+      final db = await DatabaseHelper.instance.database;
+      await db.insert('clients', {
+        'id': 'client-1',
+        'nombre': 'Cliente',
+        'created_at': DateTime(2026).toIso8601String(),
+        'updated_at': DateTime(2026).toIso8601String(),
+      });
+
+      await GigRepository.instance.insert(
+        Gig(
+          id: 'gig-prev',
+          fecha: DateTime(2026, 1, 5),
+          clientId: 'client-1',
+          status: GigStatus.confirmado,
+        ),
+      );
+      await InvoiceRepository.instance.insert(
+        _invoice('inv-prev', 33, DateTime(2026, 1, 5), 'gig-prev'),
+      );
+
+      await GigRepository.instance.insert(
+        Gig(
+          id: 'gig-a',
+          fecha: DateTime(2026, 1, 10),
+          clientId: 'client-1',
+          status: GigStatus.confirmado,
+        ),
+      );
+      await InvoiceRepository.instance.insert(
+        _invoice('inv-a', 34, DateTime(2026, 1, 10), 'gig-a'),
+      );
+      await InvoiceRepository.instance.deleteAndUnlinkGig('inv-a');
+
+      await GigRepository.instance.insert(
+        Gig(
+          id: 'gig-b',
+          fecha: DateTime(2026, 2, 10),
+          clientId: 'client-1',
+          status: GigStatus.facturado,
+        ),
+      );
+
+      final created = await InvoiceRepository.instance.getByGigId('gig-b');
+      expect(created, isNotNull);
+      expect(created?.numero, 34);
+    },
+  );
+
+  test('al borrar la factura se libera el bolo para generar otra', () async {
+    final db = await DatabaseHelper.instance.database;
+    await db.insert('clients', {
+      'id': 'client-1',
+      'nombre': 'Cliente',
+      'created_at': DateTime(2026).toIso8601String(),
+      'updated_at': DateTime(2026).toIso8601String(),
+    });
+
+    await GigRepository.instance.insert(
+      Gig(
+        id: 'gig-a',
+        fecha: DateTime(2026, 1, 10),
+        clientId: 'client-1',
+        status: GigStatus.confirmado,
+      ),
+    );
+    await InvoiceRepository.instance.insertAndLinkGig(
+      _invoice('inv-a', 34, DateTime(2026, 1, 10), 'gig-a'),
+    );
+
+    await InvoiceRepository.instance.deleteAndUnlinkGig('inv-a');
+
+    final gig = await GigRepository.instance.getById('gig-a');
+    final invoice = await InvoiceRepository.instance.getByGigId('gig-a');
+
+    expect(gig?.status, GigStatus.confirmado);
+    expect(gig?.invoiceId, isNull);
+    expect(invoice, isNull);
+  });
 }
 
 Invoice _invoice(String id, int number, DateTime date, String gigId) {

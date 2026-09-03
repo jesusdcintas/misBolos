@@ -134,9 +134,8 @@ class GoogleDriveService {
     final settings = await _settingsRepository.get();
     final account = await getCurrentAccount();
     final hasGoogleAccount =
-        account?.email?.trim().isNotEmpty == true ||
-        PlatformAuthService.instance.isSignedIn ||
-        GoogleAuthService.instance.isSignedIn;
+        GoogleAuthService.instance.isSignedIn ||
+        PlatformAuthService.instance.isSignedIn;
     if (!hasGoogleAccount) {
       await _persistDriveConnected(false);
       final result = DriveConnectionCheck(
@@ -183,12 +182,15 @@ class GoogleDriveService {
     }
 
     try {
-      final folder = await api.files.get(
-        folderId,
-        $fields: 'id,name,mimeType,trashed',
-        supportsAllDrives: true,
-      ) as drive.File;
-      final accessible = folder.id != null &&
+      final folder =
+          await api.files.get(
+                folderId,
+                $fields: 'id,name,mimeType,trashed',
+                supportsAllDrives: true,
+              )
+              as drive.File;
+      final accessible =
+          folder.id != null &&
           folder.trashed != true &&
           folder.mimeType == 'application/vnd.google-apps.folder';
       if (!accessible) {
@@ -922,7 +924,9 @@ class GoogleDriveService {
   Future<void> _persistDriveConnected(bool connected) async {
     final settings = await _settingsRepository.get();
     if (settings.driveConnected == connected) return;
-    await _settingsRepository.save(settings.copyWith(driveConnected: connected));
+    await _settingsRepository.save(
+      settings.copyWith(driveConnected: connected),
+    );
   }
 
   bool _looksLikePermissionError(Object error) {
