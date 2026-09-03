@@ -48,6 +48,8 @@
 	<string>MisBolos puede guardar documentos generados si decides compartirlos o exportarlos.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>MisBolos usa Face ID para desbloquear la app de forma segura.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>MisBolos necesita acceso a tu ubicación mientras usas la app para funciones de integraciones y servicios que puedan requerirla.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
