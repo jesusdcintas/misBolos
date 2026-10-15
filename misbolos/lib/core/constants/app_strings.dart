@@ -54,6 +54,17 @@ class AppStrings {
   static const String iva = 'IVA';
   static const String total = 'TOTAL';
 
+  // Gastos e Inversiones
+  static const String gastosEInversiones = 'Gastos e Inversiones';
+  static const String nuevoGastoOInversion = 'Nuevo gasto o inversión';
+  static const String ivaAcumuladoTrimestre = 'IVA acumulado este trimestre';
+  static const String irpfAcumuladoTrimestre = 'IRPF acumulado este trimestre';
+  static const String avisoEstimacionImpuestos =
+      'Estimación orientativa de lo que podrías llegar a pagar como máximo. '
+      'No descontamos gastos ni inversiones para que no haya sorpresas al '
+      'cierre del trimestre. Tu gestoría hará el cálculo real con las '
+      'deducciones correspondientes.';
+
   // Clientes
   static const String nuevoCliente = 'Nuevo cliente';
   static const String editarCliente = 'Editar cliente';
