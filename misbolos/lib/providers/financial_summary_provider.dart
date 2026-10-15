@@ -7,6 +7,7 @@ import 'assets_provider.dart';
 import 'expenses_provider.dart';
 import 'gig_provider.dart';
 import 'invoice_provider.dart';
+import 'settings_provider.dart';
 import 'stats_provider.dart';
 
 final financialSummaryServiceProvider = Provider<FinancialSummaryService>(
@@ -22,6 +23,7 @@ final financialSummaryProvider =
       final expenses = await ref.watch(expensesProvider.future);
       final assets = await ref.watch(assetsProvider.future);
       final gigs = await ref.watch(gigsProvider.future);
+      final settings = await ref.watch(settingsProvider.future);
       final (from, to) = _periodRange(period);
 
       return ref
@@ -33,6 +35,7 @@ final financialSummaryProvider =
             expenses: expenses,
             assets: assets,
             gigs: gigs,
+            irpfRate: settings.irpfDefault,
           );
     });
 

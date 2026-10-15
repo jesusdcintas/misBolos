@@ -837,7 +837,9 @@ class PdfService {
 
           // === RESUMEN FISCAL ===
           if (fiscalSummary != null) {
-            widgets.add(_sectionTitle('Resumen Fiscal Estimado', primary));
+            widgets.add(
+              _sectionTitle('Estimación de impuestos acumulados', primary),
+            );
             widgets.add(pw.SizedBox(height: 8));
             widgets.add(
               pw.Container(
@@ -849,47 +851,29 @@ class PdfService {
                 child: pw.Column(
                   children: [
                     _summaryRow(
-                      'Ingresos oficiales',
-                      _formatCurrency(fiscalSummary.ingresosOficiales),
-                      color: primary,
-                    ),
-                    _summaryRow(
-                      'IVA repercutido',
-                      _formatCurrency(fiscalSummary.ivaRepercutido),
+                      'IVA acumulado este trimestre',
+                      _formatCurrency(fiscalSummary.ivaEstimadoAPagar),
                       color: warning,
-                    ),
-                    _summaryRow(
-                      'IVA soportado deducible',
-                      _formatCurrency(fiscalSummary.ivaSoportado),
-                      color: success,
-                    ),
-                    _summaryRow(
-                      fiscalSummary.ivaAPagar >= 0
-                          ? 'IVA a pagar'
-                          : 'IVA a compensar',
-                      _formatCurrency(fiscalSummary.ivaAPagar.abs()),
-                      color: fiscalSummary.ivaAPagar >= 0 ? warning : success,
                       bold: true,
                     ),
-                    pw.Divider(color: PdfColors.grey300),
                     _summaryRow(
-                      'Gastos deducibles',
-                      _formatCurrency(fiscalSummary.gastosDeducibles),
-                      color: grey,
-                    ),
-                    _summaryRow(
-                      'Amortización',
-                      _formatCurrency(fiscalSummary.amortizacion),
-                      color: grey,
-                    ),
-                    _summaryRow(
-                      'Beneficio estimado',
-                      _formatCurrency(fiscalSummary.beneficioEstimado),
+                      'IRPF acumulado este trimestre',
+                      _formatCurrency(fiscalSummary.irpfEstimadoAPagar),
                       color: primary,
                       bold: true,
                     ),
                   ],
                 ),
+              ),
+            );
+            widgets.add(pw.SizedBox(height: 6));
+            widgets.add(
+              pw.Text(
+                'Estimación orientativa de lo que podrías llegar a pagar como '
+                'máximo. No descontamos gastos ni inversiones para que no haya '
+                'sorpresas al cierre del trimestre. Tu gestoría hará el cálculo '
+                'real con las deducciones correspondientes.',
+                style: pw.TextStyle(fontSize: 9, color: grey),
               ),
             );
             widgets.add(pw.SizedBox(height: 16));

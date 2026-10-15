@@ -1,82 +1,68 @@
+/// Estimación fiscal orientativa de un periodo.
+///
+/// Todos los importes son BRUTOS: nunca se restan gastos ni inversiones de los
+/// impuestos. [irpfEstimadoAPagar] es una estimación orientativa, no un cálculo
+/// fiscal real (la gestoría aplicará las deducciones correspondientes).
 class FinancialSummary {
   final DateTime from;
   final DateTime to;
-  final double ingresosFacturados;
-  final double ingresosHistoricosEstimados;
-  final double ivaRepercutidoFacturas;
-  final double ivaRepercutidoHistoricoEstimado;
-  final double gastosDeducibles;
-  final double ivaSoportadoGastos;
-  final double ivaSoportadoInversiones;
-  final double amortizacion;
-  final List<FinancialQuarterSummary> quarters;
+
+  /// Base imponible facturada oficialmente en el periodo (informativo).
+  final double ingresosOficiales;
+
+  /// Ingresos no facturados estimados desde bolos cobrados (informativo).
+  final double ingresosB;
+
+  /// Suma de gastos e inversiones del periodo (informativo, nunca se resta).
+  final double totalGastosInversiones;
+
+  /// IVA repercutido bruto de las facturas emitidas en el periodo.
+  final double ivaRepercutidoBruto;
+
+  /// IRPF ya retenido por los clientes en las facturas del periodo.
+  final double irpfAdelantado;
+
+  /// IVA estimado a pagar: igual al IVA repercutido bruto, sin restar nada.
+  final double ivaEstimadoAPagar;
+
+  /// IRPF estimado a pagar: IRPF teórico bruto sobre ingresos menos el IRPF
+  /// ya adelantado por los clientes. Sin restar gastos ni inversiones.
+  final double irpfEstimadoAPagar;
 
   const FinancialSummary({
     required this.from,
     required this.to,
-    this.ingresosFacturados = 0,
-    this.ingresosHistoricosEstimados = 0,
-    this.ivaRepercutidoFacturas = 0,
-    this.ivaRepercutidoHistoricoEstimado = 0,
-    this.gastosDeducibles = 0,
-    this.ivaSoportadoGastos = 0,
-    this.ivaSoportadoInversiones = 0,
-    this.amortizacion = 0,
-    this.quarters = const [],
+    this.ingresosOficiales = 0,
+    this.ingresosB = 0,
+    this.totalGastosInversiones = 0,
+    this.ivaRepercutidoBruto = 0,
+    this.irpfAdelantado = 0,
+    this.ivaEstimadoAPagar = 0,
+    this.irpfEstimadoAPagar = 0,
   });
 
-  double get ingresosOficiales =>
-      ingresosFacturados + ingresosHistoricosEstimados;
-
-  double get ivaRepercutido =>
-      ivaRepercutidoFacturas + ivaRepercutidoHistoricoEstimado;
-
-  double get ivaSoportado => ivaSoportadoGastos + ivaSoportadoInversiones;
-
-  double get ivaAPagar => ivaRepercutido - ivaSoportado;
-
-  double get beneficioEstimado =>
-      ingresosOficiales - gastosDeducibles - amortizacion;
-
-  bool get hasEstimatedHistoricalData =>
-      ingresosHistoricosEstimados > 0 || ivaRepercutidoHistoricoEstimado > 0;
-}
-
-class FinancialQuarterSummary {
-  final int year;
-  final int quarter;
-  final double ingresosFacturados;
-  final double ingresosHistoricosEstimados;
-  final double ivaRepercutidoFacturas;
-  final double ivaRepercutidoHistoricoEstimado;
-  final double gastosDeducibles;
-  final double ivaSoportadoGastos;
-  final double ivaSoportadoInversiones;
-  final double amortizacion;
-
-  const FinancialQuarterSummary({
-    required this.year,
-    required this.quarter,
-    this.ingresosFacturados = 0,
-    this.ingresosHistoricosEstimados = 0,
-    this.ivaRepercutidoFacturas = 0,
-    this.ivaRepercutidoHistoricoEstimado = 0,
-    this.gastosDeducibles = 0,
-    this.ivaSoportadoGastos = 0,
-    this.ivaSoportadoInversiones = 0,
-    this.amortizacion = 0,
-  });
-
-  double get ingresosOficiales =>
-      ingresosFacturados + ingresosHistoricosEstimados;
-
-  double get ivaRepercutido =>
-      ivaRepercutidoFacturas + ivaRepercutidoHistoricoEstimado;
-
-  double get ivaSoportado => ivaSoportadoGastos + ivaSoportadoInversiones;
-
-  double get ivaAPagar => ivaRepercutido - ivaSoportado;
-
-  double get beneficioEstimado =>
-      ingresosOficiales - gastosDeducibles - amortizacion;
+  FinancialSummary copyWith({
+    DateTime? from,
+    DateTime? to,
+    double? ingresosOficiales,
+    double? ingresosB,
+    double? totalGastosInversiones,
+    double? ivaRepercutidoBruto,
+    double? irpfAdelantado,
+    double? ivaEstimadoAPagar,
+    double? irpfEstimadoAPagar,
+  }) {
+    return FinancialSummary(
+      from: from ?? this.from,
+      to: to ?? this.to,
+      ingresosOficiales: ingresosOficiales ?? this.ingresosOficiales,
+      ingresosB: ingresosB ?? this.ingresosB,
+      totalGastosInversiones:
+          totalGastosInversiones ?? this.totalGastosInversiones,
+      ivaRepercutidoBruto: ivaRepercutidoBruto ?? this.ivaRepercutidoBruto,
+      irpfAdelantado: irpfAdelantado ?? this.irpfAdelantado,
+      ivaEstimadoAPagar: ivaEstimadoAPagar ?? this.ivaEstimadoAPagar,
+      irpfEstimadoAPagar: irpfEstimadoAPagar ?? this.irpfEstimadoAPagar,
+    );
+  }
 }
