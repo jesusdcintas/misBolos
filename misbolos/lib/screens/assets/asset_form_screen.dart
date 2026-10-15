@@ -437,6 +437,54 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
     final moneyFmt = NumberFormat.currency(locale: 'es_ES', symbol: '€');
     final isEditing = widget.assetId != null;
 
+    // Las inversiones quedan congeladas: no se dan de alta nuevas ni se editan.
+    // Los registros antiguos se consultan en modo solo-lectura.
+    if (!isEditing) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Inversiones')),
+        body: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  Icons.lock_outline,
+                  size: 48,
+                  color: AppColors.textSecondary,
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Las inversiones ahora se registran junto a los gastos.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Crea el movimiento como "gasto o inversión" y tu gestoría '
+                  'decidirá su clasificación.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                FilledButton.icon(
+                  onPressed: () {
+                    context.pop();
+                    context.push('/expense/new');
+                  },
+                  icon: const Icon(Icons.add),
+                  label: const Text('Nuevo gasto o inversión'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: Text(isEditing ? 'Editar inversión' : 'Nueva inversión'),
