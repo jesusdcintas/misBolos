@@ -8,6 +8,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../database/database_helper.dart';
 import '../../core/utils/invoice_file_name.dart';
+import '../../core/utils/period_utils.dart';
 import '../../models/asset.dart';
 import '../../models/client.dart';
 import '../../models/expense.dart';
@@ -180,6 +181,28 @@ class DriveDocumentSyncService {
   final ClientRepository _clientRepository = ClientRepository.instance;
   final SettingsRepository _settingsRepository = SettingsRepository();
   static const int maxRetryAttempts = 5;
+
+  /// Ruta lógica de Drive para gastos e inversiones a partir de la fecha de la
+  /// factura: `MisBolos/{YYYY}/T{1-4}/{mes capitalizado}/Gastos e Inversiones/`.
+  static String buildExpensePath(DateTime fecha) {
+    const meses = [
+      'Enero',
+      'Febrero',
+      'Marzo',
+      'Abril',
+      'Mayo',
+      'Junio',
+      'Julio',
+      'Agosto',
+      'Septiembre',
+      'Octubre',
+      'Noviembre',
+      'Diciembre',
+    ];
+    final trimestre = PeriodUtils.quarterOfMonth(fecha.month);
+    final mes = meses[fecha.month - 1];
+    return 'MisBolos/${fecha.year}/T$trimestre/$mes/Gastos e Inversiones/';
+  }
   static const String errorMissingFile = 'failed_file_missing';
   static const String errorDevicePath = 'device_path_unavailable';
   static const String errorBadFileDescriptor = 'bad_file_descriptor';
@@ -875,7 +898,7 @@ class DriveDocumentSyncService {
                   candidate,
                   File(path ?? 'adjunto.pdf'),
                 ),
-                parentFolderId: monthFolders.gastosFolderId,
+                parentFolderId: monthFolders.gastosInversionesFolderId,
               );
               await _expenseRepository.updateDriveMetadata(
                 id: candidate.id!,
@@ -1805,12 +1828,12 @@ class DriveDocumentSyncService {
       final monthFolders = await _drive.ensureMonthStructure(expense.fecha);
       listWatch.stop();
       _driveListMs += listWatch.elapsedMilliseconds;
-      folderId = monthFolders.gastosFolderId;
+      folderId = monthFolders.gastosInversionesFolderId;
       final uploaded = await _uploadOrUpdate(
         existingFileId: expense.driveFileId,
         file: stableFile,
         fileName: _expenseFileName(expense, stableFile),
-        parentFolderId: monthFolders.gastosFolderId,
+        parentFolderId: monthFolders.gastosInversionesFolderId,
         mimeType: _mimeTypeFor(stableFile.path),
       );
       await _expenseRepository.update(

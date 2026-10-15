@@ -36,6 +36,7 @@ class DriveMonthFolders {
   final String facturasFolderId;
   final String gastosFolderId;
   final String inversionesFolderId;
+  final String gastosInversionesFolderId;
 
   const DriveMonthFolders({
     required this.yearFolderId,
@@ -44,6 +45,7 @@ class DriveMonthFolders {
     required this.facturasFolderId,
     required this.gastosFolderId,
     required this.inversionesFolderId,
+    required this.gastosInversionesFolderId,
   });
 }
 
@@ -511,6 +513,10 @@ class GoogleDriveService {
       inversionesFolderId: await ensureFolder(
         parentId: monthFolderId,
         folderName: 'INVERSIONES',
+      ),
+      gastosInversionesFolderId: await ensureFolder(
+        parentId: monthFolderId,
+        folderName: 'Gastos e Inversiones',
       ),
     );
     _monthStructureCache[cacheKey] = folders;
