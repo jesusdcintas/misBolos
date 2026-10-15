@@ -23,34 +23,26 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _conceptoController = TextEditingController();
   final _proveedorController = TextEditingController();
-  final _importeBaseController = TextEditingController();
-  final _ivaRateController = TextEditingController(text: '21');
+  final _totalController = TextEditingController();
   final _notasController = TextEditingController();
   final _iaTextController = TextEditingController();
 
   DateTime _fecha = DateTime.now();
   ExpenseCategory _categoria = ExpenseCategory.otros;
-  bool _esDeducible = true;
-  double _porcentajeDeduccion = 100.0;
   String? _documentoPath;
   String? _documentoNombreOriginal;
   bool _loading = false;
   bool _extracting = false;
   bool _loaded = false;
 
-  double get _importeBase =>
-      double.tryParse(_importeBaseController.text.replaceAll(',', '.')) ?? 0;
-  double get _ivaRate =>
-      double.tryParse(_ivaRateController.text.replaceAll(',', '.')) ?? 21.0;
-  double get _ivaAmount => _importeBase * (_ivaRate / 100);
-  double get _total => _importeBase + _ivaAmount;
+  double get _total =>
+      double.tryParse(_totalController.text.replaceAll(',', '.')) ?? 0;
 
   @override
   void dispose() {
     _conceptoController.dispose();
     _proveedorController.dispose();
-    _importeBaseController.dispose();
-    _ivaRateController.dispose();
+    _totalController.dispose();
     _notasController.dispose();
     _iaTextController.dispose();
     super.dispose();
@@ -72,13 +64,10 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
     setState(() {
       _conceptoController.text = expense.concepto;
       _proveedorController.text = expense.proveedor ?? '';
-      _importeBaseController.text = expense.importeBase.toStringAsFixed(2);
-      _ivaRateController.text = expense.ivaRate.toStringAsFixed(0);
+      _totalController.text = expense.total.toStringAsFixed(2);
       _notasController.text = expense.notas ?? '';
       _fecha = expense.fecha;
       _categoria = expense.categoria;
-      _esDeducible = expense.esDeducible;
-      _porcentajeDeduccion = expense.porcentajeDeduccion;
       _documentoPath = expense.documentoPath;
       _documentoNombreOriginal = expense.attachmentDisplayName;
       _loaded = true;
@@ -162,13 +151,13 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
       proveedor: _proveedorController.text.trim().isEmpty
           ? null
           : _proveedorController.text.trim(),
-      importeBase: _importeBase,
-      ivaRate: _ivaRate,
-      ivaAmount: _ivaAmount,
+      importeBase: _total,
+      ivaRate: 0,
+      ivaAmount: 0,
       total: _total,
       categoria: _categoria,
-      esDeducible: _esDeducible,
-      porcentajeDeduccion: _porcentajeDeduccion,
+      esDeducible: false,
+      porcentajeDeduccion: 0,
       documentoPath: _documentoPath,
       attachmentOriginalName: _documentoNombreOriginal,
       notas: _notasController.text.trim().isEmpty
@@ -315,31 +304,11 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
   Future<void> _confirmApplyExtraction(ExpenseExtractionResult result) async {
     final summary = <String>[
       if (result.concepto != null) 'Concepto: ${result.concepto}',
-      if (result.proveedor != null) 'Proveedor fiscal: ${result.proveedor}',
-      if (result.estacion != null) 'Estación: ${result.estacion}',
-      if (result.numeroFactura != null) 'Factura: ${result.numeroFactura}',
+      if (result.proveedor != null) 'Proveedor: ${result.proveedor}',
       if (result.fecha != null)
         'Fecha: ${DateFormat('dd/MM/yyyy').format(result.fecha!)}',
-      if (result.fechaOperacion != null)
-        'F. Operación: ${DateFormat('dd/MM/yyyy').format(result.fechaOperacion!)}',
-      if (result.matriculaVehiculo != null)
-        'Matrícula: ${result.matriculaVehiculo}',
-      if (result.litros != null) 'Litros: ${result.litros!.toStringAsFixed(2)}',
-      if (result.precioPorLitro != null)
-        'Precio/L: ${result.precioPorLitro!.toStringAsFixed(3)} €',
-      if (result.importeBase != null)
-        'Base: ${result.importeBase!.toStringAsFixed(2)} €',
-      if (result.ivaRate != null) 'IVA: ${result.ivaRate!.toStringAsFixed(0)}%',
-      if (result.importeIva != null)
-        'IVA importe: ${result.importeIva!.toStringAsFixed(2)} €',
       if (result.importeTotal != null)
         'Total: ${result.importeTotal!.toStringAsFixed(2)} €',
-      if (result.descuento != null)
-        'Descuento: ${result.descuento!.toStringAsFixed(2)} €',
-      if (result.esDeducible != null)
-        'Deducible: ${result.esDeducible! ? 'Sí' : 'No'}',
-      if (result.porcentajeDeduccion != null)
-        'Deducción: ${result.porcentajeDeduccion!.toStringAsFixed(0)}%',
       if (result.categoria != null) 'Categoría: ${result.categoria!.label}',
       if (result.confidence > 0)
         'Confianza estimada: ${(result.confidence * 100).clamp(0, 100).toStringAsFixed(0)}%',
@@ -400,17 +369,10 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
         _proveedorController.text = result.proveedor!;
       }
       if (result.fecha != null) _fecha = result.fecha!;
-      if (result.importeBase != null) {
-        _importeBaseController.text = result.importeBase!.toStringAsFixed(2);
-      }
-      if (result.ivaRate != null) {
-        _ivaRateController.text = result.ivaRate!.toStringAsFixed(0);
+      if (result.importeTotal != null) {
+        _totalController.text = result.importeTotal!.toStringAsFixed(2);
       }
       if (result.categoria != null) _categoria = result.categoria!;
-      if (result.esDeducible != null) _esDeducible = result.esDeducible!;
-      if (result.porcentajeDeduccion != null) {
-        _porcentajeDeduccion = result.porcentajeDeduccion!.clamp(0, 100);
-      }
       if (result.notas != null && result.notas!.isNotEmpty) {
         _notasController.text = result.notas!;
       }
@@ -480,63 +442,27 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Importe base + IVA
-            Row(
-              children: [
-                Expanded(
-                  flex: 3,
-                  child: TextFormField(
-                    controller: _importeBaseController,
-                    decoration: const InputDecoration(
-                      labelText: 'Base imponible *',
-                      suffixText: '€',
-                    ),
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    onChanged: (_) => setState(() {}),
-                    validator: (v) {
-                      if (v == null || v.trim().isEmpty) {
-                        return 'Obligatorio';
-                      }
-                      if (double.tryParse(v.replaceAll(',', '.')) == null) {
-                        return 'Número no válido';
-                      }
-                      return null;
-                    },
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  flex: 2,
-                  child: TextFormField(
-                    controller: _ivaRateController,
-                    decoration: const InputDecoration(labelText: 'IVA %'),
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    onChanged: (_) => setState(() {}),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            if (_importeBase > 0)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Text(
-                      'IVA: ${_ivaAmount.toStringAsFixed(2)} €   Total: ${_total.toStringAsFixed(2)} €',
-                      style: const TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
-                ),
+            // Importe total
+            TextFormField(
+              controller: _totalController,
+              decoration: const InputDecoration(
+                labelText: 'Importe total *',
+                suffixText: '€',
               ),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              onChanged: (_) => setState(() {}),
+              validator: (v) {
+                if (v == null || v.trim().isEmpty) {
+                  return 'Obligatorio';
+                }
+                if (double.tryParse(v.replaceAll(',', '.')) == null) {
+                  return 'Número no válido';
+                }
+                return null;
+              },
+            ),
             const SizedBox(height: 16),
 
             // Categoría
@@ -554,44 +480,6 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
               },
             ),
             const SizedBox(height: 16),
-
-            // Deducibilidad
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Gasto deducible'),
-              value: _esDeducible,
-              onChanged: (v) => setState(() => _esDeducible = v),
-            ),
-            if (_esDeducible) ...[
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  const Text(
-                    '% Deducción:',
-                    style: TextStyle(color: AppColors.textSecondary),
-                  ),
-                  Expanded(
-                    child: Slider(
-                      value: _porcentajeDeduccion,
-                      min: 0,
-                      max: 100,
-                      divisions: 20,
-                      label: '${_porcentajeDeduccion.toStringAsFixed(0)} %',
-                      onChanged: (v) =>
-                          setState(() => _porcentajeDeduccion = v),
-                    ),
-                  ),
-                  SizedBox(
-                    width: 44,
-                    child: Text(
-                      '${_porcentajeDeduccion.toStringAsFixed(0)} %',
-                      textAlign: TextAlign.end,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-            const SizedBox(height: 12),
 
             // Justificante
             const Text(
