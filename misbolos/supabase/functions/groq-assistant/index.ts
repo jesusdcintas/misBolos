@@ -292,13 +292,6 @@ function normalizeAssistantClients(input: unknown) {
   return input.map(normalizeAssistantClient);
 }
 
-function normalizeText(value: string) {
-  return value
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "");
-}
-
 function readString(value: unknown) {
   if (value === null || value === undefined) return null;
   const text = String(value).trim();
