@@ -50,19 +50,17 @@ void main() {
         expenses: const [],
         assets: const [],
         gigs: const [],
-        irpfRate: 0.15,
       );
 
       expect(summary.ingresosOficiales, 1000);
       expect(summary.ivaRepercutidoBruto, 210);
-      expect(summary.ivaEstimadoAPagar, 210);
-      // IRPF teórico bruto = 1000 * 0.15, sin IRPF adelantado.
-      expect(summary.irpfAdelantado, 0);
-      expect(summary.irpfEstimadoAPagar, closeTo(150, 0.001));
+      // IRPF teórico = 1000 * 20 %, sin retención.
+      expect(summary.irpfRetenido, 0);
+      expect(summary.irpfAIngresar, closeTo(200, 0.001));
     });
 
-    test('IRPF retenido por cliente: IRPF estimado = teórico − adelantado', () {
-      // irpfRate 0.07 sobre 1000 => 70 adelantado por el cliente.
+    test('IRPF retenido por cliente: a ingresar = teórico − retenido', () {
+      // irpfRate 0.07 sobre 1000 => 70 retenido por el cliente.
       final summary = service.calculate(
         from: from,
         to: to,
@@ -77,12 +75,11 @@ void main() {
         expenses: const [],
         assets: const [],
         gigs: const [],
-        irpfRate: 0.15,
       );
 
-      expect(summary.irpfAdelantado, closeTo(70, 0.001));
-      // 1000 * 0.15 - 70 = 80
-      expect(summary.irpfEstimadoAPagar, closeTo(80, 0.001));
+      expect(summary.irpfRetenido, closeTo(70, 0.001));
+      // 1000 * 0.20 - 70 = 130
+      expect(summary.irpfAIngresar, closeTo(130, 0.001));
     });
 
     test('gastos e inversiones muy altos NO cambian IVA ni IRPF estimados', () {
@@ -97,7 +94,6 @@ void main() {
         expenses: const [],
         assets: const [],
         gigs: const [],
-        irpfRate: 0.15,
       );
 
       final conGastos = service.calculate(
@@ -126,11 +122,10 @@ void main() {
           ),
         ],
         gigs: const [],
-        irpfRate: 0.15,
       );
 
-      expect(conGastos.ivaEstimadoAPagar, sinGastos.ivaEstimadoAPagar);
-      expect(conGastos.irpfEstimadoAPagar, sinGastos.irpfEstimadoAPagar);
+      expect(conGastos.ivaRepercutidoBruto, sinGastos.ivaRepercutidoBruto);
+      expect(conGastos.irpfAIngresar, sinGastos.irpfAIngresar);
       // Los gastos e inversiones solo aparecen de forma informativa.
       expect(conGastos.totalGastosInversiones, closeTo(80000, 0.001));
     });
@@ -143,11 +138,10 @@ void main() {
         expenses: const [],
         assets: const [],
         gigs: const [],
-        irpfRate: 0.15,
       );
 
-      expect(summary.ivaEstimadoAPagar, 0);
-      expect(summary.irpfEstimadoAPagar, 0);
+      expect(summary.ivaRepercutidoBruto, 0);
+      expect(summary.irpfAIngresar, 0);
     });
 
     test('las facturas en borrador no generan impuestos estimados', () {
@@ -165,11 +159,10 @@ void main() {
         expenses: const [],
         assets: const [],
         gigs: const [],
-        irpfRate: 0.15,
       );
 
-      expect(summary.ivaEstimadoAPagar, 0);
-      expect(summary.irpfEstimadoAPagar, 0);
+      expect(summary.ivaRepercutidoBruto, 0);
+      expect(summary.irpfAIngresar, 0);
     });
   });
 

@@ -7,10 +7,15 @@ import '../models/invoice.dart';
 class FinancialSummaryService {
   const FinancialSummaryService();
 
+  /// Tipo del pago fraccionado de IRPF (modelo 130) en estimación directa.
+  ///
+  /// Es fijo por ley y no depende del tipo de retención de cada factura ni de
+  /// `AppSettings.irpfDefault` (que solo es la retención por defecto al emitir).
+  static const double irpfPagoFraccionadoRate = 0.20;
+
   /// Calcula una estimación fiscal BRUTA y orientativa del periodo.
   ///
-  /// No se restan gastos ni inversiones de los impuestos. [irpfRate] es el tipo
-  /// de IRPF teórico aplicado sobre los ingresos oficiales (p. ej. 0.15).
+  /// No se restan gastos ni inversiones de los impuestos.
   FinancialSummary calculate({
     required DateTime from,
     required DateTime to,
@@ -18,7 +23,6 @@ class FinancialSummaryService {
     required List<Expense> expenses,
     required List<Asset> assets,
     required List<Gig> gigs,
-    double irpfRate = 0.15,
   }) {
     final emittedInvoices = invoices
         .where(
@@ -36,7 +40,7 @@ class FinancialSummaryService {
       0.0,
       (sum, invoice) => sum + invoice.ivaAmount,
     );
-    final irpfAdelantado = emittedInvoices.fold<double>(
+    final irpfRetenido = emittedInvoices.fold<double>(
       0.0,
       (sum, invoice) => sum + invoice.irpfAmount,
     );
@@ -58,9 +62,8 @@ class FinancialSummaryService {
         .where((asset) => _isWithin(asset.fechaCompra, from, to))
         .fold<double>(0.0, (sum, asset) => sum + asset.importeTotal);
 
-    // IRPF teórico bruto sobre ingresos menos el ya retenido por los clientes.
-    // Estimación orientativa, no cálculo fiscal real.
-    final irpfEstimadoAPagar = ingresosOficiales * irpfRate - irpfAdelantado;
+    final irpfTeorico = ingresosOficiales * irpfPagoFraccionadoRate;
+    final irpfAIngresar = irpfTeorico - irpfRetenido;
 
     return FinancialSummary(
       from: from,
@@ -69,9 +72,9 @@ class FinancialSummaryService {
       ingresosB: ingresosB,
       totalGastosInversiones: totalGastos + totalInversiones,
       ivaRepercutidoBruto: ivaRepercutidoBruto,
-      irpfAdelantado: irpfAdelantado,
-      ivaEstimadoAPagar: ivaRepercutidoBruto,
-      irpfEstimadoAPagar: irpfEstimadoAPagar,
+      irpfTeorico: irpfTeorico,
+      irpfRetenido: irpfRetenido,
+      irpfAIngresar: irpfAIngresar > 0 ? irpfAIngresar : 0,
     );
   }
 

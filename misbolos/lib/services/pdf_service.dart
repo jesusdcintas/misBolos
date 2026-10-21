@@ -851,14 +851,32 @@ class PdfService {
                 child: pw.Column(
                   children: [
                     _summaryRow(
-                      'IVA acumulado este trimestre',
-                      _formatCurrency(fiscalSummary.ivaEstimadoAPagar),
+                      'IVA repercutido bruto',
+                      _formatCurrency(fiscalSummary.ivaRepercutidoBruto),
                       color: warning,
                       bold: true,
                     ),
+                    pw.Divider(color: PdfColors.grey300),
                     _summaryRow(
-                      'IRPF acumulado este trimestre',
-                      _formatCurrency(fiscalSummary.irpfEstimadoAPagar),
+                      'IRPF retenido en facturas',
+                      _formatCurrency(fiscalSummary.irpfRetenido),
+                      color: grey,
+                    ),
+                    _summaryRow(
+                      'IRPF a ingresar este periodo',
+                      _formatCurrency(fiscalSummary.irpfAIngresar),
+                      color: primary,
+                      bold: true,
+                    ),
+                    if (fiscalSummary.retencionSuperaIrpf)
+                      pw.Text(
+                        'Los clientes han retenido más IRPF del que '
+                        'corresponde en este periodo',
+                        style: pw.TextStyle(fontSize: 8, color: grey),
+                      ),
+                    _summaryRow(
+                      'Total IRPF (retenido + a ingresar)',
+                      _formatCurrency(fiscalSummary.irpfTotal),
                       color: primary,
                       bold: true,
                     ),
