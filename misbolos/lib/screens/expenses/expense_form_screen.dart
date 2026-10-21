@@ -6,6 +6,8 @@ import '../../core/constants/app_colors.dart';
 import '../../models/expense.dart';
 import '../../providers/expenses_provider.dart';
 import '../../services/ai_attachment_service.dart';
+import '../../services/document_text_extractor.dart';
+import '../../services/expense_pdf_parser.dart';
 
 class ExpenseFormScreen extends ConsumerStatefulWidget {
   final int? expenseId;
@@ -29,6 +31,11 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
   String? _documentoNombreOriginal;
   bool _loading = false;
   bool _loaded = false;
+  bool _fechaSugerida = false;
+  bool _totalSugerido = false;
+  bool _proveedorSugerido = false;
+  bool _avisoAutorrelleno = false;
+  bool _pdfSinTexto = false;
 
   double get _total =>
       double.tryParse(_totalController.text.replaceAll(',', '.')) ?? 0;
@@ -75,7 +82,12 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
       firstDate: DateTime(2020),
       lastDate: DateTime(2030),
     );
-    if (picked != null) setState(() => _fecha = picked);
+    if (picked != null) {
+      setState(() {
+        _fecha = picked;
+        _fechaSugerida = false;
+      });
+    }
   }
 
   Future<void> _pickDocument() async {
@@ -87,10 +99,54 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
           _documentoNombreOriginal = AiAttachmentService.instance
               .normalizeOriginalFileName(path);
         });
+        if (widget.expenseId == null) await _autorrellenarDesdePdf(path);
       }
     } catch (e) {
       _showPickerError('No se pudo seleccionar el PDF: $e');
     }
+  }
+
+  Future<void> _autorrellenarDesdePdf(String path) async {
+    String? texto;
+    try {
+      texto = await DocumentTextExtractor.instance.tryExtractText(path);
+    } catch (_) {
+      texto = null;
+    }
+    final result = texto == null ? null : ExpensePdfParser.parse(texto);
+    if (!mounted) return;
+
+    setState(() {
+      _limpiarSugerencias();
+      if (result == null || !result.algunoEncontrado) {
+        _pdfSinTexto = true;
+        return;
+      }
+      _avisoAutorrelleno = true;
+      final fecha = result.fecha.valor;
+      if (fecha != null) {
+        _fecha = fecha;
+        _fechaSugerida = true;
+      }
+      final total = result.total.valor;
+      if (total != null) {
+        _totalController.text = total.toStringAsFixed(2);
+        _totalSugerido = true;
+      }
+      final proveedor = result.proveedor.valor;
+      if (proveedor != null) {
+        _proveedorController.text = proveedor;
+        _proveedorSugerido = true;
+      }
+    });
+  }
+
+  void _limpiarSugerencias() {
+    _fechaSugerida = false;
+    _totalSugerido = false;
+    _proveedorSugerido = false;
+    _avisoAutorrelleno = false;
+    _pdfSinTexto = false;
   }
 
   void _showPickerError(String message) {
@@ -229,6 +285,18 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            if (_avisoAutorrelleno) ...[
+              const _AvisoPdf(
+                icon: Icons.fact_check_outlined,
+                color: AppColors.warning,
+                background: AppColors.warningBg,
+                texto:
+                    'Los datos se han leído automáticamente del PDF. Comprueba '
+                    'la fecha, el total y el proveedor antes de guardar.',
+              ),
+              const SizedBox(height: 12),
+            ],
+
             // Fecha
             ListTile(
               contentPadding: EdgeInsets.zero,
@@ -238,6 +306,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
               ),
               title: const Text('Fecha'),
               subtitle: Text(dateFmt.format(_fecha)),
+              trailing: _fechaSugerida ? const _EtiquetaSugerido() : null,
               onTap: _pickDate,
             ),
             const Divider(),
@@ -259,24 +328,33 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
             // Proveedor
             TextFormField(
               controller: _proveedorController,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Proveedor',
                 hintText: 'Ej: Amazon, Repsol',
+                helper: _proveedorSugerido
+                    ? const _EtiquetaSugerido()
+                    : null,
               ),
+              onChanged: (_) {
+                if (_proveedorSugerido) {
+                  setState(() => _proveedorSugerido = false);
+                }
+              },
             ),
             const SizedBox(height: 16),
 
             // Importe total
             TextFormField(
               controller: _totalController,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Importe total *',
                 suffixText: '€',
+                helper: _totalSugerido ? const _EtiquetaSugerido() : null,
               ),
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
-              onChanged: (_) => setState(() {}),
+              onChanged: (_) => setState(() => _totalSugerido = false),
               validator: (v) {
                 if (v == null || v.trim().isEmpty) {
                   return 'Obligatorio';
@@ -323,6 +401,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
                 onDeleted: () => setState(() {
                   _documentoPath = null;
                   _documentoNombreOriginal = null;
+                  _limpiarSugerencias();
                 }),
               ),
             const SizedBox(height: 4),
@@ -331,6 +410,29 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
               icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
               label: const Text('Seleccionar PDF'),
             ),
+            if (_pdfSinTexto) ...[
+              const SizedBox(height: 8),
+              const _AvisoPdf(
+                icon: Icons.info_outline,
+                color: AppColors.textSecondary,
+                background: AppColors.primaryLight,
+                texto:
+                    'Este PDF no tiene texto legible. Introduce los datos '
+                    'manualmente.',
+              ),
+            ],
+            if (widget.expenseId == null) ...[
+              const SizedBox(height: 8),
+              const _AvisoPdf(
+                icon: Icons.phone_iphone,
+                color: AppColors.textSecondary,
+                background: AppColors.primaryLight,
+                texto:
+                    '¿Tienes una foto del ticket? En iPhone puedes convertirla '
+                    'a PDF: Compartir → Imprimir → Guardar como PDF, o usa '
+                    'Escanear documentos en la app Notas.',
+              ),
+            ],
             const SizedBox(height: 16),
 
             // Notas
@@ -345,6 +447,71 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
             const SizedBox(height: 32),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _EtiquetaSugerido extends StatelessWidget {
+  const _EtiquetaSugerido();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppColors.warningBg,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.auto_fix_high, size: 12, color: AppColors.warning),
+          SizedBox(width: 4),
+          Text(
+            'Sugerido',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: AppColors.warning,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AvisoPdf extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final Color background;
+  final String texto;
+
+  const _AvisoPdf({
+    required this.icon,
+    required this.color,
+    required this.background,
+    required this.texto,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(texto, style: const TextStyle(fontSize: 12.5)),
+          ),
+        ],
       ),
     );
   }
