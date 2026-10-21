@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../core/constants/app_colors.dart';
 import '../../models/expense.dart';
 import '../../providers/expenses_provider.dart';
+import '../../providers/settings_provider.dart';
 import '../../services/ai_attachment_service.dart';
 import '../../services/document_text_extractor.dart';
 import '../../services/expense_pdf_parser.dart';
@@ -113,7 +114,20 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
     } catch (_) {
       texto = null;
     }
-    final result = texto == null ? null : ExpensePdfParser.parse(texto);
+    String? nifUsuario;
+    String? nombreUsuario;
+    try {
+      final settings = await ref.read(settingsProvider.future);
+      nifUsuario = settings.emisorNIF;
+      nombreUsuario = settings.emisorNombre;
+    } catch (_) {}
+    final result = texto == null
+        ? null
+        : ExpensePdfParser.parse(
+            texto,
+            nifUsuario: nifUsuario,
+            nombreUsuario: nombreUsuario,
+          );
     if (!mounted) return;
 
     setState(() {

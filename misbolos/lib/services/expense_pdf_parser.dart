@@ -70,7 +70,22 @@ class ExpensePdfParser {
     'pagina',
   ];
 
-  static ExpensePdfParseResult parse(String texto) {
+  static final _formaSocietariaRegex = RegExp(
+    r'(?<![A-Za-zÁÉÍÓÚÜÑáéíóúüñ])'
+    r'(S\.\s?L\.\s?U\.?|S\.\s?L\.\s?L\.?|S\.\s?L\.?|S\.\s?A\.?|SLU|SLL|SL|SA|GmbH)'
+    r'(?![A-Za-zÁÉÍÓÚÜÑáéíóúüñ])',
+  );
+  static final _direccionRegex = RegExp(
+    r'\b(calle|c/|avda|avenida|av\.|plaza|pza|paseo|carretera|ctra|camino|'
+    r'street|str\.|strasse|straße|road|pol[ií]gono|apartado)|\b\d{5}\b',
+    caseSensitive: false,
+  );
+
+  static ExpensePdfParseResult parse(
+    String texto, {
+    String? nifUsuario,
+    String? nombreUsuario,
+  }) {
     final lineas = texto
         .split(RegExp(r'\r?\n'))
         .map((l) => l.trim())
@@ -78,8 +93,56 @@ class ExpensePdfParser {
     return ExpensePdfParseResult(
       fecha: _parseFecha(lineas),
       total: _parseTotal(lineas),
-      proveedor: _parseProveedor(lineas),
+      proveedor: _parseProveedor(
+        lineas,
+        _lineasDelUsuario(lineas, nifUsuario, nombreUsuario),
+        _normalizarTexto(nombreUsuario ?? ''),
+      ),
     );
+  }
+
+  /// Índices de las líneas del bloque donde aparece el NIF o el nombre del
+  /// usuario (el adquiriente), que nunca pueden ser proveedor.
+  static Set<int> _lineasDelUsuario(
+    List<String> lineas,
+    String? nifUsuario,
+    String? nombreUsuario,
+  ) {
+    final nif = _normalizarNif(nifUsuario ?? '');
+    final nombre = _normalizarTexto(nombreUsuario ?? '');
+    final excluidas = <int>{};
+    for (var i = 0; i < lineas.length; i++) {
+      final esNif = nif.length >= 8 && _normalizarNif(lineas[i]).contains(nif);
+      final esNombre =
+          nombre.length >= 3 && _normalizarTexto(lineas[i]).contains(nombre);
+      if (!esNif && !esNombre) continue;
+      excluidas.add(i);
+      // El NIF suele cerrar el bloque del adquiriente y el nombre abrirlo.
+      final arriba = esNif ? 3 : 1;
+      final abajo = esNif && !esNombre ? 1 : 3;
+      for (var d = 1; d <= arriba; d++) {
+        if (i - d < 0 || lineas[i - d].isEmpty) break;
+        excluidas.add(i - d);
+      }
+      for (var d = 1; d <= abajo; d++) {
+        if (i + d >= lineas.length || lineas[i + d].isEmpty) break;
+        excluidas.add(i + d);
+      }
+    }
+    return excluidas;
+  }
+
+  static String _normalizarNif(String s) =>
+      s.toUpperCase().replaceAll(RegExp(r'[\s.\-]'), '');
+
+  static String _normalizarTexto(String s) {
+    const conAcento = 'áéíóúüàèìòù';
+    const sinAcento = 'aeiouuaeiou';
+    var out = s.toLowerCase();
+    for (var i = 0; i < conAcento.length; i++) {
+      out = out.replaceAll(conAcento[i], sinAcento[i]);
+    }
+    return out.replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 
   static CampoSugerido<DateTime> _parseFecha(List<String> lineas) {
@@ -195,27 +258,72 @@ class ExpensePdfParser {
     return double.tryParse(s);
   }
 
-  static CampoSugerido<String> _parseProveedor(List<String> lineas) {
-    final nifIndex = lineas.indexWhere(
-      (l) => _nifLabelRegex.hasMatch(l) || _nifValueRegex.hasMatch(l),
+  static CampoSugerido<String> _parseProveedor(
+    List<String> lineas,
+    Set<int> excluidas,
+    String nombreUsuario,
+  ) {
+    bool disponible(int i) => lineas[i].isNotEmpty && !excluidas.contains(i);
+    bool esDelUsuario(String nombre) =>
+        nombreUsuario.length >= 3 &&
+        _normalizarTexto(nombre).contains(nombreUsuario);
+
+    final societarias = <String, String>{};
+    for (var i = 0; i < lineas.length; i++) {
+      if (!disponible(i)) continue;
+      final nombre = _nombreSocietario(lineas[i]);
+      if (nombre == null || esDelUsuario(nombre)) continue;
+      societarias.putIfAbsent(_normalizarTexto(nombre), () => nombre);
+    }
+    if (societarias.length == 1) {
+      return CampoSugerido.encontrado(societarias.values.first);
+    }
+    if (societarias.length > 1) return const CampoSugerido.vacio();
+
+    CampoSugerido<String> candidata(String linea) {
+      final valida = _esNombreValido(linea) &&
+          !_direccionRegex.hasMatch(linea) &&
+          !esDelUsuario(linea);
+      return valida
+          ? CampoSugerido.encontrado(linea)
+          : const CampoSugerido.vacio();
+    }
+
+    final nifIndex = List.generate(lineas.length, (i) => i).firstWhere(
+      (i) =>
+          disponible(i) &&
+          (_nifLabelRegex.hasMatch(lineas[i]) ||
+              _nifValueRegex.hasMatch(lineas[i])),
+      orElse: () => -1,
     );
     if (nifIndex >= 0) {
       for (var i = nifIndex - 1; i >= 0; i--) {
         if (lineas[i].isEmpty) continue;
-        return _esNombreValido(lineas[i])
-            ? CampoSugerido.encontrado(lineas[i])
-            : const CampoSugerido.vacio();
+        if (excluidas.contains(i)) return const CampoSugerido.vacio();
+        return candidata(lineas[i]);
       }
       return const CampoSugerido.vacio();
     }
 
-    for (final linea in lineas) {
-      if (linea.isEmpty) continue;
-      return _esNombreValido(linea)
-          ? CampoSugerido.encontrado(linea)
-          : const CampoSugerido.vacio();
+    for (var i = 0; i < lineas.length; i++) {
+      if (!disponible(i)) continue;
+      return candidata(lineas[i]);
     }
     return const CampoSugerido.vacio();
+  }
+
+  /// Nombre comercial hasta la forma societaria, sin la dirección que siga.
+  static String? _nombreSocietario(String linea) {
+    final match = _formaSocietariaRegex.firstMatch(linea);
+    if (match == null) return null;
+    var nombre = linea.substring(0, match.end).trim();
+    final dosPuntos = nombre.lastIndexOf(':');
+    if (dosPuntos >= 0) nombre = nombre.substring(dosPuntos + 1).trim();
+    final sinForma = nombre.substring(0, nombre.length - match.group(0)!.length);
+    if (!RegExp(r'[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{2,}').hasMatch(sinForma)) {
+      return null;
+    }
+    return _esNombreValido(nombre) ? nombre : null;
   }
 
   static bool _esNombreValido(String linea) {
