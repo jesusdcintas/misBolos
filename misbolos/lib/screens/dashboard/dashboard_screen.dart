@@ -150,15 +150,9 @@ class DashboardScreen extends ConsumerWidget {
           ),
           FABAction(
             icon: Icons.euro_outlined,
-            label: 'Nuevo gasto',
+            label: 'Nuevo gasto o inversión',
             color: AppColors.warning,
             onTap: (ctx) => ctx.push('/expense/new'),
-          ),
-          FABAction(
-            icon: Icons.inventory_2_outlined,
-            label: 'Nueva inversión',
-            color: AppColors.success,
-            onTap: (ctx) => ctx.push('/asset/new'),
           ),
         ],
       ),

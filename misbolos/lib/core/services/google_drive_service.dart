@@ -36,6 +36,7 @@ class DriveMonthFolders {
   final String facturasFolderId;
   final String gastosFolderId;
   final String inversionesFolderId;
+  final String gastosInversionesFolderId;
 
   const DriveMonthFolders({
     required this.yearFolderId,
@@ -44,6 +45,7 @@ class DriveMonthFolders {
     required this.facturasFolderId,
     required this.gastosFolderId,
     required this.inversionesFolderId,
+    required this.gastosInversionesFolderId,
   });
 }
 
@@ -512,6 +514,10 @@ class GoogleDriveService {
         parentId: monthFolderId,
         folderName: 'INVERSIONES',
       ),
+      gastosInversionesFolderId: await ensureFolder(
+        parentId: monthFolderId,
+        folderName: gastosInversionesFolderName,
+      ),
     );
     _monthStructureCache[cacheKey] = folders;
     return folders;
@@ -722,6 +728,32 @@ class GoogleDriveService {
       throw Exception('No se pudo copiar el archivo en Drive.');
     }
     return DriveUploadResult(fileId: copied.id!, fileUrl: copied.webViewLink);
+  }
+
+  /// Mueve el fichero a [targetFolderId] cambiando sus `parents`, sin copiarlo.
+  Future<void> moveFileToFolder({
+    required String fileId,
+    required String targetFolderId,
+  }) async {
+    final api = await _driveApi();
+    final current =
+        await api.files.get(
+              fileId,
+              $fields: 'id,parents',
+              supportsAllDrives: true,
+            )
+            as drive.File;
+    final parents = (current.parents ?? []).whereType<String>().toList();
+    if (parents.length == 1 && parents.first == targetFolderId) return;
+    final toRemove = parents.where((id) => id != targetFolderId).join(',');
+    await api.files.update(
+      drive.File(),
+      fileId,
+      addParents: parents.contains(targetFolderId) ? null : targetFolderId,
+      removeParents: toRemove.isEmpty ? null : toRemove,
+      supportsAllDrives: true,
+      $fields: 'id,parents',
+    );
   }
 
   Future<void> openFolder(String folderId) async {
@@ -969,6 +1001,8 @@ String getMonthName(DateTime date) {
 }
 
 String getYearFolderName(DateTime date) => 'Contabilidad ${date.year}';
+
+const String gastosInversionesFolderName = 'Gastos e Inversiones';
 
 String sanitizeDriveFileName(String input) {
   final sanitized = input

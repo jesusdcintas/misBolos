@@ -4,11 +4,11 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../core/constants/app_colors.dart';
 import '../../models/expense.dart';
-import '../../models/expense_extraction_result.dart';
 import '../../providers/expenses_provider.dart';
+import '../../providers/settings_provider.dart';
 import '../../services/ai_attachment_service.dart';
 import '../../services/document_text_extractor.dart';
-import '../../services/expense_ai_extractor.dart';
+import '../../services/expense_pdf_parser.dart';
 
 class ExpenseFormScreen extends ConsumerStatefulWidget {
   final int? expenseId;
@@ -23,36 +23,30 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _conceptoController = TextEditingController();
   final _proveedorController = TextEditingController();
-  final _importeBaseController = TextEditingController();
-  final _ivaRateController = TextEditingController(text: '21');
+  final _totalController = TextEditingController();
   final _notasController = TextEditingController();
-  final _iaTextController = TextEditingController();
 
   DateTime _fecha = DateTime.now();
   ExpenseCategory _categoria = ExpenseCategory.otros;
-  bool _esDeducible = true;
-  double _porcentajeDeduccion = 100.0;
   String? _documentoPath;
   String? _documentoNombreOriginal;
   bool _loading = false;
-  bool _extracting = false;
   bool _loaded = false;
+  bool _fechaSugerida = false;
+  bool _totalSugerido = false;
+  bool _proveedorSugerido = false;
+  bool _avisoAutorrelleno = false;
+  bool _pdfSinTexto = false;
 
-  double get _importeBase =>
-      double.tryParse(_importeBaseController.text.replaceAll(',', '.')) ?? 0;
-  double get _ivaRate =>
-      double.tryParse(_ivaRateController.text.replaceAll(',', '.')) ?? 21.0;
-  double get _ivaAmount => _importeBase * (_ivaRate / 100);
-  double get _total => _importeBase + _ivaAmount;
+  double get _total =>
+      double.tryParse(_totalController.text.replaceAll(',', '.')) ?? 0;
 
   @override
   void dispose() {
     _conceptoController.dispose();
     _proveedorController.dispose();
-    _importeBaseController.dispose();
-    _ivaRateController.dispose();
+    _totalController.dispose();
     _notasController.dispose();
-    _iaTextController.dispose();
     super.dispose();
   }
 
@@ -72,13 +66,10 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
     setState(() {
       _conceptoController.text = expense.concepto;
       _proveedorController.text = expense.proveedor ?? '';
-      _importeBaseController.text = expense.importeBase.toStringAsFixed(2);
-      _ivaRateController.text = expense.ivaRate.toStringAsFixed(0);
+      _totalController.text = expense.total.toStringAsFixed(2);
       _notasController.text = expense.notas ?? '';
       _fecha = expense.fecha;
       _categoria = expense.categoria;
-      _esDeducible = expense.esDeducible;
-      _porcentajeDeduccion = expense.porcentajeDeduccion;
       _documentoPath = expense.documentoPath;
       _documentoNombreOriginal = expense.attachmentDisplayName;
       _loaded = true;
@@ -92,7 +83,12 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
       firstDate: DateTime(2020),
       lastDate: DateTime(2030),
     );
-    if (picked != null) setState(() => _fecha = picked);
+    if (picked != null) {
+      setState(() {
+        _fecha = picked;
+        _fechaSugerida = false;
+      });
+    }
   }
 
   Future<void> _pickDocument() async {
@@ -104,40 +100,67 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
           _documentoNombreOriginal = AiAttachmentService.instance
               .normalizeOriginalFileName(path);
         });
+        if (widget.expenseId == null) await _autorrellenarDesdePdf(path);
       }
     } catch (e) {
       _showPickerError('No se pudo seleccionar el PDF: $e');
     }
   }
 
-  Future<void> _pickPhoto() async {
+  Future<void> _autorrellenarDesdePdf(String path) async {
+    String? texto;
     try {
-      final path = await AiAttachmentService.instance.pickImageFromGallery();
-      if (path != null && mounted) {
-        setState(() {
-          _documentoPath = path;
-          _documentoNombreOriginal = AiAttachmentService.instance
-              .normalizeOriginalFileName(path);
-        });
-      }
-    } catch (e) {
-      _showPickerError('No se pudo seleccionar la imagen: $e');
+      texto = await DocumentTextExtractor.instance.tryExtractText(path);
+    } catch (_) {
+      texto = null;
     }
+    String? nifUsuario;
+    String? nombreUsuario;
+    try {
+      final settings = await ref.read(settingsProvider.future);
+      nifUsuario = settings.emisorNIF;
+      nombreUsuario = settings.emisorNombre;
+    } catch (_) {}
+    final result = texto == null
+        ? null
+        : ExpensePdfParser.parse(
+            texto,
+            nifUsuario: nifUsuario,
+            nombreUsuario: nombreUsuario,
+          );
+    if (!mounted) return;
+
+    setState(() {
+      _limpiarSugerencias();
+      if (result == null || !result.algunoEncontrado) {
+        _pdfSinTexto = true;
+        return;
+      }
+      _avisoAutorrelleno = true;
+      final fecha = result.fecha.valor;
+      if (fecha != null) {
+        _fecha = fecha;
+        _fechaSugerida = true;
+      }
+      final total = result.total.valor;
+      if (total != null) {
+        _totalController.text = total.toStringAsFixed(2);
+        _totalSugerido = true;
+      }
+      final proveedor = result.proveedor.valor;
+      if (proveedor != null) {
+        _proveedorController.text = proveedor;
+        _proveedorSugerido = true;
+      }
+    });
   }
 
-  Future<void> _takePhoto() async {
-    try {
-      final path = await AiAttachmentService.instance.takePhotoWithCamera();
-      if (path != null && mounted) {
-        setState(() {
-          _documentoPath = path;
-          _documentoNombreOriginal = AiAttachmentService.instance
-              .normalizeOriginalFileName(path);
-        });
-      }
-    } catch (e) {
-      _showPickerError('No se pudo abrir la cámara: $e');
-    }
+  void _limpiarSugerencias() {
+    _fechaSugerida = false;
+    _totalSugerido = false;
+    _proveedorSugerido = false;
+    _avisoAutorrelleno = false;
+    _pdfSinTexto = false;
   }
 
   void _showPickerError(String message) {
@@ -162,13 +185,13 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
       proveedor: _proveedorController.text.trim().isEmpty
           ? null
           : _proveedorController.text.trim(),
-      importeBase: _importeBase,
-      ivaRate: _ivaRate,
-      ivaAmount: _ivaAmount,
+      importeBase: _total,
+      ivaRate: 0,
+      ivaAmount: 0,
       total: _total,
       categoria: _categoria,
-      esDeducible: _esDeducible,
-      porcentajeDeduccion: _porcentajeDeduccion,
+      esDeducible: false,
+      porcentajeDeduccion: 0,
       documentoPath: _documentoPath,
       attachmentOriginalName: _documentoNombreOriginal,
       notas: _notasController.text.trim().isEmpty
@@ -250,173 +273,6 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
     return keep == true;
   }
 
-  Future<void> _extractWithAi() async {
-    var inputText = _iaTextController.text.trim();
-    if (_extracting || _loading) return;
-
-    setState(() => _extracting = true);
-    try {
-      final documentPath = _documentoPath;
-      final hasImage =
-          documentPath != null &&
-          AiAttachmentService.instance.isImagePath(documentPath);
-
-      if (hasImage) {
-        final result = await ExpenseAiExtractor.instance
-            .extractExpenseFromImagePath(documentPath);
-        if (!mounted) return;
-        await _confirmApplyExtraction(result);
-        return;
-      }
-
-      if (inputText.isEmpty && documentPath != null) {
-        final extracted = await DocumentTextExtractor.instance.tryExtractText(
-          documentPath,
-        );
-        if (extracted != null && extracted.trim().isNotEmpty) {
-          inputText = extracted.trim();
-          if (mounted) {
-            setState(() => _iaTextController.text = inputText);
-          }
-        }
-      }
-
-      if (inputText.isEmpty) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'No pude leer texto automáticamente. Pega OCR o texto manual.',
-            ),
-          ),
-        );
-        return;
-      }
-
-      final result = _documentoPath == null
-          ? await ExpenseAiExtractor.instance.extractExpenseFromText(inputText)
-          : await ExpenseAiExtractor.instance.extractExpenseFromReceiptText(
-              prompt:
-                  'Extrae un gasto desde OCR de ticket/factura. No inventes campos.',
-              receiptText: inputText,
-            );
-      if (!mounted) return;
-      await _confirmApplyExtraction(result);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo extraer automáticamente: $e')),
-      );
-    } finally {
-      if (mounted) setState(() => _extracting = false);
-    }
-  }
-
-  Future<void> _confirmApplyExtraction(ExpenseExtractionResult result) async {
-    final summary = <String>[
-      if (result.concepto != null) 'Concepto: ${result.concepto}',
-      if (result.proveedor != null) 'Proveedor fiscal: ${result.proveedor}',
-      if (result.estacion != null) 'Estación: ${result.estacion}',
-      if (result.numeroFactura != null) 'Factura: ${result.numeroFactura}',
-      if (result.fecha != null)
-        'Fecha: ${DateFormat('dd/MM/yyyy').format(result.fecha!)}',
-      if (result.fechaOperacion != null)
-        'F. Operación: ${DateFormat('dd/MM/yyyy').format(result.fechaOperacion!)}',
-      if (result.matriculaVehiculo != null)
-        'Matrícula: ${result.matriculaVehiculo}',
-      if (result.litros != null) 'Litros: ${result.litros!.toStringAsFixed(2)}',
-      if (result.precioPorLitro != null)
-        'Precio/L: ${result.precioPorLitro!.toStringAsFixed(3)} €',
-      if (result.importeBase != null)
-        'Base: ${result.importeBase!.toStringAsFixed(2)} €',
-      if (result.ivaRate != null) 'IVA: ${result.ivaRate!.toStringAsFixed(0)}%',
-      if (result.importeIva != null)
-        'IVA importe: ${result.importeIva!.toStringAsFixed(2)} €',
-      if (result.importeTotal != null)
-        'Total: ${result.importeTotal!.toStringAsFixed(2)} €',
-      if (result.descuento != null)
-        'Descuento: ${result.descuento!.toStringAsFixed(2)} €',
-      if (result.esDeducible != null)
-        'Deducible: ${result.esDeducible! ? 'Sí' : 'No'}',
-      if (result.porcentajeDeduccion != null)
-        'Deducción: ${result.porcentajeDeduccion!.toStringAsFixed(0)}%',
-      if (result.categoria != null) 'Categoría: ${result.categoria!.label}',
-      if (result.confidence > 0)
-        'Confianza estimada: ${(result.confidence * 100).clamp(0, 100).toStringAsFixed(0)}%',
-    ];
-
-    final apply = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Datos detectados'),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (summary.isEmpty)
-                const Text('No se detectaron campos suficientes.'),
-              for (final line in summary) Text(line),
-              if (result.warnings.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                const Text(
-                  'Revisa estos puntos:',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 6),
-                for (final warning in result.warnings) Text('• $warning'),
-              ],
-              if (result.confidence < 0.75) ...[
-                const SizedBox(height: 12),
-                const Text(
-                  'Confianza baja: revisa manualmente antes de guardar.',
-                  style: TextStyle(
-                    color: Colors.orange,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Corregir manualmente'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Guardar gasto'),
-          ),
-        ],
-      ),
-    );
-
-    if (apply != true || !mounted) return;
-
-    setState(() {
-      if (result.concepto != null) _conceptoController.text = result.concepto!;
-      if (result.proveedor != null) {
-        _proveedorController.text = result.proveedor!;
-      }
-      if (result.fecha != null) _fecha = result.fecha!;
-      if (result.importeBase != null) {
-        _importeBaseController.text = result.importeBase!.toStringAsFixed(2);
-      }
-      if (result.ivaRate != null) {
-        _ivaRateController.text = result.ivaRate!.toStringAsFixed(0);
-      }
-      if (result.categoria != null) _categoria = result.categoria!;
-      if (result.esDeducible != null) _esDeducible = result.esDeducible!;
-      if (result.porcentajeDeduccion != null) {
-        _porcentajeDeduccion = result.porcentajeDeduccion!.clamp(0, 100);
-      }
-      if (result.notas != null && result.notas!.isNotEmpty) {
-        _notasController.text = result.notas!;
-      }
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     final dateFmt = DateFormat('d MMMM yyyy', 'es_ES');
@@ -443,6 +299,18 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            if (_avisoAutorrelleno) ...[
+              const _AvisoPdf(
+                icon: Icons.fact_check_outlined,
+                color: AppColors.warning,
+                background: AppColors.warningBg,
+                texto:
+                    'Los datos se han leído automáticamente del PDF. Comprueba '
+                    'la fecha, el total y el proveedor antes de guardar.',
+              ),
+              const SizedBox(height: 12),
+            ],
+
             // Fecha
             ListTile(
               contentPadding: EdgeInsets.zero,
@@ -452,6 +320,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
               ),
               title: const Text('Fecha'),
               subtitle: Text(dateFmt.format(_fecha)),
+              trailing: _fechaSugerida ? const _EtiquetaSugerido() : null,
               onTap: _pickDate,
             ),
             const Divider(),
@@ -473,70 +342,43 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
             // Proveedor
             TextFormField(
               controller: _proveedorController,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Proveedor',
                 hintText: 'Ej: Amazon, Repsol',
+                helper: _proveedorSugerido
+                    ? const _EtiquetaSugerido()
+                    : null,
               ),
+              onChanged: (_) {
+                if (_proveedorSugerido) {
+                  setState(() => _proveedorSugerido = false);
+                }
+              },
             ),
             const SizedBox(height: 16),
 
-            // Importe base + IVA
-            Row(
-              children: [
-                Expanded(
-                  flex: 3,
-                  child: TextFormField(
-                    controller: _importeBaseController,
-                    decoration: const InputDecoration(
-                      labelText: 'Base imponible *',
-                      suffixText: '€',
-                    ),
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    onChanged: (_) => setState(() {}),
-                    validator: (v) {
-                      if (v == null || v.trim().isEmpty) {
-                        return 'Obligatorio';
-                      }
-                      if (double.tryParse(v.replaceAll(',', '.')) == null) {
-                        return 'Número no válido';
-                      }
-                      return null;
-                    },
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  flex: 2,
-                  child: TextFormField(
-                    controller: _ivaRateController,
-                    decoration: const InputDecoration(labelText: 'IVA %'),
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    onChanged: (_) => setState(() {}),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            if (_importeBase > 0)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Text(
-                      'IVA: ${_ivaAmount.toStringAsFixed(2)} €   Total: ${_total.toStringAsFixed(2)} €',
-                      style: const TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
-                ),
+            // Importe total
+            TextFormField(
+              controller: _totalController,
+              decoration: InputDecoration(
+                labelText: 'Importe total *',
+                suffixText: '€',
+                helper: _totalSugerido ? const _EtiquetaSugerido() : null,
               ),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              onChanged: (_) => setState(() => _totalSugerido = false),
+              validator: (v) {
+                if (v == null || v.trim().isEmpty) {
+                  return 'Obligatorio';
+                }
+                if (double.tryParse(v.replaceAll(',', '.')) == null) {
+                  return 'Número no válido';
+                }
+                return null;
+              },
+            ),
             const SizedBox(height: 16),
 
             // Categoría
@@ -554,44 +396,6 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
               },
             ),
             const SizedBox(height: 16),
-
-            // Deducibilidad
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Gasto deducible'),
-              value: _esDeducible,
-              onChanged: (v) => setState(() => _esDeducible = v),
-            ),
-            if (_esDeducible) ...[
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  const Text(
-                    '% Deducción:',
-                    style: TextStyle(color: AppColors.textSecondary),
-                  ),
-                  Expanded(
-                    child: Slider(
-                      value: _porcentajeDeduccion,
-                      min: 0,
-                      max: 100,
-                      divisions: 20,
-                      label: '${_porcentajeDeduccion.toStringAsFixed(0)} %',
-                      onChanged: (v) =>
-                          setState(() => _porcentajeDeduccion = v),
-                    ),
-                  ),
-                  SizedBox(
-                    width: 44,
-                    child: Text(
-                      '${_porcentajeDeduccion.toStringAsFixed(0)} %',
-                      textAlign: TextAlign.end,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-            const SizedBox(height: 12),
 
             // Justificante
             const Text(
@@ -611,53 +415,38 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
                 onDeleted: () => setState(() {
                   _documentoPath = null;
                   _documentoNombreOriginal = null;
+                  _limpiarSugerencias();
                 }),
               ),
             const SizedBox(height: 4),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                OutlinedButton.icon(
-                  onPressed: _pickDocument,
-                  icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
-                  label: const Text('PDF'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: _pickPhoto,
-                  icon: const Icon(Icons.photo_outlined, size: 18),
-                  label: const Text('Galería'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: _takePhoto,
-                  icon: const Icon(Icons.photo_camera_outlined, size: 18),
-                  label: const Text('Cámara'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: _extracting || _loading ? null : _extractWithAi,
-                  icon: _extracting
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.auto_awesome_outlined, size: 18),
-                  label: const Text('Extraer información'),
-                ),
-              ],
+            OutlinedButton.icon(
+              onPressed: _pickDocument,
+              icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+              label: const Text('Seleccionar PDF'),
             ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _iaTextController,
-              decoration: const InputDecoration(
-                labelText: 'Texto para analizar con IA',
-                hintText:
-                    'Puedes pegar aquí el texto de una factura, ticket o escribir una descripción como: Gasolina Repsol 29,48€, fecha 04/03/2026, IVA 21%.',
+            if (_pdfSinTexto) ...[
+              const SizedBox(height: 8),
+              const _AvisoPdf(
+                icon: Icons.info_outline,
+                color: AppColors.textSecondary,
+                background: AppColors.primaryLight,
+                texto:
+                    'Este PDF no tiene texto legible. Introduce los datos '
+                    'manualmente.',
               ),
-              minLines: 3,
-              maxLines: 6,
-            ),
+            ],
+            if (widget.expenseId == null) ...[
+              const SizedBox(height: 8),
+              const _AvisoPdf(
+                icon: Icons.phone_iphone,
+                color: AppColors.textSecondary,
+                background: AppColors.primaryLight,
+                texto:
+                    '¿Tienes una foto del ticket? En iPhone puedes convertirla '
+                    'a PDF: Compartir → Imprimir → Guardar como PDF, o usa '
+                    'Escanear documentos en la app Notas.',
+              ),
+            ],
             const SizedBox(height: 16),
 
             // Notas
@@ -672,6 +461,71 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
             const SizedBox(height: 32),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _EtiquetaSugerido extends StatelessWidget {
+  const _EtiquetaSugerido();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppColors.warningBg,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.auto_fix_high, size: 12, color: AppColors.warning),
+          SizedBox(width: 4),
+          Text(
+            'Sugerido',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: AppColors.warning,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AvisoPdf extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final Color background;
+  final String texto;
+
+  const _AvisoPdf({
+    required this.icon,
+    required this.color,
+    required this.background,
+    required this.texto,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(texto, style: const TextStyle(fontSize: 12.5)),
+          ),
+        ],
       ),
     );
   }

@@ -77,12 +77,12 @@ class Expense {
     required this.concepto,
     this.proveedor,
     required this.importeBase,
-    this.ivaRate = 21.0,
+    this.ivaRate = 0,
     required this.ivaAmount,
     required this.total,
     this.categoria = ExpenseCategory.otros,
-    this.esDeducible = true,
-    this.porcentajeDeduccion = 100.0,
+    this.esDeducible = false,
+    this.porcentajeDeduccion = 0,
     this.documentoPath,
     this.notas,
     this.synced = false,
@@ -97,8 +97,6 @@ class Expense {
     this.attachmentStoredName,
     this.attachmentMimeType,
   }) : createdAt = createdAt ?? DateTime.now();
-
-  double get importeDeducible => importeBase * (porcentajeDeduccion / 100);
 
   Expense copyWith({
     int? id,

@@ -180,6 +180,36 @@ class DriveDocumentSyncService {
   final ClientRepository _clientRepository = ClientRepository.instance;
   final SettingsRepository _settingsRepository = SettingsRepository();
   static const int maxRetryAttempts = 5;
+
+  /// Ruta de la carpeta de gastos e inversiones relativa a la carpeta raíz,
+  /// con los mismos nombres que crea `GoogleDriveService.ensureMonthStructure`.
+  static String buildExpensePath(DateTime fecha) {
+    return [
+      getYearFolderName(fecha),
+      getQuarterName(fecha),
+      getMonthName(fecha),
+      gastosInversionesFolderName,
+    ].join('/');
+  }
+
+  /// True si al pasar de [anterior] a [nueva] el adjunto cambia de carpeta.
+  static bool expenseFolderChanged(DateTime anterior, DateTime nueva) {
+    return buildExpensePath(anterior) != buildExpensePath(nueva);
+  }
+
+  /// Mueve el adjunto ya subido a la carpeta que corresponde a su fecha.
+  Future<void> moveExpenseAttachmentToDateFolder(Expense expense) async {
+    final fileId = expense.driveFileId?.trim();
+    if (fileId == null || fileId.isEmpty) return;
+    final monthFolders = await _drive.ensureMonthStructure(expense.fecha);
+    await _drive.moveFileToFolder(
+      fileId: fileId,
+      targetFolderId: monthFolders.gastosInversionesFolderId,
+    );
+    debugPrint(
+      '[DRIVE][MOVE] expense/${expense.id} -> ${buildExpensePath(expense.fecha)}',
+    );
+  }
   static const String errorMissingFile = 'failed_file_missing';
   static const String errorDevicePath = 'device_path_unavailable';
   static const String errorBadFileDescriptor = 'bad_file_descriptor';
@@ -260,6 +290,7 @@ class DriveDocumentSyncService {
     String? driveFileId,
     String? remoteFolderId,
     String? logicalPath,
+    bool force = false,
   }) async {
     final normalizedType = _canonicalEntityType(entityType);
     if (normalizedType == 'invoice') {
@@ -314,7 +345,7 @@ class DriveDocumentSyncService {
         );
         return;
       }
-      if (currentStatus == statusUploaded) {
+      if (currentStatus == statusUploaded && !force) {
         debugPrint(
           '[DriveUploadQueue] skipped duplicate pending task entity=$normalizedType/$entityId status=$currentStatus',
         );
@@ -875,7 +906,7 @@ class DriveDocumentSyncService {
                   candidate,
                   File(path ?? 'adjunto.pdf'),
                 ),
-                parentFolderId: monthFolders.gastosFolderId,
+                parentFolderId: monthFolders.gastosInversionesFolderId,
               );
               await _expenseRepository.updateDriveMetadata(
                 id: candidate.id!,
@@ -1805,14 +1836,21 @@ class DriveDocumentSyncService {
       final monthFolders = await _drive.ensureMonthStructure(expense.fecha);
       listWatch.stop();
       _driveListMs += listWatch.elapsedMilliseconds;
-      folderId = monthFolders.gastosFolderId;
+      folderId = monthFolders.gastosInversionesFolderId;
       final uploaded = await _uploadOrUpdate(
         existingFileId: expense.driveFileId,
         file: stableFile,
         fileName: _expenseFileName(expense, stableFile),
-        parentFolderId: monthFolders.gastosFolderId,
+        parentFolderId: monthFolders.gastosInversionesFolderId,
         mimeType: _mimeTypeFor(stableFile.path),
       );
+      if (expense.driveFileId?.trim().isNotEmpty == true) {
+        // Si la fecha cambió, el fichero actualizado sigue en la carpeta vieja.
+        await _drive.moveFileToFolder(
+          fileId: uploaded.fileId,
+          targetFolderId: monthFolders.gastosInversionesFolderId,
+        );
+      }
       await _expenseRepository.update(
         expense.copyWith(
           driveFileId: uploaded.fileId,

@@ -269,7 +269,14 @@ class ExpensesNotifier extends AsyncNotifier<List<Expense>> {
 
   Future<void> updateExpense(Expense expense) async {
     final repo = ref.read(expenseRepositoryProvider);
-    var updated = expense.copyWith(synced: false);
+    final previous = expense.id == null ? null : await repo.getById(expense.id!);
+    // El formulario no conoce los datos de Drive: sin esto se perdería el enlace.
+    var updated = expense.copyWith(
+      synced: false,
+      driveFileId: previous?.driveFileId,
+      driveFileUrl: previous?.driveFileUrl,
+      driveSyncedAt: previous?.driveSyncedAt,
+    );
     if (updated.documentoPath != null && updated.id != null) {
       try {
         final stablePath = await AiAttachmentService.instance
@@ -301,6 +308,15 @@ class ExpensesNotifier extends AsyncNotifier<List<Expense>> {
     }
     await repo.update(updated);
     ref.invalidateSelf();
+    final hasDriveFile = updated.driveFileId?.trim().isNotEmpty == true;
+    if (previous != null &&
+        hasDriveFile &&
+        DriveDocumentSyncService.expenseFolderChanged(
+          previous.fecha,
+          updated.fecha,
+        )) {
+      unawaited(_moveExpenseAttachment(updated));
+    }
     if (expense.id != null) {
       await _tryUploadExpense(expense.id!);
       await _queueAutoUploadExpenseToDrive(expense.id!);
@@ -394,6 +410,33 @@ class ExpensesNotifier extends AsyncNotifier<List<Expense>> {
     }
   }
 
+  Future<void> _moveExpenseAttachment(Expense expense) async {
+    try {
+      await DriveDocumentSyncService.instance.moveExpenseAttachmentToDateFolder(
+        expense,
+      );
+    } catch (e) {
+      debugPrint('[DriveMove] expense/${expense.id} move failed, queued: $e');
+      try {
+        await DriveDocumentSyncService.instance.enqueuePendingUpload(
+          entityType: 'expense',
+          entityId: expense.id.toString(),
+          action: 'update',
+          localFilePath: expense.documentoPath,
+          targetFolderType: 'GASTOS',
+          documentType: 'expense_attachment',
+          fileName: expense.attachmentDisplayName,
+          mimeType: expense.attachmentMimeType,
+          driveFileId: expense.driveFileId,
+          logicalPath: DriveDocumentSyncService.buildExpensePath(expense.fecha),
+          force: true,
+        );
+      } catch (queueError) {
+        debugPrint('[DriveMove] expense/${expense.id} enqueue failed: $queueError');
+      }
+    }
+  }
+
   Future<void> _queueAutoUploadExpenseToDrive(int localId) async {
     final expense = await ref.read(expenseRepositoryProvider).getById(localId);
     if (expense == null) return;
@@ -455,11 +498,4 @@ final gastosTrimestralProvider =
       return ref
           .read(expenseRepositoryProvider)
           .getTotalesPorCategoria(params.year, params.quarter);
-    });
-
-final ivaDeducibleTrimestralProvider =
-    FutureProvider.family<double, ({int year, int quarter})>((ref, params) {
-      return ref
-          .read(expenseRepositoryProvider)
-          .getTotalIvaSoportadoTrimestre(params.year, params.quarter);
     });

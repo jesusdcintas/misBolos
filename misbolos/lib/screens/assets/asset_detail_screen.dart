@@ -61,12 +61,6 @@ class _AssetDetailContent extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text(asset.descripcion),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.edit_outlined),
-            onPressed: () => buildContext.push('/asset/edit/${asset.id}'),
-          ),
-        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),

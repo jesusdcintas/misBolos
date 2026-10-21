@@ -5,11 +5,8 @@ import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/currency_formatter.dart';
-import '../../models/expense.dart';
 import '../../models/financial_summary.dart';
 import '../../models/gig.dart';
-import '../../providers/expenses_provider.dart';
-import '../../providers/assets_provider.dart';
 import '../../providers/financial_summary_provider.dart';
 import '../../providers/stats_provider.dart';
 import '../../services/pdf_service.dart';
@@ -79,20 +76,6 @@ class FinancialSummaryScreen extends ConsumerWidget {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 16),
-
-                    // IVA section (quarter + year modes)
-                    if (summary.ivaQuarters.isNotEmpty) ...[
-                      _IvaSection(quarters: summary.ivaQuarters),
-                      const SizedBox(height: 16),
-                    ],
-
-                    // Gastos section
-                    _GastosSection(period: period),
-                    const SizedBox(height: 16),
-
-                    // Amortizaciones section
-                    _AmortizacionSection(period: period),
                     const SizedBox(height: 16),
 
                     // Sub-period breakdown
@@ -192,78 +175,59 @@ class _FiscalSection extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Fiscalidad estimada',
+              'Estimación de impuestos acumulados',
               style: Theme.of(
                 context,
               ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 4),
-            Text(
-              summary.hasEstimatedHistoricalData
-                  ? 'Incluye histórico estimado desde bolos facturables sin factura'
-                  : 'Calculado con facturas cobradas, gastos e inversiones',
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.textSecondary,
-              ),
-            ),
-            const Divider(height: 24),
-            _row(
-              icon: Icons.receipt_long,
-              color: AppColors.primary,
-              label: 'Ingresos oficiales',
-              value: summary.ingresosOficiales,
-            ),
-            const SizedBox(height: 12),
-            _row(
+            const SizedBox(height: 16),
+            _bigNumber(
+              context,
               icon: Icons.account_balance,
               color: AppColors.warning,
-              label: 'IVA repercutido',
-              value: summary.ivaRepercutido,
+              label: 'IVA repercutido bruto',
+              value: summary.ivaRepercutidoBruto,
             ),
-            const SizedBox(height: 12),
+            const Divider(height: 28),
             _row(
-              icon: Icons.savings,
-              color: AppColors.success,
-              label: 'IVA soportado deducible',
-              value: summary.ivaSoportado,
+              label: 'IRPF retenido en facturas',
+              value: summary.irpfRetenido,
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             _row(
+              label: 'IRPF a ingresar este periodo',
+              value: summary.irpfAIngresar,
+              bold: true,
+            ),
+            if (summary.retencionSuperaIrpf) ...[
+              const SizedBox(height: 4),
+              const Text(
+                'Los clientes han retenido más IRPF del que corresponde en '
+                'este periodo',
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              ),
+            ],
+            const SizedBox(height: 12),
+            _bigNumber(
+              context,
               icon: Icons.payments,
-              color: summary.ivaAPagar >= 0
-                  ? AppColors.warning
-                  : AppColors.success,
-              label: summary.ivaAPagar >= 0 ? 'IVA a pagar' : 'IVA a compensar',
-              value: summary.ivaAPagar.abs(),
+              color: AppColors.primary,
+              label: 'Total IRPF (retenido + a ingresar)',
+              value: summary.irpfTotal,
             ),
-            const Divider(height: 24),
-            _row(
-              icon: Icons.category,
-              color: AppColors.textSecondary,
-              label: 'Gastos deducibles',
-              value: summary.gastosDeducibles,
-            ),
-            const SizedBox(height: 12),
-            _row(
-              icon: Icons.trending_down,
-              color: AppColors.textSecondary,
-              label: 'Amortización',
-              value: summary.amortizacion,
-            ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: AppColors.primaryLight,
+                color: AppColors.warningBg,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: _row(
-                icon: Icons.insights,
-                color: AppColors.primary,
-                label: 'Beneficio estimado',
-                value: summary.beneficioEstimado,
-                large: true,
+              child: const Text(
+                '⚠️ Estimación orientativa de lo que podrías llegar a pagar '
+                'como máximo. No descontamos gastos ni inversiones para que no '
+                'haya sorpresas al cierre del trimestre. Tu gestoría hará el '
+                'cálculo real con las deducciones correspondientes.',
+                style: TextStyle(fontSize: 12.5, height: 1.4),
               ),
             ),
           ],
@@ -273,30 +237,56 @@ class _FiscalSection extends StatelessWidget {
   }
 
   Widget _row({
+    required String label,
+    required double value,
+    bool bold = false,
+  }) {
+    final weight = bold ? FontWeight.bold : FontWeight.w500;
+    return Row(
+      children: [
+        Expanded(
+          child: Text(label, style: TextStyle(fontWeight: weight)),
+        ),
+        Text(
+          CurrencyFormatter.format(value),
+          style: TextStyle(fontWeight: weight, fontSize: 15),
+        ),
+      ],
+    );
+  }
+
+  Widget _bigNumber(
+    BuildContext context, {
     required IconData icon,
     required Color color,
     required String label,
     required double value,
-    bool large = false,
   }) {
     return Row(
       children: [
-        Icon(icon, color: color, size: large ? 24 : 20),
-        const SizedBox(width: 10),
+        Icon(icon, color: color, size: 28),
+        const SizedBox(width: 12),
         Expanded(
-          child: Text(
-            label,
-            style: TextStyle(
-              fontWeight: large ? FontWeight.bold : FontWeight.w500,
-            ),
-          ),
-        ),
-        Text(
-          CurrencyFormatter.format(value),
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: large ? 18 : 15,
-            color: color,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                CurrencyFormatter.format(value),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 24,
+                  color: color,
+                ),
+              ),
+            ],
           ),
         ),
       ],
@@ -716,469 +706,6 @@ class _SummaryCard extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-// ==================== IVA SECTION ====================
-
-class _IvaSection extends StatelessWidget {
-  final List<QuarterVatDetail> quarters;
-  const _IvaSection({required this.quarters});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'IVA Trimestral',
-          style: Theme.of(
-            context,
-          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 8),
-        ...quarters.map((q) => _IvaQuarterCard(quarter: q)),
-      ],
-    );
-  }
-}
-
-class _IvaQuarterCard extends ConsumerWidget {
-  final QuarterVatDetail quarter;
-  const _IvaQuarterCard({required this.quarter});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // Status badge colors
-    Color badgeBg;
-    Color badgeText;
-    String badgeLabel;
-
-    switch (quarter.status) {
-      case 'declarado':
-        badgeBg = AppColors.successBg;
-        badgeText = AppColors.success;
-        badgeLabel = 'Declarado';
-        break;
-      case 'pendiente_declarar':
-        badgeBg = AppColors.errorBg;
-        badgeText = AppColors.error;
-        badgeLabel = 'Sin declarar';
-        break;
-      case 'pasado':
-        badgeBg = AppColors.successBg;
-        badgeText = AppColors.success;
-        badgeLabel = 'Declarado';
-        break;
-      case 'en_curso':
-        badgeBg = AppColors.primaryLight;
-        badgeText = AppColors.primary;
-        badgeLabel = 'Actual';
-        break;
-      default:
-        badgeBg = AppColors.draftBg;
-        badgeText = AppColors.draft;
-        badgeLabel = 'Futuro';
-    }
-
-    // Estimated badge
-    Color estBadgeBg;
-    Color estBadgeText;
-    String estBadgeLabel;
-    if (quarter.isEstimated) {
-      estBadgeBg = const Color(0xFFF1EFE8);
-      estBadgeText = const Color(0xFF5F5E5A);
-      estBadgeLabel = 'Estimado';
-    } else {
-      estBadgeBg = const Color(0xFFE8F6EF);
-      estBadgeText = const Color(0xFF1B8A56);
-      estBadgeLabel = 'Real';
-    }
-
-    final declFormat = DateFormat('dd MMM', 'es');
-
-    // Can toggle declared? Past quarters only (not en_curso or futuro)
-    final canToggleDeclared =
-        quarter.status == 'pendiente_declarar' ||
-        quarter.status == 'pasado' ||
-        quarter.status == 'declarado';
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ExpansionTile(
-        leading: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: badgeBg,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Text(
-            'T${quarter.quarter}',
-            style: TextStyle(fontWeight: FontWeight.bold, color: badgeText),
-          ),
-        ),
-        title: Row(
-          children: [
-            Text(
-              CurrencyFormatter.format(quarter.ivaTotal),
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-            ),
-            const SizedBox(width: 6),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: estBadgeBg,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                estBadgeLabel,
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: estBadgeText,
-                ),
-              ),
-            ),
-            const SizedBox(width: 4),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: badgeBg,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                badgeLabel,
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: badgeText,
-                ),
-              ),
-            ),
-          ],
-        ),
-        subtitle: Text(
-          'Declaración: ${declFormat.format(quarter.declarationDate)}${quarter.daysRemaining > 0 ? ' (${quarter.daysRemaining} días)' : ''}',
-          style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
-        ),
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Invoice details
-                if (quarter.invoices.isNotEmpty) ...[
-                  const Row(
-                    children: [
-                      Expanded(
-                        flex: 3,
-                        child: Text(
-                          'Factura',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        flex: 2,
-                        child: Text(
-                          'Base',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textSecondary,
-                          ),
-                          textAlign: TextAlign.right,
-                        ),
-                      ),
-                      Expanded(
-                        flex: 2,
-                        child: Text(
-                          'IVA',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textSecondary,
-                          ),
-                          textAlign: TextAlign.right,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const Divider(height: 12),
-                  ...quarter.invoices.map(
-                    (inv) => InkWell(
-                      onTap: () => context.push('/invoice/${inv.invoiceId}'),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              flex: 3,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    '${inv.displayNumber} · ${inv.clientName}',
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  Text(
-                                    DateFormat('dd/MM/yy').format(inv.fecha),
-                                    style: const TextStyle(
-                                      fontSize: 10,
-                                      color: AppColors.textSecondary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Expanded(
-                              flex: 2,
-                              child: Text(
-                                CurrencyFormatter.format(inv.base),
-                                style: const TextStyle(fontSize: 12),
-                                textAlign: TextAlign.right,
-                              ),
-                            ),
-                            Expanded(
-                              flex: 2,
-                              child: Text(
-                                CurrencyFormatter.format(inv.iva),
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                textAlign: TextAlign.right,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  if (quarter.ivaFacturas > 0) ...[
-                    const Divider(height: 12),
-                    Row(
-                      children: [
-                        const Expanded(
-                          flex: 3,
-                          child: Text(
-                            'IVA facturas',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          flex: 4,
-                          child: Text(
-                            CurrencyFormatter.format(quarter.ivaFacturas),
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                            textAlign: TextAlign.right,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ],
-
-                // Historical estimated IVA section
-                if (quarter.isEstimated) ...[
-                  if (quarter.invoices.isNotEmpty) const SizedBox(height: 8),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF1EFE8),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text(
-                              'IVA estimado (histórico)',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFF5F5E5A),
-                              ),
-                            ),
-                            Text(
-                              CurrencyFormatter.format(
-                                quarter.ivaHistoricoEstimado,
-                              ),
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF5F5E5A),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Base estimada: ${CurrencyFormatter.format(quarter.ivaHistoricoEstimado / 0.21 * 1.21)} · IVA 21%',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: Color(0xFF5F5E5A),
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        const Text(
-                          'IVA calculado sobre el cachet de los bolos importados. Puede diferir del IVA real declarado.',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-
-                if (quarter.invoices.isEmpty && !quarter.isEstimated)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8),
-                    child: Text(
-                      'Sin facturas cobradas en este trimestre',
-                      style: TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ),
-
-                // Total
-                if (quarter.ivaTotal > 0) ...[
-                  const Divider(height: 16),
-                  Row(
-                    children: [
-                      const Expanded(
-                        flex: 3,
-                        child: Text(
-                          'Total IVA',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        flex: 4,
-                        child: Text(
-                          CurrencyFormatter.format(quarter.ivaTotal),
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          textAlign: TextAlign.right,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-
-                // Declare button (past quarters only)
-                if (canToggleDeclared) ...[
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: quarter.isDeclared
-                        ? Container(
-                            padding: const EdgeInsets.symmetric(vertical: 10),
-                            decoration: BoxDecoration(
-                              color: AppColors.successBg,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(
-                                  Icons.check_circle,
-                                  color: AppColors.success,
-                                  size: 16,
-                                ),
-                                const SizedBox(width: 6),
-                                const Text(
-                                  'Declarado ✓',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppColors.success,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                GestureDetector(
-                                  onTap: () {
-                                    ref
-                                        .read(declaredQuartersProvider.notifier)
-                                        .toggle(
-                                          quarter.year,
-                                          quarter.quarter,
-                                          ivaAmount: quarter.ivaTotal,
-                                        );
-                                    // Invalidate financial summary
-                                    ref.invalidate(
-                                      financialPeriodSummaryProvider,
-                                    );
-                                  },
-                                  child: const Text(
-                                    'Deshacer',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: AppColors.textSecondary,
-                                      decoration: TextDecoration.underline,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          )
-                        : OutlinedButton.icon(
-                            onPressed: () {
-                              ref
-                                  .read(declaredQuartersProvider.notifier)
-                                  .toggle(
-                                    quarter.year,
-                                    quarter.quarter,
-                                    ivaAmount: quarter.ivaTotal,
-                                  );
-                              // Invalidate financial summary
-                              ref.invalidate(financialPeriodSummaryProvider);
-                            },
-                            icon: const Icon(Icons.check, size: 16),
-                            label: const Text('Marcar como declarado'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: AppColors.primary,
-                              side: const BorderSide(color: AppColors.primary),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                          ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -1603,358 +1130,3 @@ class _GigsList extends StatelessWidget {
   }
 }
 
-// ==================== GASTOS SECTION ====================
-
-class _GastosSection extends ConsumerWidget {
-  final DashboardPeriod period;
-
-  const _GastosSection({required this.period});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final quarters = _quartersForPeriod(period);
-    if (quarters.isEmpty) return const SizedBox.shrink();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Gastos',
-          style: Theme.of(
-            context,
-          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 8),
-        ...quarters.map((q) => _GastosQuarterCard(year: q.$1, quarter: q.$2)),
-      ],
-    );
-  }
-
-  List<(int, int)> _quartersForPeriod(DashboardPeriod p) {
-    switch (p.mode) {
-      case DashboardPeriodMode.trimestre:
-        return [(p.year, p.quarter)];
-      case DashboardPeriodMode.anio:
-        return [(p.year, 1), (p.year, 2), (p.year, 3), (p.year, 4)];
-      case DashboardPeriodMode.mes:
-        final q = ((p.month - 1) ~/ 3) + 1;
-        return [(p.year, q)];
-    }
-  }
-}
-
-class _GastosQuarterCard extends ConsumerWidget {
-  final int year;
-  final int quarter;
-
-  const _GastosQuarterCard({required this.year, required this.quarter});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final params = (year: year, quarter: quarter);
-    final totalesAsync = ref.watch(gastosTrimestralProvider(params));
-    final ivaAsync = ref.watch(ivaDeducibleTrimestralProvider(params));
-    final fmt = NumberFormat.currency(locale: 'es_ES', symbol: '€');
-
-    final totalGastos =
-        totalesAsync.valueOrNull?.values.fold(0.0, (s, v) => s + v) ?? 0.0;
-    final ivaSoportado = ivaAsync.valueOrNull ?? 0.0;
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ExpansionTile(
-        leading: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: AppColors.warningBg,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Text(
-            'T$quarter',
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              color: AppColors.warning,
-            ),
-          ),
-        ),
-        title: totalesAsync.when(
-          loading: () => const SizedBox(
-            height: 16,
-            width: 16,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-          error: (_, __) => const Text('Error'),
-          data: (_) => Text(
-            fmt.format(totalGastos),
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-          ),
-        ),
-        subtitle: ivaAsync.when(
-          loading: () => const SizedBox.shrink(),
-          error: (_, __) => const SizedBox.shrink(),
-          data: (_) => Text(
-            'IVA soportado: ${fmt.format(ivaSoportado)}',
-            style: const TextStyle(
-              fontSize: 11,
-              color: AppColors.textSecondary,
-            ),
-          ),
-        ),
-        children: [
-          totalesAsync.when(
-            loading: () => const Padding(
-              padding: EdgeInsets.all(16),
-              child: CircularProgressIndicator(),
-            ),
-            error: (e, _) => Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text('Error: $e'),
-            ),
-            data: (totales) {
-              if (totales.isEmpty) {
-                return const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
-                  child: Text(
-                    'Sin gastos en este trimestre',
-                    style: TextStyle(color: AppColors.textSecondary),
-                  ),
-                );
-              }
-              return Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Divider(height: 8),
-                    ...totales.entries.map((entry) {
-                      final cat = ExpenseCategoryExtension.fromDb(entry.key);
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        child: Row(
-                          children: [
-                            Expanded(child: Text(cat.label)),
-                            Text(
-                              fmt.format(entry.value),
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }),
-                    const Divider(height: 12),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'IVA soportado deducible',
-                          style: TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 12,
-                          ),
-                        ),
-                        Text(
-                          fmt.format(ivaSoportado),
-                          style: const TextStyle(
-                            color: AppColors.success,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ==================== AMORTIZACIÓN SECTION ====================
-
-class _AmortizacionSection extends ConsumerWidget {
-  final DashboardPeriod period;
-
-  const _AmortizacionSection({required this.period});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final quarters = _quartersForPeriod(period);
-    if (quarters.isEmpty) return const SizedBox.shrink();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Amortizaciones',
-          style: Theme.of(
-            context,
-          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 8),
-        ...quarters.map(
-          (q) => _AmortizacionQuarterCard(year: q.$1, quarter: q.$2),
-        ),
-      ],
-    );
-  }
-
-  List<(int, int)> _quartersForPeriod(DashboardPeriod p) {
-    switch (p.mode) {
-      case DashboardPeriodMode.trimestre:
-        return [(p.year, p.quarter)];
-      case DashboardPeriodMode.anio:
-        return [(p.year, 1), (p.year, 2), (p.year, 3), (p.year, 4)];
-      case DashboardPeriodMode.mes:
-        final q = ((p.month - 1) ~/ 3) + 1;
-        return [(p.year, q)];
-    }
-  }
-}
-
-class _AmortizacionQuarterCard extends ConsumerWidget {
-  final int year;
-  final int quarter;
-
-  const _AmortizacionQuarterCard({required this.year, required this.quarter});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final params = (year: year, quarter: quarter);
-    final totalAsync = ref.watch(assetAmortizacionTrimestreProvider(params));
-    final assetsAsync = ref.watch(assetsActivosProvider);
-    final fmt = NumberFormat.currency(locale: 'es_ES', symbol: '€');
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ExpansionTile(
-        leading: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: AppColors.primaryLight,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Text(
-            'T$quarter',
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              color: AppColors.primary,
-            ),
-          ),
-        ),
-        title: totalAsync.when(
-          loading: () => const SizedBox(
-            height: 16,
-            width: 16,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-          error: (_, __) => const Text('Error'),
-          data: (total) => Text(
-            fmt.format(total),
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-          ),
-        ),
-        subtitle: const Text(
-          'Amortización acumulada',
-          style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
-        ),
-        children: [
-          assetsAsync.when(
-            loading: () => const Padding(
-              padding: EdgeInsets.all(16),
-              child: CircularProgressIndicator(),
-            ),
-            error: (e, _) => Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text('Error: $e'),
-            ),
-            data: (assets) {
-              final activos = assets.where((a) {
-                return a.cuotaTrimestreConcreto(year, quarter) > 0;
-              }).toList();
-
-              if (activos.isEmpty) {
-                return const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
-                  child: Text(
-                    'Sin amortizaciones en este trimestre',
-                    style: TextStyle(color: AppColors.textSecondary),
-                  ),
-                );
-              }
-
-              return Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Divider(height: 8),
-                    ...activos.map(
-                      (a) => Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        child: Row(
-                          children: [
-                            Icon(
-                              a.categoria.icono,
-                              size: 14,
-                              color: AppColors.textSecondary,
-                            ),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                a.descripcion,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontSize: 12),
-                              ),
-                            ),
-                            Text(
-                              fmt.format(
-                                a.cuotaTrimestreConcreto(year, quarter),
-                              ),
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w500,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const Divider(height: 12),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Deducible de IRPF',
-                          style: TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 12,
-                          ),
-                        ),
-                        totalAsync.when(
-                          loading: () => const SizedBox.shrink(),
-                          error: (_, __) => const SizedBox.shrink(),
-                          data: (total) => Text(
-                            fmt.format(total),
-                            style: const TextStyle(
-                              color: AppColors.success,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}

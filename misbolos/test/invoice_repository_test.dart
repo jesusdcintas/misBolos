@@ -15,7 +15,8 @@ void main() {
   });
 
   setUp(() async {
-    dbPath = p.join(await getDatabasesPath(), 'misbolos.db');
+    // DatabaseHelper usa un fichero por usuario; sin sesión es el de invitado.
+    dbPath = p.join(await getDatabasesPath(), 'misbolos_guest.db');
     await DatabaseHelper.instance.close();
     await deleteDatabase(dbPath);
   });

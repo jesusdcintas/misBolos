@@ -4,8 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_theme_colors.dart';
 import '../../providers/invoice_provider.dart';
 import '../invoices/invoices_list_screen.dart';
-import '../expenses/expenses_screen.dart';
-import '../assets/assets_screen.dart';
+import 'gastos_inversiones_screen.dart';
 import '../clients/clients_list_screen.dart';
 
 class FinanzasScreen extends ConsumerStatefulWidget {
@@ -52,7 +51,7 @@ class _FinanzasScreenState extends ConsumerState<FinanzasScreen> {
     final colors = context.colors;
     final scheme = Theme.of(context).colorScheme;
     return DefaultTabController(
-      length: 4,
+      length: 3,
       child: Column(
         children: [
           const SafeArea(bottom: false, child: SizedBox(height: 12)),
@@ -65,10 +64,9 @@ class _FinanzasScreenState extends ConsumerState<FinanzasScreen> {
               indicatorWeight: 3,
               tabs: const [
                 Tab(icon: Icon(Icons.receipt_long_outlined), text: 'Facturas'),
-                Tab(icon: Icon(Icons.euro_outlined), text: 'Gastos'),
                 Tab(
-                  icon: Icon(Icons.inventory_2_outlined),
-                  text: 'Inversiones',
+                  icon: Icon(Icons.euro_outlined),
+                  text: 'Gastos e Inversiones',
                 ),
                 Tab(icon: Icon(Icons.people_outline), text: 'Clientes'),
               ],
@@ -79,8 +77,7 @@ class _FinanzasScreenState extends ConsumerState<FinanzasScreen> {
               physics: NeverScrollableScrollPhysics(),
               children: [
                 InvoicesListScreen(),
-                ExpensesScreen(),
-                AssetsScreen(),
+                GastosInversionesScreen(),
                 ClientsListScreen(embedded: true),
               ],
             ),
