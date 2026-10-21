@@ -97,4 +97,141 @@ Total 20,00
       expect(result.proveedor.encontrado, isFalse);
     });
   });
+
+  // Textos sintéticos con la estructura de facturas reales, sin datos personales.
+  group('ExpensePdfParser casos reales anonimizados', () {
+    const nifUsuario = '00000000T';
+    const nombreUsuario = 'Usuario Ejemplo';
+
+    ExpensePdfParseResult parse(String texto) => ExpensePdfParser.parse(
+      texto,
+      nifUsuario: nifUsuario,
+      nombreUsuario: nombreUsuario,
+    );
+
+    test('1. TOTAL al final de la línea de OBSERVACIONES', () {
+      const texto = '''
+Proveedor Ejemplo S.L.
+C/ Ejemplo 12, 28001 Madrid
+CIF: B00000000
+FACTURA Nº F-2026/0153
+Fecha: 17/07/2026
+CLIENTE
+Usuario Ejemplo
+NIF: 00000000T
+Concepto Importe
+Alquiler de equipo 90,00
+BASE IMPONIBLE 90,00
+IVA 21% 18,90
+OBSERVACIONES: Pago por transferencia      TOTAL: 108,90 €
+''';
+      final result = parse(texto);
+
+      expect(result.total.valor, 108.90);
+      expect(result.fecha.valor, DateTime(2026, 7, 17));
+      expect(result.proveedor.valor, 'Proveedor Ejemplo S.L.');
+    });
+
+    test('2. TOTAL FACTURA EUROS y fecha de operación distinta', () {
+      const texto = '''
+Gasolinera Ejemplo, S.A.
+Avda. del Ejemplo s/n
+CIF A00000000
+FACTURA SIMPLIFICADA
+Fecha: 10/09/2026   F. Operación: 09/09/2026
+Producto: Gasóleo A
+Litros 60,50
+BASE IMPONIBLE 82,89
+IVA 21% 17,40
+TOTAL FACTURA EUROS........ 100,29 €
+Pago con Mastercard ****1234 100,29
+''';
+      final result = parse(texto);
+
+      expect(result.total.valor, 100.29);
+      expect(result.fecha.valor, DateTime(2026, 9, 10));
+      expect(result.proveedor.valor, 'Gasolinera Ejemplo, S.A.');
+    });
+
+    test('3. Factura en inglés con GmbH, dirección y Total Price', () {
+      const texto = '''
+Thomann Ejemplo GmbH, Hans-Ejemplo-Str. 1, 96138 Burgebrach
+VAT ID: DE000000000
+Invoice
+Usuario Ejemplo
+Calle Falsa 1
+28001 Madrid
+NIF: 00000000T
+Invoice no. 0000000
+Date: 22.07.2026
+Article Qty Total Price
+Cable XLR 2 40,00
+Total Price 667,81
+Net amount 667,81
+VAT 21% 140,24
+Total amount: 808,05 EUR
+Amount carried forward 0,00
+''';
+      final result = parse(texto);
+
+      expect(result.total.valor, 808.05);
+      expect(result.fecha.valor, DateTime(2026, 7, 22));
+      expect(result.proveedor.valor, 'Thomann Ejemplo GmbH');
+    });
+
+    test('4. Nunca sugiere el nombre del usuario como proveedor', () {
+      const conUsuarioPrimero = '''
+Usuario Ejemplo
+Calle Falsa 1
+NIF: 00000000-T
+
+Fecha: 01/03/2026
+Total: 50,00
+''';
+      final result = parse(conUsuarioPrimero);
+
+      expect(result.proveedor.valor, isNot(nombreUsuario));
+      expect(result.proveedor.encontrado, isFalse);
+
+      const conAdquiriente = '''
+Estudio Ejemplo
+Datos del cliente:
+Usuario Ejemplo
+NIF: 00000000T
+''';
+      expect(parse(conAdquiriente).proveedor.valor, isNot(nombreUsuario));
+    });
+
+    test('5. Dos totales distintos: total vacío', () {
+      const texto = '''
+Tienda Ejemplo
+Total 100,00
+Total 121,00
+''';
+      expect(parse(texto).total.encontrado, isFalse);
+    });
+
+    test('6. Solo Subtotal: total vacío', () {
+      const texto = '''
+Tienda Ejemplo
+Subtotal 80,00
+IVA 21% 16,80
+''';
+      expect(parse(texto).total.encontrado, isFalse);
+    });
+
+    test('7. Fechas dd.mm.yyyy y dd-mm-yyyy', () {
+      expect(parse('Date: 22.07.2026').fecha.valor, DateTime(2026, 7, 22));
+      expect(parse('Fecha: 17-07-2026').fecha.valor, DateTime(2026, 7, 17));
+    });
+
+    test('etiqueta de total sola con el importe en la línea siguiente', () {
+      const texto = '''
+Tienda Ejemplo
+TOTAL:
+45,30 €
+''';
+      expect(parse(texto).total.valor, 45.30);
+    });
+  });
 }
