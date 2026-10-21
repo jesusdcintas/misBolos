@@ -160,7 +160,7 @@ Deno.serve(async (req) => {
 
     return json({ ok: true, task_type: body.task_type, model, text: content.trim() });
   } catch (error) {
-    return json({ ok: false, error: error.message ?? String(error) }, 400);
+    return json({ ok: false, error: error instanceof Error ? error.message : String(error) }, 400);
   }
 });
 
