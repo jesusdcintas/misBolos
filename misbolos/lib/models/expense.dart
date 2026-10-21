@@ -98,8 +98,6 @@ class Expense {
     this.attachmentMimeType,
   }) : createdAt = createdAt ?? DateTime.now();
 
-  double get importeDeducible => importeBase * (porcentajeDeduccion / 100);
-
   Expense copyWith({
     int? id,
     String? cloudId,

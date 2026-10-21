@@ -499,10 +499,3 @@ final gastosTrimestralProvider =
           .read(expenseRepositoryProvider)
           .getTotalesPorCategoria(params.year, params.quarter);
     });
-
-final ivaDeducibleTrimestralProvider =
-    FutureProvider.family<double, ({int year, int quarter})>((ref, params) {
-      return ref
-          .read(expenseRepositoryProvider)
-          .getTotalIvaSoportadoTrimestre(params.year, params.quarter);
-    });
