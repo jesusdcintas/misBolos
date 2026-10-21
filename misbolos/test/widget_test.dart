@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:misbolos/app.dart';
 
 void main() {
+  // Omitido: requiere Supabase inicializado. Falla también en main.
   testWidgets(
     'App smoke test',
     (WidgetTester tester) async {
@@ -19,6 +20,6 @@ void main() {
       await tester.pump();
       expect(find.text('Inicio'), findsWidgets);
     },
-    skip: 'Omitido: requiere Supabase inicializado. Falla también en main.',
+    skip: true,
   );
 }
