@@ -145,33 +145,46 @@ class ExpensePdfParser {
     return out.replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 
+  static final _fechaNoEmisionRegex = RegExp(
+    r'operacion|vencimiento|due\s+date|\bf\.\s*op',
+  );
+  static final _fechaEmisionRegex = RegExp(
+    r'fecha\s*(de\s+)?(factura|emision|expedicion)|invoice\s+date',
+  );
+  static final _fechaEtiquetaRegex = RegExp(r'\bfecha\b|\bdate\b');
+
   static CampoSugerido<DateTime> _parseFecha(List<String> lineas) {
-    final facturaCtx = <DateTime>{};
-    final fechaCtx = <DateTime>{};
+    final emision = <DateTime>{};
+    final etiquetadas = <DateTime>{};
     final todas = <DateTime>{};
 
     for (var i = 0; i < lineas.length; i++) {
-      final fechas = _fechasEn(lineas[i]);
-      if (fechas.isEmpty) continue;
-      todas.addAll(fechas);
-
-      final ctx = lineas[i].toLowerCase();
-      // Etiqueta "Fecha:" en la línea anterior y la fecha debajo.
-      final prevLinea = i > 0 ? lineas[i - 1] : '';
-      final etiquetaPrevia = prevLinea.isNotEmpty && _fechasEn(prevLinea).isEmpty
-          ? prevLinea.toLowerCase()
-          : '';
-      final contexto = '$ctx $etiquetaPrevia';
-      if (contexto.contains('vencimiento')) continue;
-      if (RegExp(r'fecha\s+(de\s+)?(factura|emisi[oó]n|expedici[oó]n)')
-          .hasMatch(contexto)) {
-        facturaCtx.addAll(fechas);
-      } else if (contexto.contains('fecha')) {
-        fechaCtx.addAll(fechas);
+      final linea = lineas[i];
+      var inicio = 0;
+      for (final m in _dateRegex.allMatches(linea)) {
+        final fecha = _fechaDe(m);
+        // Cada fecha toma como etiqueta el texto entre la fecha anterior y ella.
+        var contexto = linea.substring(inicio, m.start);
+        inicio = m.end;
+        if (fecha == null) continue;
+        todas.add(fecha);
+        if (contexto.trim().isEmpty && i > 0) {
+          final previa = lineas[i - 1];
+          if (previa.isNotEmpty && !_dateRegex.hasMatch(previa)) {
+            contexto = previa;
+          }
+        }
+        final ctx = _normalizarTexto(contexto);
+        if (_fechaNoEmisionRegex.hasMatch(ctx)) continue;
+        if (_fechaEmisionRegex.hasMatch(ctx)) {
+          emision.add(fecha);
+        } else if (_fechaEtiquetaRegex.hasMatch(ctx)) {
+          etiquetadas.add(fecha);
+        }
       }
     }
 
-    for (final candidatas in [facturaCtx, fechaCtx]) {
+    for (final candidatas in [emision, etiquetadas]) {
       if (candidatas.length == 1) {
         return CampoSugerido.encontrado(candidatas.first);
       }
@@ -181,18 +194,14 @@ class ExpensePdfParser {
     return const CampoSugerido.vacio();
   }
 
-  static List<DateTime> _fechasEn(String linea) {
-    final result = <DateTime>[];
-    for (final m in _dateRegex.allMatches(linea)) {
-      final d = int.parse(m.group(1)!);
-      final mo = int.parse(m.group(2)!);
-      final y = int.parse(m.group(3)!);
-      if (mo < 1 || mo > 12 || d < 1 || d > 31) continue;
-      final date = DateTime(y, mo, d);
-      if (date.month != mo || date.day != d) continue;
-      result.add(date);
-    }
-    return result;
+  static DateTime? _fechaDe(RegExpMatch m) {
+    final d = int.parse(m.group(1)!);
+    final mo = int.parse(m.group(2)!);
+    final y = int.parse(m.group(3)!);
+    if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+    final date = DateTime(y, mo, d);
+    if (date.month != mo || date.day != d) return null;
+    return date;
   }
 
   static CampoSugerido<double> _parseTotal(List<String> lineas) {
