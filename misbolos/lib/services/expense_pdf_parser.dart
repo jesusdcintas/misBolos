@@ -33,6 +33,7 @@ class ExpensePdfParser {
     r'(?<!\d)(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{4})(?!\d)',
   );
   static final _amountTokenRegex = RegExp(r'\d[\d.,]*');
+  static final _amountWithDecimalRegex = RegExp(r'\d[\d.,]*[.,]\d{1,2}');
   static final _totalLabelRegex = RegExp(
     r'(total\s*:|total\s+factura|total\s+amount|importe\s+total|'
     r'total\s+a\s+pagar|^total\b)',
@@ -40,7 +41,8 @@ class ExpensePdfParser {
   );
   static final _totalExcluidoRegex = RegExp(
     r'\b(subtotal|total\s+price|value\s+of\s+goods|net\s+amount|base|iva|vat|'
-    r'carried\s+forward|mastercard|visa)\b',
+    r'carried\s+forward|amount\s+carried\s+forward|mastercard|visa|'
+    r'base\s+imponible|importe\s+del\s+producto\s*\(\s*base\s*imponible\s*\))\b',
     caseSensitive: false,
   );
   static final _soloEtiquetaRegex = RegExp(
@@ -205,7 +207,8 @@ class ExpensePdfParser {
   }
 
   static CampoSugerido<double> _parseTotal(List<String> lineas) {
-    final candidatos = <int>{};
+    final importesDocumento = _extraerImportesDocumentoEnCentimos(lineas);
+    final candidatosValidados = <int>{};
     for (var i = 0; i < lineas.length; i++) {
       final linea = lineas[i];
       final etiqueta = _totalLabelRegex.firstMatch(linea);
@@ -220,12 +223,44 @@ class ExpensePdfParser {
           valor = _ultimoImporte(siguiente);
         }
       }
-      if (valor != null) candidatos.add((valor * 100).round());
+      if (valor == null) continue;
+      final candidato = (valor * 100).round();
+      if (_coincideConSumaDeDosImportes(candidato, importesDocumento)) {
+        candidatosValidados.add(candidato);
+      }
     }
-    if (candidatos.length == 1) {
-      return CampoSugerido.encontrado(candidatos.first / 100);
+    if (candidatosValidados.length == 1) {
+      return CampoSugerido.encontrado(candidatosValidados.first / 100);
     }
     return const CampoSugerido.vacio();
+  }
+
+  static List<int> _extraerImportesDocumentoEnCentimos(List<String> lineas) {
+    final importes = <int>[];
+    for (final linea in lineas) {
+      final sinFechas = linea.replaceAll(_dateRegex, ' ');
+      for (final m in _amountTokenRegex.allMatches(sinFechas)) {
+        final raw = m.group(0)!;
+        if (!_amountWithDecimalRegex.hasMatch(raw)) continue;
+        final valor = parseImporte(raw);
+        if (valor == null || valor <= 0) continue;
+        importes.add((valor * 100).round());
+      }
+    }
+    return importes;
+  }
+
+  static bool _coincideConSumaDeDosImportes(int candidato, List<int> importes) {
+    if (importes.length < 2) return false;
+    for (var i = 0; i < importes.length - 1; i++) {
+      for (var j = i + 1; j < importes.length; j++) {
+        final a = importes[i];
+        final b = importes[j];
+        if (a == b) continue; // Deben ser dos importes distintos.
+        if ((a + b - candidato).abs() <= 1) return true;
+      }
+    }
+    return false;
   }
 
   static double? _ultimoImporte(String texto) {

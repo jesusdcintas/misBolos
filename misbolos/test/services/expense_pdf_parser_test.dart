@@ -66,11 +66,19 @@ Total 50,00
 
     test('interpreta importes con coma decimal y con punto decimal', () {
       expect(
-        ExpensePdfParser.parse('Total: 1.234,56 €').total.valor,
+        ExpensePdfParser.parse('''
+Base imponible 1.000,00
+IVA 234,56
+Total: 1.234,56 €
+''').total.valor,
         1234.56,
       );
       expect(
-        ExpensePdfParser.parse('Total: 1234.56 EUR').total.valor,
+        ExpensePdfParser.parse('''
+Base imponible 1000.00
+IVA 234.56
+Total: 1234.56 EUR
+''').total.valor,
         1234.56,
       );
       expect(ExpensePdfParser.parseImporte('1.234,56'), 1234.56);
@@ -228,10 +236,110 @@ IVA 21% 16,80
     test('etiqueta de total sola con el importe en la línea siguiente', () {
       const texto = '''
 Tienda Ejemplo
+Base imponible 30,00
+IVA 15,30
 TOTAL:
 45,30 €
 ''';
       expect(parse(texto).total.valor, 45.30);
+    });
+
+    test('valida TOTAL FACTURA EUROS con suma base + IVA', () {
+      const texto = '''
+Proveedor Demo S.L.
+Base imponible 82,88 €
+IVA 21% 17,41 €
+TOTAL FACTURA EUROS.... 100,29 €
+''';
+
+      final result = parse(texto);
+
+      expect(result.total.encontrado, isTrue);
+      expect(result.total.valor, 100.29);
+    });
+
+    test('valida Total amount con suma de dos importes', () {
+      const texto = '''
+Vendor Demo GmbH
+Net amount 667,81
+VAT 21% 140,24
+Total amount: 808,05 EUR
+''';
+
+      final result = parse(texto);
+
+      expect(result.total.encontrado, isTrue);
+      expect(result.total.valor, 808.05);
+    });
+
+    test('valida TOTAL en tabla con base e IVA', () {
+      const texto = '''
+Concepto Importe
+Base imponible 90,00
+IVA 21% 18,90
+TOTAL: 108,90
+''';
+
+      final result = parse(texto);
+
+      expect(result.total.encontrado, isTrue);
+      expect(result.total.valor, 108.90);
+    });
+
+    test('solo base imponible sin etiqueta de total deja total vacío', () {
+      const texto = '''
+Proveedor Demo
+Base imponible 82,88 €
+''';
+
+      final result = parse(texto);
+
+      expect(result.total.encontrado, isFalse);
+      expect(result.total.valor, isNull);
+    });
+
+    test('TOTAL igual a base sin IVA que complete deja total vacío', () {
+      const texto = '''
+Proveedor Demo
+Base imponible 82,88 €
+TOTAL 82,88 €
+''';
+
+      final result = parse(texto);
+
+      expect(result.total.encontrado, isFalse);
+      expect(result.total.valor, isNull);
+    });
+
+    test('dos etiquetas total: si ambas cumplen valores distintos, total vacío', () {
+      const texto = '''
+Proveedor Demo
+Base imponible 90,00
+IVA 21% 18,90
+Retención 10,00
+TOTAL: 108,90
+Total amount: 100,00 EUR
+''';
+
+      final result = parse(texto);
+
+      expect(result.total.encontrado, isFalse);
+      expect(result.total.valor, isNull);
+    });
+
+    test('dos etiquetas total: si solo una cumple suma, se sugiere esa', () {
+      const texto = '''
+Proveedor Demo
+Base imponible 90,00
+IVA 21% 18,90
+TOTAL: 108,90
+Total amount: 120,00 EUR
+''';
+
+      final result = parse(texto);
+
+      expect(result.total.encontrado, isTrue);
+      expect(result.total.valor, 108.90);
     });
   });
 }
