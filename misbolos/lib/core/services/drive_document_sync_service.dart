@@ -8,7 +8,6 @@ import 'package:uuid/uuid.dart';
 
 import '../../database/database_helper.dart';
 import '../../core/utils/invoice_file_name.dart';
-import '../../core/utils/period_utils.dart';
 import '../../models/asset.dart';
 import '../../models/client.dart';
 import '../../models/expense.dart';
@@ -182,26 +181,34 @@ class DriveDocumentSyncService {
   final SettingsRepository _settingsRepository = SettingsRepository();
   static const int maxRetryAttempts = 5;
 
-  /// Ruta lógica de Drive para gastos e inversiones a partir de la fecha de la
-  /// factura: `MisBolos/{YYYY}/T{1-4}/{mes capitalizado}/Gastos e Inversiones/`.
+  /// Ruta de la carpeta de gastos e inversiones relativa a la carpeta raíz,
+  /// con los mismos nombres que crea `GoogleDriveService.ensureMonthStructure`.
   static String buildExpensePath(DateTime fecha) {
-    const meses = [
-      'Enero',
-      'Febrero',
-      'Marzo',
-      'Abril',
-      'Mayo',
-      'Junio',
-      'Julio',
-      'Agosto',
-      'Septiembre',
-      'Octubre',
-      'Noviembre',
-      'Diciembre',
-    ];
-    final trimestre = PeriodUtils.quarterOfMonth(fecha.month);
-    final mes = meses[fecha.month - 1];
-    return 'MisBolos/${fecha.year}/T$trimestre/$mes/Gastos e Inversiones/';
+    return [
+      getYearFolderName(fecha),
+      getQuarterName(fecha),
+      getMonthName(fecha),
+      gastosInversionesFolderName,
+    ].join('/');
+  }
+
+  /// True si al pasar de [anterior] a [nueva] el adjunto cambia de carpeta.
+  static bool expenseFolderChanged(DateTime anterior, DateTime nueva) {
+    return buildExpensePath(anterior) != buildExpensePath(nueva);
+  }
+
+  /// Mueve el adjunto ya subido a la carpeta que corresponde a su fecha.
+  Future<void> moveExpenseAttachmentToDateFolder(Expense expense) async {
+    final fileId = expense.driveFileId?.trim();
+    if (fileId == null || fileId.isEmpty) return;
+    final monthFolders = await _drive.ensureMonthStructure(expense.fecha);
+    await _drive.moveFileToFolder(
+      fileId: fileId,
+      targetFolderId: monthFolders.gastosInversionesFolderId,
+    );
+    debugPrint(
+      '[DRIVE][MOVE] expense/${expense.id} -> ${buildExpensePath(expense.fecha)}',
+    );
   }
   static const String errorMissingFile = 'failed_file_missing';
   static const String errorDevicePath = 'device_path_unavailable';
@@ -283,6 +290,7 @@ class DriveDocumentSyncService {
     String? driveFileId,
     String? remoteFolderId,
     String? logicalPath,
+    bool force = false,
   }) async {
     final normalizedType = _canonicalEntityType(entityType);
     if (normalizedType == 'invoice') {
@@ -337,7 +345,7 @@ class DriveDocumentSyncService {
         );
         return;
       }
-      if (currentStatus == statusUploaded) {
+      if (currentStatus == statusUploaded && !force) {
         debugPrint(
           '[DriveUploadQueue] skipped duplicate pending task entity=$normalizedType/$entityId status=$currentStatus',
         );
@@ -1836,6 +1844,13 @@ class DriveDocumentSyncService {
         parentFolderId: monthFolders.gastosInversionesFolderId,
         mimeType: _mimeTypeFor(stableFile.path),
       );
+      if (expense.driveFileId?.trim().isNotEmpty == true) {
+        // Si la fecha cambió, el fichero actualizado sigue en la carpeta vieja.
+        await _drive.moveFileToFolder(
+          fileId: uploaded.fileId,
+          targetFolderId: monthFolders.gastosInversionesFolderId,
+        );
+      }
       await _expenseRepository.update(
         expense.copyWith(
           driveFileId: uploaded.fileId,

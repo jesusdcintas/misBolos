@@ -131,29 +131,10 @@ void main() {
   });
 
   group('DriveDocumentSyncService.buildExpensePath', () {
-    test('construye la ruta por trimestre y mes capitalizado', () {
+    test('usa los nombres reales de las carpetas del sync', () {
       expect(
         DriveDocumentSyncService.buildExpensePath(DateTime(2026, 2, 10)),
-        'MisBolos/2026/T1/Febrero/Gastos e Inversiones/',
-      );
-      expect(
-        DriveDocumentSyncService.buildExpensePath(DateTime(2026, 5, 1)),
-        'MisBolos/2026/T2/Mayo/Gastos e Inversiones/',
-      );
-      expect(
-        DriveDocumentSyncService.buildExpensePath(DateTime(2026, 8, 20)),
-        'MisBolos/2026/T3/Agosto/Gastos e Inversiones/',
-      );
-      expect(
-        DriveDocumentSyncService.buildExpensePath(DateTime(2026, 11, 3)),
-        'MisBolos/2026/T4/Noviembre/Gastos e Inversiones/',
-      );
-    });
-
-    test('respeta años distintos', () {
-      expect(
-        DriveDocumentSyncService.buildExpensePath(DateTime(2025, 1, 1)),
-        'MisBolos/2025/T1/Enero/Gastos e Inversiones/',
+        'Contabilidad 2026/1 TRIMESTRE/FEBRERO/Gastos e Inversiones',
       );
     });
   });
