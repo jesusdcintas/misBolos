@@ -4,11 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../core/constants/app_colors.dart';
 import '../../models/expense.dart';
-import '../../models/expense_extraction_result.dart';
 import '../../providers/expenses_provider.dart';
 import '../../services/ai_attachment_service.dart';
-import '../../services/document_text_extractor.dart';
-import '../../services/expense_ai_extractor.dart';
 
 class ExpenseFormScreen extends ConsumerStatefulWidget {
   final int? expenseId;
@@ -25,14 +22,12 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
   final _proveedorController = TextEditingController();
   final _totalController = TextEditingController();
   final _notasController = TextEditingController();
-  final _iaTextController = TextEditingController();
 
   DateTime _fecha = DateTime.now();
   ExpenseCategory _categoria = ExpenseCategory.otros;
   String? _documentoPath;
   String? _documentoNombreOriginal;
   bool _loading = false;
-  bool _extracting = false;
   bool _loaded = false;
 
   double get _total =>
@@ -44,7 +39,6 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
     _proveedorController.dispose();
     _totalController.dispose();
     _notasController.dispose();
-    _iaTextController.dispose();
     super.dispose();
   }
 
@@ -96,36 +90,6 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
       }
     } catch (e) {
       _showPickerError('No se pudo seleccionar el PDF: $e');
-    }
-  }
-
-  Future<void> _pickPhoto() async {
-    try {
-      final path = await AiAttachmentService.instance.pickImageFromGallery();
-      if (path != null && mounted) {
-        setState(() {
-          _documentoPath = path;
-          _documentoNombreOriginal = AiAttachmentService.instance
-              .normalizeOriginalFileName(path);
-        });
-      }
-    } catch (e) {
-      _showPickerError('No se pudo seleccionar la imagen: $e');
-    }
-  }
-
-  Future<void> _takePhoto() async {
-    try {
-      final path = await AiAttachmentService.instance.takePhotoWithCamera();
-      if (path != null && mounted) {
-        setState(() {
-          _documentoPath = path;
-          _documentoNombreOriginal = AiAttachmentService.instance
-              .normalizeOriginalFileName(path);
-        });
-      }
-    } catch (e) {
-      _showPickerError('No se pudo abrir la cámara: $e');
     }
   }
 
@@ -237,146 +201,6 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
       ),
     );
     return keep == true;
-  }
-
-  Future<void> _extractWithAi() async {
-    var inputText = _iaTextController.text.trim();
-    if (_extracting || _loading) return;
-
-    setState(() => _extracting = true);
-    try {
-      final documentPath = _documentoPath;
-      final hasImage =
-          documentPath != null &&
-          AiAttachmentService.instance.isImagePath(documentPath);
-
-      if (hasImage) {
-        final result = await ExpenseAiExtractor.instance
-            .extractExpenseFromImagePath(documentPath);
-        if (!mounted) return;
-        await _confirmApplyExtraction(result);
-        return;
-      }
-
-      if (inputText.isEmpty && documentPath != null) {
-        final extracted = await DocumentTextExtractor.instance.tryExtractText(
-          documentPath,
-        );
-        if (extracted != null && extracted.trim().isNotEmpty) {
-          inputText = extracted.trim();
-          if (mounted) {
-            setState(() => _iaTextController.text = inputText);
-          }
-        }
-      }
-
-      if (inputText.isEmpty) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'No pude leer texto automáticamente. Pega OCR o texto manual.',
-            ),
-          ),
-        );
-        return;
-      }
-
-      final result = _documentoPath == null
-          ? await ExpenseAiExtractor.instance.extractExpenseFromText(inputText)
-          : await ExpenseAiExtractor.instance.extractExpenseFromReceiptText(
-              prompt:
-                  'Extrae un gasto desde OCR de ticket/factura. No inventes campos.',
-              receiptText: inputText,
-            );
-      if (!mounted) return;
-      await _confirmApplyExtraction(result);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo extraer automáticamente: $e')),
-      );
-    } finally {
-      if (mounted) setState(() => _extracting = false);
-    }
-  }
-
-  Future<void> _confirmApplyExtraction(ExpenseExtractionResult result) async {
-    final summary = <String>[
-      if (result.concepto != null) 'Concepto: ${result.concepto}',
-      if (result.proveedor != null) 'Proveedor: ${result.proveedor}',
-      if (result.fecha != null)
-        'Fecha: ${DateFormat('dd/MM/yyyy').format(result.fecha!)}',
-      if (result.importeTotal != null)
-        'Total: ${result.importeTotal!.toStringAsFixed(2)} €',
-      if (result.categoria != null) 'Categoría: ${result.categoria!.label}',
-      if (result.confidence > 0)
-        'Confianza estimada: ${(result.confidence * 100).clamp(0, 100).toStringAsFixed(0)}%',
-    ];
-
-    final apply = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Datos detectados'),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (summary.isEmpty)
-                const Text('No se detectaron campos suficientes.'),
-              for (final line in summary) Text(line),
-              if (result.warnings.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                const Text(
-                  'Revisa estos puntos:',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 6),
-                for (final warning in result.warnings) Text('• $warning'),
-              ],
-              if (result.confidence < 0.75) ...[
-                const SizedBox(height: 12),
-                const Text(
-                  'Confianza baja: revisa manualmente antes de guardar.',
-                  style: TextStyle(
-                    color: Colors.orange,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Corregir manualmente'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Guardar gasto'),
-          ),
-        ],
-      ),
-    );
-
-    if (apply != true || !mounted) return;
-
-    setState(() {
-      if (result.concepto != null) _conceptoController.text = result.concepto!;
-      if (result.proveedor != null) {
-        _proveedorController.text = result.proveedor!;
-      }
-      if (result.fecha != null) _fecha = result.fecha!;
-      if (result.importeTotal != null) {
-        _totalController.text = result.importeTotal!.toStringAsFixed(2);
-      }
-      if (result.categoria != null) _categoria = result.categoria!;
-      if (result.notas != null && result.notas!.isNotEmpty) {
-        _notasController.text = result.notas!;
-      }
-    });
   }
 
   @override
@@ -502,49 +326,10 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
                 }),
               ),
             const SizedBox(height: 4),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                OutlinedButton.icon(
-                  onPressed: _pickDocument,
-                  icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
-                  label: const Text('PDF'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: _pickPhoto,
-                  icon: const Icon(Icons.photo_outlined, size: 18),
-                  label: const Text('Galería'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: _takePhoto,
-                  icon: const Icon(Icons.photo_camera_outlined, size: 18),
-                  label: const Text('Cámara'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: _extracting || _loading ? null : _extractWithAi,
-                  icon: _extracting
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.auto_awesome_outlined, size: 18),
-                  label: const Text('Extraer información'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _iaTextController,
-              decoration: const InputDecoration(
-                labelText: 'Texto para analizar con IA',
-                hintText:
-                    'Puedes pegar aquí el texto de una factura, ticket o escribir una descripción como: Gasolina Repsol 29,48€, fecha 04/03/2026, IVA 21%.',
-              ),
-              minLines: 3,
-              maxLines: 6,
+            OutlinedButton.icon(
+              onPressed: _pickDocument,
+              icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+              label: const Text('Seleccionar PDF'),
             ),
             const SizedBox(height: 16),
 
