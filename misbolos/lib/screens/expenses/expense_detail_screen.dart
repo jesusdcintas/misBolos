@@ -19,7 +19,7 @@ class ExpenseDetailScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Detalle del gasto'),
+        title: const Text('Detalles del gasto o inversión'),
         actions: [
           expenseAsync.maybeWhen(
             data: (expense) => expense != null
@@ -120,7 +120,7 @@ class _ExpenseDetail extends StatelessWidget {
         ),
         const SizedBox(height: 12),
 
-        // Importes
+        // Importe
         Card(
           elevation: 0,
           shape: RoundedRectangleBorder(
@@ -129,56 +129,10 @@ class _ExpenseDetail extends StatelessWidget {
           ),
           child: Padding(
             padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                _Row(
-                  label: 'Base imponible',
-                  value: fmt.format(expense.importeBase),
-                ),
-                _Row(
-                  label: 'IVA (${expense.ivaRate.toStringAsFixed(0)} %)',
-                  value: fmt.format(expense.ivaAmount),
-                ),
-                const Divider(height: 16),
-                _Row(
-                  label: 'Total',
-                  value: fmt.format(expense.total),
-                  bold: true,
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-
-        // Deducibilidad
-        Card(
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: const BorderSide(color: AppColors.cardBorder),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                _Row(
-                  label: 'Deducible',
-                  value: expense.esDeducible ? 'Sí' : 'No',
-                ),
-                if (expense.esDeducible) ...[
-                  _Row(
-                    label: '% Deducción',
-                    value:
-                        '${expense.porcentajeDeduccion.toStringAsFixed(0)} %',
-                  ),
-                  _Row(
-                    label: 'Importe deducible',
-                    value: fmt.format(expense.importeDeducible),
-                    bold: true,
-                  ),
-                ],
-              ],
+            child: _Row(
+              label: 'Importe total',
+              value: fmt.format(expense.total),
+              bold: true,
             ),
           ),
         ),
