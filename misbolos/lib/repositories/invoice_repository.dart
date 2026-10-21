@@ -338,85 +338,19 @@ class InvoiceRepository {
 
   Future<void> delete(String id) async {
     final db = await DatabaseHelper.instance.database;
-    final invoice = await getById(id);
-    if (invoice?.isFiscallyLocked == true) {
-      throw StateError(
-        'Factura bloqueada por modo fiscal estricto. Crea una rectificativa.',
-      );
-    }
-    final rectifyingChildren = await db.rawQuery(
-      '''
-      SELECT COUNT(*) AS total
-      FROM invoices
-      WHERE rectifies_invoice_id = ?
-        AND deleted_at IS NULL
-      ''',
-      [id],
-    );
-    final hasRectifyingChildren =
-        (rectifyingChildren.first['total'] as int? ?? 0) > 0;
-    if (hasRectifyingChildren) {
-      throw StateError(
-        'No se puede eliminar una factura con rectificativas asociadas.',
-      );
-    }
-    final now = DateTime.now().toIso8601String();
-    await db.update(
-      'invoices',
-      {'deleted_at': now, 'updated_at': now},
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    await db.transaction((txn) async {
+      final invoice = await _loadInvoiceForDelete(txn, id);
+      if (invoice == null) return;
+      await _softDeleteInvoiceAndSyncGig(txn, invoice);
+    });
   }
 
   Future<Invoice?> deleteAndUnlinkGig(String id) async {
     final db = await DatabaseHelper.instance.database;
     return db.transaction((txn) async {
-      final rows = await txn.query(
-        'invoices',
-        where: 'id = ?',
-        whereArgs: [id],
-      );
-      if (rows.isEmpty) return null;
-      final invoice = Invoice.fromMap(rows.first);
-      if (invoice.isFiscallyLocked) {
-        throw StateError(
-          'Factura bloqueada por modo fiscal estricto. Crea una rectificativa.',
-        );
-      }
-      final rectifyingChildren = await txn.rawQuery(
-        '''
-        SELECT COUNT(*) AS total
-        FROM invoices
-        WHERE rectifies_invoice_id = ?
-          AND deleted_at IS NULL
-        ''',
-        [id],
-      );
-      final hasRectifyingChildren =
-          (rectifyingChildren.first['total'] as int? ?? 0) > 0;
-      if (hasRectifyingChildren) {
-        throw StateError(
-          'No se puede eliminar una factura con rectificativas asociadas.',
-        );
-      }
-      await txn.update(
-        'gigs',
-        {
-          'invoice_id': null,
-          'status': GigStatus.confirmado.dbValue,
-          'updated_at': DateTime.now().toIso8601String(),
-        },
-        where: 'id = ? AND invoice_id = ?',
-        whereArgs: [invoice.gigId, invoice.id],
-      );
-      final now = DateTime.now().toIso8601String();
-      await txn.update(
-        'invoices',
-        {'deleted_at': now, 'updated_at': now},
-        where: 'id = ?',
-        whereArgs: [id],
-      );
+      final invoice = await _loadInvoiceForDelete(txn, id);
+      if (invoice == null) return null;
+      await _softDeleteInvoiceAndSyncGig(txn, invoice);
       return invoice;
     });
   }
@@ -678,6 +612,101 @@ class InvoiceRepository {
       'invoice_id=$invoiceId old_number=$oldNumber attempted=$attemptedNumber',
     );
     debugPrintStack(stackTrace: StackTrace.current);
+  }
+
+  Future<Invoice?> _loadInvoiceForDelete(DatabaseExecutor db, String id) async {
+    final rows = await db.query('invoices', where: 'id = ?', whereArgs: [id]);
+    if (rows.isEmpty) return null;
+    final invoice = Invoice.fromMap(rows.first);
+    if (invoice.isFiscallyLocked) {
+      throw StateError(
+        'Factura bloqueada por modo fiscal estricto. Crea una rectificativa.',
+      );
+    }
+    final rectifyingChildren = await db.rawQuery(
+      '''
+      SELECT COUNT(*) AS total
+      FROM invoices
+      WHERE rectifies_invoice_id = ?
+        AND deleted_at IS NULL
+      ''',
+      [id],
+    );
+    final hasRectifyingChildren =
+        (rectifyingChildren.first['total'] as int? ?? 0) > 0;
+    if (hasRectifyingChildren) {
+      throw StateError(
+        'No se puede eliminar una factura con rectificativas asociadas.',
+      );
+    }
+    return invoice;
+  }
+
+  Future<void> _softDeleteInvoiceAndSyncGig(
+    DatabaseExecutor db,
+    Invoice invoice,
+  ) async {
+    final now = DateTime.now().toIso8601String();
+    await db.update(
+      'invoices',
+      {'deleted_at': now, 'updated_at': now},
+      where: 'id = ?',
+      whereArgs: [invoice.id],
+    );
+    await _syncGigAfterInvoiceDeletion(
+      db,
+      gigId: invoice.gigId,
+      deletedInvoiceId: invoice.id,
+    );
+  }
+
+  Future<void> _syncGigAfterInvoiceDeletion(
+    DatabaseExecutor db, {
+    required String gigId,
+    required String deletedInvoiceId,
+  }) async {
+    final remainingRows = await db.query(
+      'invoices',
+      columns: ['id', 'status', 'invoice_type'],
+      where: 'gig_id = ? AND deleted_at IS NULL AND id != ?',
+      whereArgs: [gigId, deletedInvoiceId],
+      orderBy:
+          "CASE invoice_type WHEN '${InvoiceType.normal.name}' THEN 0 ELSE 1 END, "
+          'created_at DESC',
+      limit: 1,
+    );
+
+    if (remainingRows.isEmpty) {
+      await db.update(
+        'gigs',
+        {
+          'invoice_id': null,
+          'status': GigStatus.confirmado.dbValue,
+          'updated_at': DateTime.now().toIso8601String(),
+        },
+        where: 'id = ?',
+        whereArgs: [gigId],
+      );
+      return;
+    }
+
+    final remainingStatus = InvoiceStatusExtension.fromDb(
+      remainingRows.first['status']?.toString() ?? InvoiceStatus.borrador.name,
+    );
+    final remainingGigStatus = switch (remainingStatus) {
+      InvoiceStatus.pagada => GigStatus.cobrado,
+      _ => GigStatus.facturado,
+    };
+    await db.update(
+      'gigs',
+      {
+        'invoice_id': remainingRows.first['id']?.toString(),
+        'status': remainingGigStatus.dbValue,
+        'updated_at': DateTime.now().toIso8601String(),
+      },
+      where: 'id = ?',
+      whereArgs: [gigId],
+    );
   }
 }
 
