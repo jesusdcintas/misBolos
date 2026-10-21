@@ -33,6 +33,20 @@ class ExpensePdfParser {
     r'(?<!\d)(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{4})(?!\d)',
   );
   static final _amountTokenRegex = RegExp(r'\d[\d.,]*');
+  static final _totalLabelRegex = RegExp(
+    r'(total\s*:|total\s+factura|total\s+amount|importe\s+total|'
+    r'total\s+a\s+pagar|^total\b)',
+    caseSensitive: false,
+  );
+  static final _totalExcluidoRegex = RegExp(
+    r'\b(subtotal|total\s+price|value\s+of\s+goods|net\s+amount|base|iva|vat|'
+    r'carried\s+forward|mastercard|visa)\b',
+    caseSensitive: false,
+  );
+  static final _soloEtiquetaRegex = RegExp(
+    r'^(?:[\s:.\-€]|eur(?:os)?)*$',
+    caseSensitive: false,
+  );
   static final _nifLabelRegex = RegExp(
     r'\b(N\.?I\.?F\.?|C\.?I\.?F\.?)\b',
     caseSensitive: false,
@@ -120,27 +134,43 @@ class ExpensePdfParser {
 
   static CampoSugerido<double> _parseTotal(List<String> lineas) {
     final candidatos = <int>{};
-    for (final linea in lineas) {
-      final lower = linea.toLowerCase();
-      final empiezaPorTotal =
-          lower.startsWith('total') || lower.startsWith('importe total');
-      if (!empiezaPorTotal) continue;
-      if (lower.contains('subtotal') || lower.contains('base')) continue;
+    for (var i = 0; i < lineas.length; i++) {
+      final linea = lineas[i];
+      final etiqueta = _totalLabelRegex.firstMatch(linea);
+      if (etiqueta == null) continue;
+      if (_totalExcluidoRegex.hasMatch(linea)) continue;
 
-      final sinFechas = linea.replaceAll(_dateRegex, ' ');
-      final tokens = _amountTokenRegex
-          .allMatches(sinFechas)
-          .map((m) => m.group(0)!)
-          .toList();
-      if (tokens.isEmpty) continue;
-      final valor = parseImporte(tokens.last);
-      if (valor == null) continue;
-      candidatos.add((valor * 100).round());
+      final resto = linea.substring(etiqueta.end);
+      var valor = _ultimoImporte(resto);
+      if (valor == null && _soloEtiquetaRegex.hasMatch(resto)) {
+        final siguiente = _siguienteNoVacia(lineas, i);
+        if (siguiente != null && !_totalExcluidoRegex.hasMatch(siguiente)) {
+          valor = _ultimoImporte(siguiente);
+        }
+      }
+      if (valor != null) candidatos.add((valor * 100).round());
     }
     if (candidatos.length == 1) {
       return CampoSugerido.encontrado(candidatos.first / 100);
     }
     return const CampoSugerido.vacio();
+  }
+
+  static double? _ultimoImporte(String texto) {
+    final sinFechas = texto.replaceAll(_dateRegex, ' ');
+    final tokens = _amountTokenRegex
+        .allMatches(sinFechas)
+        .map((m) => m.group(0)!)
+        .toList();
+    if (tokens.isEmpty) return null;
+    return parseImporte(tokens.last);
+  }
+
+  static String? _siguienteNoVacia(List<String> lineas, int desde) {
+    for (var j = desde + 1; j < lineas.length; j++) {
+      if (lineas[j].isNotEmpty) return lineas[j];
+    }
+    return null;
   }
 
   /// Interpreta `1.234,56`, `1234,56`, `1,234.56` y `1234.56`.
