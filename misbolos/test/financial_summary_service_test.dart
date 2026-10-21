@@ -1,7 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:misbolos/core/services/drive_document_sync_service.dart';
-import 'package:misbolos/models/asset.dart';
-import 'package:misbolos/models/expense.dart';
 import 'package:misbolos/models/invoice.dart';
 import 'package:misbolos/services/financial_summary_service.dart';
 
@@ -47,8 +45,6 @@ void main() {
         invoices: [
           _invoice(id: 'inv-1', numero: 1, fecha: DateTime(2026, 2, 10)),
         ],
-        expenses: const [],
-        assets: const [],
         gigs: const [],
       );
 
@@ -72,8 +68,6 @@ void main() {
             irpfRate: 0.07,
           ),
         ],
-        expenses: const [],
-        assets: const [],
         gigs: const [],
       );
 
@@ -82,52 +76,26 @@ void main() {
       expect(summary.irpfAIngresar, closeTo(130, 0.001));
     });
 
-    test('gastos e inversiones muy altos NO cambian IVA ni IRPF estimados', () {
+    test('el servicio no recibe gastos: IVA e IRPF solo dependen de facturas', () {
       final invoices = [
         _invoice(id: 'inv-1', numero: 1, fecha: DateTime(2026, 2, 10)),
       ];
 
-      final sinGastos = service.calculate(
+      final primera = service.calculate(
         from: from,
         to: to,
         invoices: invoices,
-        expenses: const [],
-        assets: const [],
         gigs: const [],
       );
-
-      final conGastos = service.calculate(
+      final segunda = service.calculate(
         from: from,
         to: to,
         invoices: invoices,
-        expenses: [
-          Expense(
-            fecha: DateTime(2026, 3, 1),
-            concepto: 'Equipo caro',
-            importeBase: 50000,
-            ivaAmount: 0,
-            total: 50000,
-          ),
-        ],
-        assets: [
-          Asset(
-            descripcion: 'Furgoneta',
-            fechaCompra: DateTime(2026, 1, 15),
-            importeTotal: 30000,
-            importeConIva: 36300,
-            ivaRate: 21,
-            ivaAmount: 6300,
-            vidaUtilAnos: 6,
-            createdAt: DateTime(2026, 1, 15),
-          ),
-        ],
         gigs: const [],
       );
 
-      expect(conGastos.ivaRepercutidoBruto, sinGastos.ivaRepercutidoBruto);
-      expect(conGastos.irpfAIngresar, sinGastos.irpfAIngresar);
-      // Los gastos e inversiones solo aparecen de forma informativa.
-      expect(conGastos.totalGastosInversiones, closeTo(80000, 0.001));
+      expect(segunda.ivaRepercutidoBruto, primera.ivaRepercutidoBruto);
+      expect(segunda.irpfAIngresar, primera.irpfAIngresar);
     });
 
     test('periodo sin facturas: IVA e IRPF estimados a 0', () {
@@ -135,8 +103,6 @@ void main() {
         from: from,
         to: to,
         invoices: const [],
-        expenses: const [],
-        assets: const [],
         gigs: const [],
       );
 
@@ -156,8 +122,6 @@ void main() {
             status: InvoiceStatus.borrador,
           ),
         ],
-        expenses: const [],
-        assets: const [],
         gigs: const [],
       );
 

@@ -1,5 +1,3 @@
-import '../models/asset.dart';
-import '../models/expense.dart';
 import '../models/financial_summary.dart';
 import '../models/gig.dart';
 import '../models/invoice.dart';
@@ -15,13 +13,11 @@ class FinancialSummaryService {
 
   /// Calcula una estimación fiscal BRUTA y orientativa del periodo.
   ///
-  /// No se restan gastos ni inversiones de los impuestos.
+  /// Solo depende de las facturas emitidas: los gastos e inversiones no entran.
   FinancialSummary calculate({
     required DateTime from,
     required DateTime to,
     required List<Invoice> invoices,
-    required List<Expense> expenses,
-    required List<Asset> assets,
     required List<Gig> gigs,
   }) {
     final emittedInvoices = invoices
@@ -55,13 +51,6 @@ class FinancialSummaryService {
         )
         .fold<double>(0.0, (sum, gig) => sum + (gig.cachet ?? 0.0));
 
-    final totalGastos = expenses
-        .where((expense) => _isWithin(expense.fecha, from, to))
-        .fold<double>(0.0, (sum, expense) => sum + expense.total);
-    final totalInversiones = assets
-        .where((asset) => _isWithin(asset.fechaCompra, from, to))
-        .fold<double>(0.0, (sum, asset) => sum + asset.importeTotal);
-
     final irpfTeorico = ingresosOficiales * irpfPagoFraccionadoRate;
     final irpfAIngresar = irpfTeorico - irpfRetenido;
 
@@ -70,7 +59,6 @@ class FinancialSummaryService {
       to: to,
       ingresosOficiales: ingresosOficiales,
       ingresosB: ingresosB,
-      totalGastosInversiones: totalGastos + totalInversiones,
       ivaRepercutidoBruto: ivaRepercutidoBruto,
       irpfTeorico: irpfTeorico,
       irpfRetenido: irpfRetenido,

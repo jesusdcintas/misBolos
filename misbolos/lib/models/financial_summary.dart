@@ -13,9 +13,6 @@ class FinancialSummary {
   /// Ingresos no facturados estimados desde bolos cobrados (informativo).
   final double ingresosB;
 
-  /// Suma de gastos e inversiones del periodo (informativo, nunca se resta).
-  final double totalGastosInversiones;
-
   /// IVA repercutido bruto de las facturas emitidas en el periodo.
   final double ivaRepercutidoBruto;
 
@@ -33,7 +30,6 @@ class FinancialSummary {
     required this.to,
     this.ingresosOficiales = 0,
     this.ingresosB = 0,
-    this.totalGastosInversiones = 0,
     this.ivaRepercutidoBruto = 0,
     this.irpfTeorico = 0,
     this.irpfRetenido = 0,
@@ -51,7 +47,6 @@ class FinancialSummary {
     DateTime? to,
     double? ingresosOficiales,
     double? ingresosB,
-    double? totalGastosInversiones,
     double? ivaRepercutidoBruto,
     double? irpfTeorico,
     double? irpfRetenido,
@@ -62,8 +57,6 @@ class FinancialSummary {
       to: to ?? this.to,
       ingresosOficiales: ingresosOficiales ?? this.ingresosOficiales,
       ingresosB: ingresosB ?? this.ingresosB,
-      totalGastosInversiones:
-          totalGastosInversiones ?? this.totalGastosInversiones,
       ivaRepercutidoBruto: ivaRepercutidoBruto ?? this.ivaRepercutidoBruto,
       irpfTeorico: irpfTeorico ?? this.irpfTeorico,
       irpfRetenido: irpfRetenido ?? this.irpfRetenido,
