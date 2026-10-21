@@ -397,7 +397,7 @@ class GigRepository {
     final existing = await db.query(
       'invoices',
       columns: ['id'],
-      where: 'id = ?',
+      where: 'id = ? AND deleted_at IS NULL',
       whereArgs: [invoiceId],
       limit: 1,
     );
@@ -407,7 +407,7 @@ class GigRepository {
     final byGig = await db.query(
       'invoices',
       columns: ['id'],
-      where: 'gig_id = ?',
+      where: 'gig_id = ? AND deleted_at IS NULL',
       whereArgs: [gig.id],
       limit: 1,
     );
@@ -431,8 +431,10 @@ class GigRepository {
       SELECT MAX(numero) as max_num
       FROM invoices
       WHERE CAST(strftime('%Y', fecha) AS INTEGER) = ?
+        AND deleted_at IS NULL
+        AND invoice_type = ?
       ''',
-      [gig.fecha.year],
+      [gig.fecha.year, InvoiceType.normal.dbValue],
     );
     final maxNum = nextNumResult.first['max_num'] as int?;
     final nextNum = (maxNum ?? 0) + 1;

@@ -1,4 +1,5 @@
 import '../../database/database_helper.dart';
+import '../../models/invoice.dart';
 
 class InvoiceNumberGenerator {
   InvoiceNumberGenerator._();
@@ -11,8 +12,10 @@ class InvoiceNumberGenerator {
       SELECT MAX(numero) as max_num
       FROM invoices
       WHERE CAST(strftime('%Y', fecha) AS INTEGER) = ?
+        AND deleted_at IS NULL
+        AND invoice_type = ?
       ''',
-      [invoiceYear],
+      [invoiceYear, InvoiceType.normal.dbValue],
     );
     final maxNum = result.first['max_num'] as int?;
     return (maxNum ?? 0) + 1;

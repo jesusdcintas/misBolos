@@ -262,13 +262,18 @@ class GoogleAuthNotifier extends StateNotifier<GoogleAuthState> {
       if (success) {
         await _updateStateFromPlatform();
         await _saveMobileCalendarState();
-      } else if (wasConnected) {
+      } else if (wasConnected && !Platform.isMacOS) {
         state = GoogleAuthState(
           isSignedIn: true,
           calendarConnected: false,
           email: savedEmail,
           displayName: savedEmail?.split('@').first,
         );
+      } else {
+        state = const GoogleAuthState();
+        if (Platform.isMacOS) {
+          await _clearMobileCalendarState();
+        }
       }
     } else {
       final success = await GoogleAuthService.instance.signInSilently();
@@ -314,24 +319,20 @@ class GoogleAuthNotifier extends StateNotifier<GoogleAuthState> {
           await _saveMobileCalendarState();
           return true;
         }
-        if (Platform.isMacOS) {
-          final success = await GoogleAuthService.instance.signIn();
-          final hasAccess =
-              success && await GoogleAuthService.instance.checkCalendarAccess();
-          state = GoogleAuthState(
-            isSignedIn: true,
-            calendarConnected: hasAccess,
-            email:
-                GoogleAuthService.instance.userEmail ??
-                PlatformAuthService.instance.userEmail,
-            displayName:
-                GoogleAuthService.instance.displayName ??
-                PlatformAuthService.instance.displayName,
-            photoUrl: PlatformAuthService.instance.photoUrl,
-          );
-          await _saveMobileCalendarState();
-          return hasAccess;
-        }
+      }
+      if (Platform.isMacOS) {
+        final success = await GoogleAuthService.instance.signIn();
+        final hasAccess =
+            success && await GoogleAuthService.instance.checkCalendarAccess();
+        state = GoogleAuthState(
+          isSignedIn: success,
+          calendarConnected: hasAccess,
+          email: GoogleAuthService.instance.userEmail,
+          displayName: GoogleAuthService.instance.displayName,
+          photoUrl: GoogleAuthService.instance.photoUrl,
+        );
+        await _saveMobileCalendarState();
+        return hasAccess;
       }
       final success = await signIn();
       return success && state.calendarConnected;
@@ -351,6 +352,10 @@ class GoogleAuthNotifier extends StateNotifier<GoogleAuthState> {
 
   Future<void> _updateStateFromPlatform() async {
     final svc = PlatformAuthService.instance;
+    if (!svc.isSignedIn) {
+      state = const GoogleAuthState();
+      return;
+    }
     final calendarConnected = await _hasPlatformCalendarAccess();
     state = GoogleAuthState(
       isSignedIn: true,

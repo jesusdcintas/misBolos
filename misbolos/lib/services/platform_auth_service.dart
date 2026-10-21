@@ -27,18 +27,21 @@ class PlatformAuthService {
 
   bool get isSignedIn {
     if (Platform.isMacOS) {
-      return SupabaseService.instance.isAuthenticated;
+      return SupabaseService.instance.hasGoogleProviderSession;
     }
     return _currentUser != null;
   }
 
   String? get userEmail {
-    if (Platform.isMacOS) return SupabaseService.instance.userEmail;
+    if (Platform.isMacOS) {
+      return isSignedIn ? SupabaseService.instance.userEmail : null;
+    }
     return _currentUser?.email;
   }
 
   String? get displayName {
     if (Platform.isMacOS) {
+      if (!isSignedIn) return null;
       // Supabase no tiene displayName, usar la parte antes de @ del email
       final email = SupabaseService.instance.userEmail;
       return email?.split('@').first;
@@ -151,7 +154,7 @@ class PlatformAuthService {
 
     // En macOS, verificar si Supabase tiene sesión activa
     if (Platform.isMacOS) {
-      return SupabaseService.instance.isAuthenticated;
+      return SupabaseService.instance.hasGoogleProviderSession;
     }
 
     try {
