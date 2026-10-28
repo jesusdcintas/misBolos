@@ -737,6 +737,9 @@ class SyncNotifier extends StateNotifier<SyncState> {
       iban: keepLocalIfCloudEmpty(local.iban, cloud.iban),
       notificacionesActivas: local.notificacionesActivas,
       diasRecordatorio: local.diasRecordatorio,
+      // La nube no guarda irpf_default: es un ajuste local. Si no se
+      // conserva aquí, cada descarga lo devuelve al 0.15 del constructor.
+      irpfDefault: local.irpfDefault,
       driveConnected: local.driveConnected,
       driveAccountEmail: local.driveAccountEmail,
       driveAccountName: local.driveAccountName,
