@@ -54,12 +54,14 @@ class SyncState {
 class SyncNotifier extends StateNotifier<SyncState> {
   final Ref _ref;
   static Future<void>? _globalSyncInFlight;
+  static String? _globalSyncReason;
 
   SyncNotifier(this._ref) : super(const SyncState());
 
   SupabaseService get _supabase => SupabaseService.instance;
 
   bool get isAuthenticated => _supabase.isAuthenticated;
+  bool get isSyncInFlight => _globalSyncInFlight != null;
 
   bool _shouldRunDefensiveCloudPull(String reason) {
     switch (reason) {
@@ -618,7 +620,7 @@ class SyncNotifier extends StateNotifier<SyncState> {
 
       state = state.copyWith(
         status: SyncStatus.success,
-        message: 'Sincronización incremental completada',
+        message: 'Sincronizado',
         lastSync: syncEndedAt,
       );
     } catch (e) {
@@ -647,21 +649,36 @@ class SyncNotifier extends StateNotifier<SyncState> {
   }) async {
     final totalWatch = Stopwatch()..start();
     debugPrint('[SYNC] start reason=$reason');
-    if (_globalSyncInFlight != null) {
+    final running = _globalSyncInFlight;
+    if (running != null) {
       debugPrint(
-        '[SYNC] acquire lock: ${totalWatch.elapsedMilliseconds} ms (reused in-flight)',
+        '[SYNC] skipped reason=$reason; already running reason=$_globalSyncReason',
       );
-      return _globalSyncInFlight;
+      return running;
     }
     debugPrint('[SYNC] acquire lock: ${totalWatch.elapsedMilliseconds} ms');
-    _globalSyncInFlight = action();
+    _globalSyncReason = reason;
+    _globalSyncInFlight = action().timeout(
+      const Duration(minutes: 2),
+      onTimeout: () {
+        throw TimeoutException('La sincronización ha tardado demasiado.');
+      },
+    );
     try {
       await _globalSyncInFlight;
+    } on TimeoutException catch (e) {
+      debugPrint('[SYNC] timeout reason=$reason: $e');
+      state = state.copyWith(
+        status: SyncStatus.error,
+        message:
+            'La sincronización ha tardado demasiado. Reintenta en un momento.',
+      );
     } finally {
       debugPrint(
         '[SYNC] total: ${totalWatch.elapsedMilliseconds} ms status=${state.status.name}',
       );
       _globalSyncInFlight = null;
+      _globalSyncReason = null;
     }
   }
 
