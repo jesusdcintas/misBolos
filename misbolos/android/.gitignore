@@ -12,3 +12,7 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+
+# Artefactos de build de Gradle en cualquier nivel (app/.gradle, app/build, build)
+.gradle/
+build/
