@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 import 'dart:io';
 
 import '../../core/config/fiscal.dart';
+import '../../widgets/fiscal/retencion_irpf_info.dart';
 import '../../models/app_settings.dart';
 import '../../models/gig.dart';
 import '../../models/pdf_theme.dart';
@@ -423,11 +424,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               final irpf = Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Retención IRPF por defecto en cada factura',
-                    style: Theme.of(context).textTheme.titleSmall,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Retención IRPF por defecto en cada factura',
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.info_outline),
+                        tooltip: '¿Qué retención me corresponde?',
+                        onPressed: () => mostrarRetencionIrpfInfo(context),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 4),
                   SegmentedButton<double>(
                     segments: RetencionIrpf.opciones
                         .map(
@@ -446,24 +458,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       setState(() => _irpfDefault = v.first);
                     },
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    irpfValido
-                        ? RetencionIrpf.explicacion(_irpfDefault)!
-                        : 'Tienes guardado un '
-                              '${RetencionIrpf.etiqueta(_irpfDefault)} que ya '
-                              'no es una opción. Elige una de las de arriba.',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: irpfValido
-                          ? null
-                          : Theme.of(context).colorScheme.error,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    RetencionIrpf.notaGeneral,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
+                  const SizedBox(height: 10),
+                  RetencionIrpfAviso(rate: _irpfDefault),
                 ],
               );
 

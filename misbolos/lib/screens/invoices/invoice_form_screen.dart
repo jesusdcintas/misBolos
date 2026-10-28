@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/config/fiscal.dart';
+import '../../widgets/fiscal/retencion_irpf_info.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/services/drive_document_sync_service.dart';
 import '../../core/utils/currency_formatter.dart';
@@ -606,6 +607,11 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                     'Retención IRPF',
                     style: const TextStyle(fontWeight: FontWeight.w500),
                   ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.info_outline),
+                  tooltip: '¿Qué retención me corresponde?',
+                  onPressed: () => mostrarRetencionIrpfInfo(context),
                 ),
                 Switch(
                   value: _applyIrpf,
