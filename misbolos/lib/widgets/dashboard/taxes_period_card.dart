@@ -72,7 +72,10 @@ class TaxesPeriodCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           _Linea(
-            label: 'IRPF pago trimestral (20 %)',
+            // En la vista Año no es un pago trimestral, son los cuatro.
+            label: period.mode == DashboardPeriodMode.anio
+                ? 'IRPF pagos fraccionados (20 %)'
+                : 'IRPF pago trimestral (20 %)',
             value: summary.irpfTeorico,
           ),
           const SizedBox(height: 8),
