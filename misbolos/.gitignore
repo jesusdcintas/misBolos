@@ -48,3 +48,7 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Ficheros generados por herramientas
+/repomix-output.xml
+/supabase/functions/deno.lock
