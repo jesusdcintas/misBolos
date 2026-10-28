@@ -5,6 +5,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'dart:io';
 
+import '../../core/config/fiscal.dart';
 import '../../models/app_settings.dart';
 import '../../models/gig.dart';
 import '../../models/pdf_theme.dart';
@@ -418,24 +419,50 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
                 ],
               );
+              final irpfValido = RetencionIrpf.esValida(_irpfDefault);
               final irpf = Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Retención IRPF por defecto',
+                    'Retención IRPF por defecto en cada factura',
                     style: Theme.of(context).textTheme.titleSmall,
                   ),
                   const SizedBox(height: 8),
                   SegmentedButton<double>(
-                    segments: const [
-                      ButtonSegment(value: 0.0, label: Text('0%')),
-                      ButtonSegment(value: 0.07, label: Text('7%')),
-                      ButtonSegment(value: 0.15, label: Text('15%')),
-                      ButtonSegment(value: 0.19, label: Text('19%')),
-                    ],
-                    selected: {_irpfDefault},
-                    onSelectionChanged: (v) =>
-                        setState(() => _irpfDefault = v.first),
+                    segments: RetencionIrpf.opciones
+                        .map(
+                          (rate) => ButtonSegment(
+                            value: rate,
+                            label: Text(RetencionIrpf.etiqueta(rate)),
+                          ),
+                        )
+                        .toList(),
+                    // Un valor guardado fuera de la lista (por ejemplo un 19 %
+                    // antiguo) se queda sin seleccionar en vez de romper.
+                    emptySelectionAllowed: true,
+                    selected: irpfValido ? {_irpfDefault} : const <double>{},
+                    onSelectionChanged: (v) {
+                      if (v.isEmpty) return;
+                      setState(() => _irpfDefault = v.first);
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    irpfValido
+                        ? RetencionIrpf.explicacion(_irpfDefault)!
+                        : 'Tienes guardado un '
+                              '${RetencionIrpf.etiqueta(_irpfDefault)} que ya '
+                              'no es una opción. Elige una de las de arriba.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: irpfValido
+                          ? null
+                          : Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    RetencionIrpf.notaGeneral,
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
               );

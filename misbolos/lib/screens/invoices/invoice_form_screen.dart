@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/config/fiscal.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/services/drive_document_sync_service.dart';
 import '../../core/utils/currency_formatter.dart';
@@ -42,7 +43,6 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
   bool _applyIrpf = false;
   DateTime _fecha = DateTime.now();
 
-  static const List<double> _irpfOptions = [0.0, 0.07, 0.15, 0.19];
 
   DateTime _asDateOnly(DateTime value) =>
       DateTime(value.year, value.month, value.day);
@@ -58,8 +58,12 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
       final settings = await ref.read(settingsProvider.future);
       _settings = settings;
       _ivaRate = settings.ivaDefault;
-      _irpfRate = settings.irpfDefault;
-      _applyIrpf = settings.irpfDefault > 0;
+      // Un valor guardado fuera de la lista (por ejemplo un 19 % antiguo) no
+      // se aplica a la factura nueva: se deja la retención desactivada.
+      _irpfRate = RetencionIrpf.esValida(settings.irpfDefault)
+          ? settings.irpfDefault
+          : 0.0;
+      _applyIrpf = _irpfRate > 0;
 
       if (widget.invoiceId != null) {
         // Editando factura existente
@@ -611,7 +615,11 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                       _applyIrpf = value;
                       if (!value) _irpfRate = 0.0;
                       if (value && _irpfRate == 0) {
-                        _irpfRate = _settings?.irpfDefault ?? 0.15;
+                        final porDefecto =
+                            _settings?.irpfDefault ?? RetencionIrpf.general;
+                        _irpfRate = RetencionIrpf.esValida(porDefecto)
+                            ? porDefecto
+                            : RetencionIrpf.general;
                       }
                     });
                   },
@@ -628,10 +636,12 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children: _irpfOptions.where((r) => r > 0).map((rate) {
+                children: RetencionIrpf.opciones.where((r) => r > 0).map((
+                  rate,
+                ) {
                   final isSelected = _irpfRate == rate;
                   return ChoiceChip(
-                    label: Text('${(rate * 100).toInt()}%'),
+                    label: Text(RetencionIrpf.etiqueta(rate)),
                     selected: isSelected,
                     selectedColor: AppColors.primary.withValues(alpha: 0.2),
                     onSelected: (selected) {
