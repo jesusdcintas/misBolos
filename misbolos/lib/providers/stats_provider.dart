@@ -1325,34 +1325,6 @@ final pendingInvoicesProvider = FutureProvider<List<PendingInvoice>>((
   return resultado;
 });
 
-// ==================== RACHA / ACTIVIDAD ====================
-
-class ActivityStreak {
-  final int daysSinceLastGig;
-
-  ActivityStreak({required this.daysSinceLastGig});
-}
-
-final activityStreakProvider = FutureProvider<ActivityStreak>((ref) async {
-  final allGigs = await ref.watch(gigsProvider.future);
-  if (allGigs.isEmpty) return ActivityStreak(daysSinceLastGig: -1);
-
-  final now = DateTime.now();
-  final today = DateTime(now.year, now.month, now.day);
-
-  // Último bolo registrado (más reciente por fecha de creación)
-  final sorted = [...allGigs]
-    ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-  final lastGig = sorted.first;
-  final lastDate = DateTime(
-    lastGig.createdAt.year,
-    lastGig.createdAt.month,
-    lastGig.createdAt.day,
-  );
-
-  return ActivityStreak(daysSinceLastGig: today.difference(lastDate).inDays);
-});
-
 // ==================== FINANCIAL SUMMARY PERIOD ====================
 
 final financialPeriodProvider = StateProvider<DashboardPeriod>((ref) {
