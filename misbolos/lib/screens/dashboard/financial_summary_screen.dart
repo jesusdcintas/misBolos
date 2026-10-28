@@ -226,7 +226,11 @@ class _FiscalSection extends StatelessWidget {
                 '⚠️ Estimación orientativa de lo que podrías llegar a pagar '
                 'como máximo. No descontamos gastos ni inversiones para que no '
                 'haya sorpresas al cierre del trimestre. Tu gestoría hará el '
-                'cálculo real con las deducciones correspondientes.',
+                'cálculo real con las deducciones correspondientes.\n\n'
+                'Si en el año anterior al menos el 70 % de tus ingresos '
+                'profesionales tuvo retención, puede que no tengas que '
+                'presentar el pago trimestral del IRPF (modelo 130). '
+                'Confírmalo con tu gestoría.',
                 style: TextStyle(fontSize: 12.5, height: 1.4),
               ),
             ),

@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import '../database/database_helper.dart';
-import '../models/app_settings.dart';
+import '../core/utils/settings_merge.dart';
 import '../services/supabase_service.dart';
 import '../services/sync_queue_processor.dart';
 import '../repositories/client_repository.dart';
@@ -578,7 +578,7 @@ class SyncNotifier extends StateNotifier<SyncState> {
       // Guardar settings si existen en la nube
       if (cloudSettings != null) {
         final localSettings = await SettingsRepository().get();
-        final mergedSettings = _mergeDownloadedSettings(
+        final mergedSettings = mergeDownloadedSettings(
           localSettings,
           cloudSettings,
         );
@@ -694,63 +694,6 @@ class SyncNotifier extends StateNotifier<SyncState> {
 
   void clearStatus() {
     state = state.copyWith(status: SyncStatus.idle, message: null);
-  }
-
-  AppSettings _mergeDownloadedSettings(AppSettings local, AppSettings cloud) {
-    String keepLocalIfCloudEmpty(String localValue, String cloudValue) {
-      if (cloudValue.trim().isEmpty && localValue.trim().isNotEmpty) {
-        return localValue;
-      }
-      return cloudValue;
-    }
-
-    return cloud.copyWith(
-      logoPath: keepLocalIfCloudEmpty(local.logoPath, cloud.logoPath),
-      logoSize: local.logoSize,
-      pdfTheme: local.pdfTheme,
-      emisorNombre: keepLocalIfCloudEmpty(
-        local.emisorNombre,
-        cloud.emisorNombre,
-      ),
-      emisorNIF: keepLocalIfCloudEmpty(local.emisorNIF, cloud.emisorNIF),
-      emisorDireccion: keepLocalIfCloudEmpty(
-        local.emisorDireccion,
-        cloud.emisorDireccion,
-      ),
-      emisorCiudad: keepLocalIfCloudEmpty(
-        local.emisorCiudad,
-        cloud.emisorCiudad,
-      ),
-      emisorProvincia: keepLocalIfCloudEmpty(
-        local.emisorProvincia,
-        cloud.emisorProvincia,
-      ),
-      emisorCodigoPostal: keepLocalIfCloudEmpty(
-        local.emisorCodigoPostal,
-        cloud.emisorCodigoPostal,
-      ),
-      emisorEmail: keepLocalIfCloudEmpty(local.emisorEmail, cloud.emisorEmail),
-      emisorTelefono: keepLocalIfCloudEmpty(
-        local.emisorTelefono,
-        cloud.emisorTelefono,
-      ),
-      iban: keepLocalIfCloudEmpty(local.iban, cloud.iban),
-      notificacionesActivas: local.notificacionesActivas,
-      diasRecordatorio: local.diasRecordatorio,
-      driveConnected: local.driveConnected,
-      driveAccountEmail: local.driveAccountEmail,
-      driveAccountName: local.driveAccountName,
-      driveRootFolderId: local.driveRootFolderId,
-      driveRootFolderName: local.driveRootFolderName,
-      lastDriveBackupAt: local.lastDriveBackupAt,
-      lastDriveSyncAt: local.lastDriveSyncAt,
-      lastCloudSyncAt: local.lastCloudSyncAt,
-      cloudSettingsSignature: local.cloudSettingsSignature,
-      securityPinEnabled: local.securityPinEnabled,
-      securityPinCode: local.securityPinCode,
-      securityBiometricEnabled: local.securityBiometricEnabled,
-      securityLockDelaySeconds: local.securityLockDelaySeconds,
-    );
   }
 }
 
