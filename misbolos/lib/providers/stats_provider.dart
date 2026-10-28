@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../core/utils/pending_invoices.dart';
 import '../core/utils/period_utils.dart';
 import '../database/database_helper.dart';
 import '../models/client.dart';
@@ -1284,32 +1285,44 @@ final overdueInvoicesProvider = FutureProvider<OverdueAlert>((ref) async {
   return OverdueAlert(invoices: overdue);
 });
 
-// ==================== RACHA / ACTIVIDAD ====================
+// ============ PENDIENTE DE COBRO ============
 
-class ActivityStreak {
-  final int daysSinceLastGig;
+/// Factura emitida y sin cobrar, con su antigüedad en días.
+class PendingInvoice {
+  final Invoice invoice;
+  final String clientName;
+  final int daysSinceSent;
 
-  ActivityStreak({required this.daysSinceLastGig});
+  PendingInvoice({
+    required this.invoice,
+    required this.clientName,
+    required this.daysSinceSent,
+  });
 }
 
-final activityStreakProvider = FutureProvider<ActivityStreak>((ref) async {
-  final allGigs = await ref.watch(gigsProvider.future);
-  if (allGigs.isEmpty) return ActivityStreak(daysSinceLastGig: -1);
+/// Facturas emitidas y sin cobrar, de la más antigua a la más nueva.
+///
+/// Es global, no depende del periodo seleccionado, igual que
+/// [upcomingGigsProvider]. El filtro y el orden están en
+/// `facturasPendientesDeCobro`.
+final pendingInvoicesProvider = FutureProvider<List<PendingInvoice>>((
+  ref,
+) async {
+  final allInvoices = await ref.watch(invoicesProvider.future);
+  final pendientes = facturasPendientesDeCobro(allInvoices);
 
-  final now = DateTime.now();
-  final today = DateTime(now.year, now.month, now.day);
-
-  // Último bolo registrado (más reciente por fecha de creación)
-  final sorted = [...allGigs]
-    ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-  final lastGig = sorted.first;
-  final lastDate = DateTime(
-    lastGig.createdAt.year,
-    lastGig.createdAt.month,
-    lastGig.createdAt.day,
-  );
-
-  return ActivityStreak(daysSinceLastGig: today.difference(lastDate).inDays);
+  final resultado = <PendingInvoice>[];
+  for (final inv in pendientes) {
+    final client = await ref.read(clientByIdProvider(inv.clientId).future);
+    resultado.add(
+      PendingInvoice(
+        invoice: inv,
+        clientName: client?.displayName ?? 'Cliente desconocido',
+        daysSinceSent: diasDesdeEmision(inv.fecha),
+      ),
+    );
+  }
+  return resultado;
 });
 
 // ==================== FINANCIAL SUMMARY PERIOD ====================

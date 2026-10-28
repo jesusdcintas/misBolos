@@ -6,6 +6,7 @@ import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../providers/stats_provider.dart';
+import '../../widgets/dashboard/period_metrics.dart';
 import '../../providers/gig_provider.dart';
 import '../../providers/invoice_provider.dart';
 import '../../models/gig.dart';
@@ -70,6 +71,8 @@ class _OfficialTab extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        const PeriodMetricsSection(scope: PeriodMetricsScope.oficial),
+        const SizedBox(height: 28),
         _YearSelector(),
         const SizedBox(height: 12),
         const Center(child: _ChartModeToggle()),
@@ -150,6 +153,8 @@ class _EnBTab extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        const PeriodMetricsSection(scope: PeriodMetricsScope.privado),
+        const SizedBox(height: 28),
         _YearSelector(),
         const SizedBox(height: 12),
         const Center(child: _ChartModeToggle()),
@@ -224,6 +229,8 @@ class _GlobalTab extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        const PeriodMetricsSection(scope: PeriodMetricsScope.global),
+        const SizedBox(height: 28),
         _YearSelector(),
         const SizedBox(height: 12),
         const Center(child: _ChartModeToggle()),
