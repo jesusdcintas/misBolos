@@ -1,11 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/theme/app_theme_colors.dart';
+import '../../core/constants/app_colors.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../core/utils/dashboard_amounts.dart';
 import '../../providers/stats_provider.dart';
 import '../common/animated_counter.dart';
+
+/// Azul marino fijo: la tarjeta es una superficie oscura en los dos temas, así
+/// que no puede usar colorScheme.primary (en oscuro es un azul claro) ni los
+/// colores del tema, que en oscuro no se leen sobre el marino.
+const Color _marino = AppColors.primary;
+
+/// Colores de los tramos de la barra, legibles sobre el marino.
+const Color _verdeCobrado = Color(0xFF4DBA7B);
+const Color _ambarPendiente = Color(0xFFF0B35A);
+const Color _grisConfirmado = Colors.white38;
+
+/// Tonos claros para las cifras, los mismos que se veían en modo claro.
+const Color _cremaPendiente = Color(0xFFFEF3E2);
+const Color _mentaPrevisto = Color(0xFFE8F6EF);
 
 /// Tarjeta de ingresos del periodo, en azul marino.
 ///
@@ -24,9 +38,6 @@ class IncomePeriodCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = context.colors;
-    final primary = Theme.of(context).colorScheme.primary;
-
     final cobrado = stats.cobrado;
     final pendiente = stats.pendienteTotal;
     final total = stats.totalPrevistoGlobal;
@@ -43,7 +54,7 @@ class IncomePeriodCard extends StatelessWidget {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(20),
           gradient: LinearGradient(
-            colors: [primary, primary.withValues(alpha: 0.78)],
+            colors: [_marino, _marino.withValues(alpha: 0.88)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
@@ -83,7 +94,7 @@ class IncomePeriodCard extends StatelessWidget {
                   child: _Cifra(
                     label: 'Pendiente de cobro',
                     value: pendiente,
-                    color: colors.warningBg,
+                    color: _cremaPendiente,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -91,7 +102,7 @@ class IncomePeriodCard extends StatelessWidget {
                   child: _Cifra(
                     label: 'Total previsto',
                     value: total,
-                    color: colors.successBg,
+                    color: _mentaPrevisto,
                   ),
                 ),
               ],
@@ -101,19 +112,17 @@ class IncomePeriodCard extends StatelessWidget {
               cobrado: cobrado,
               pendiente: pendiente,
               confirmado: confirmado,
-              colorCobrado: Colors.white,
-              colorPendiente: colors.warningBg,
-              colorConfirmado: Colors.white24,
             ),
             const SizedBox(height: 10),
-            Wrap(
+            const Wrap(
               spacing: 14,
               runSpacing: 6,
               children: [
-                _Leyenda(color: Colors.white, texto: 'Cobrado'),
-                _Leyenda(color: colors.warningBg, texto: 'Pendiente'),
-                const _Leyenda(
-                  color: Colors.white24,
+                // Cada punto lleva el color de su tramo en la barra.
+                _Leyenda(color: _verdeCobrado, texto: 'Cobrado'),
+                _Leyenda(color: _ambarPendiente, texto: 'Pendiente'),
+                _Leyenda(
+                  color: _grisConfirmado,
                   texto: 'Confirmado sin facturar',
                 ),
               ],
@@ -204,17 +213,14 @@ class _BarraTramos extends StatelessWidget {
   final double cobrado;
   final double pendiente;
   final double confirmado;
-  final Color colorCobrado;
-  final Color colorPendiente;
-  final Color colorConfirmado;
+
+  /// Alto de la barra.
+  static const double alto = 10;
 
   const _BarraTramos({
     required this.cobrado,
     required this.pendiente,
     required this.confirmado,
-    required this.colorCobrado,
-    required this.colorPendiente,
-    required this.colorConfirmado,
   });
 
   @override
@@ -222,7 +228,7 @@ class _BarraTramos extends StatelessWidget {
     final total = cobrado + pendiente + confirmado;
     if (total <= 0) {
       return Container(
-        height: 10,
+        height: alto,
         decoration: BoxDecoration(
           color: Colors.white24,
           borderRadius: BorderRadius.circular(6),
@@ -233,23 +239,26 @@ class _BarraTramos extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(6),
       child: SizedBox(
-        height: 10,
+        height: alto,
         child: Row(
+          // Sin stretch, la Row pasa restricciones verticales holgadas y un
+          // ColoredBox sin hijo se queda en 0 de alto: la barra desaparecía.
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (cobrado > 0)
               Expanded(
                 flex: (cobrado / total * 1000).round(),
-                child: ColoredBox(color: colorCobrado),
+                child: const ColoredBox(color: _verdeCobrado),
               ),
             if (pendiente > 0)
               Expanded(
                 flex: (pendiente / total * 1000).round(),
-                child: ColoredBox(color: colorPendiente),
+                child: const ColoredBox(color: _ambarPendiente),
               ),
             if (confirmado > 0)
               Expanded(
                 flex: (confirmado / total * 1000).round(),
-                child: ColoredBox(color: colorConfirmado),
+                child: const ColoredBox(color: _grisConfirmado),
               ),
           ],
         ),
