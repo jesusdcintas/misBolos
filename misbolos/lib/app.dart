@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'core/config/features.dart';
 import 'core/constants/app_colors.dart';
 import 'core/security/app_lock_manager.dart';
 import 'core/theme/app_theme.dart';
@@ -94,6 +95,10 @@ final routerProvider = Provider<GoRouter>((ref) {
     refreshListenable: authRefresh,
     initialLocation: '/',
     redirect: (context, state) {
+      // IA aparcada: la ruta del asistente no se resuelve con el flag apagado,
+      // ni siquiera por enlace directo. Cae en Inicio y, si no hay sesión, el
+      // propio redirect la lleva después a /login.
+      if (!kIaHabilitada && esRutaDeIa(state.matchedLocation)) return '/';
       final session = Supabase.instance.client.auth.currentSession;
       if (session != null) {
         _lastRouterSessionSeenAt = DateTime.now();
@@ -744,7 +749,7 @@ class _ScaffoldWithNavBarState extends State<_ScaffoldWithNavBar> {
   Widget build(BuildContext context) {
     final location = GoRouterState.of(context).uri.path;
     final selectedIndex = _indexFromLocation(location);
-    final showBolin = !location.startsWith('/assistant');
+    final showBolin = kIaHabilitada && !location.startsWith('/assistant');
 
     return Scaffold(
       resizeToAvoidBottomInset: true,
