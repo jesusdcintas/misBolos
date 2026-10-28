@@ -1284,6 +1284,57 @@ final overdueInvoicesProvider = FutureProvider<OverdueAlert>((ref) async {
   return OverdueAlert(invoices: overdue);
 });
 
+// ============ PENDIENTE DE COBRO DEL PERIODO ============
+
+/// Factura emitida y sin cobrar, con su antigüedad en días.
+class PendingInvoice {
+  final Invoice invoice;
+  final String clientName;
+  final int daysSinceSent;
+
+  PendingInvoice({
+    required this.invoice,
+    required this.clientName,
+    required this.daysSinceSent,
+  });
+}
+
+/// Facturas enviadas y sin cobrar del periodo, de la más antigua a la más
+/// nueva. A diferencia de [overdueInvoicesProvider], no filtra por antigüedad.
+final pendingInvoicesInPeriodProvider =
+    FutureProvider.family<List<PendingInvoice>, DashboardPeriod>((
+      ref,
+      period,
+    ) async {
+      final allInvoices = await ref.watch(invoicesProvider.future);
+      final (start, end) = _periodRange(period);
+      final now = DateTime.now();
+
+      final enviadas = allInvoices
+          .where(
+            (i) =>
+                i.status == InvoiceStatus.enviada &&
+                !i.fecha.isBefore(start) &&
+                !i.fecha.isAfter(end),
+          )
+          .toList();
+
+      final pendientes = <PendingInvoice>[];
+      for (final inv in enviadas) {
+        final client = await ref.read(clientByIdProvider(inv.clientId).future);
+        pendientes.add(
+          PendingInvoice(
+            invoice: inv,
+            clientName: client?.displayName ?? 'Cliente desconocido',
+            daysSinceSent: now.difference(inv.fecha).inDays,
+          ),
+        );
+      }
+
+      pendientes.sort((a, b) => a.invoice.fecha.compareTo(b.invoice.fecha));
+      return pendientes;
+    });
+
 // ==================== RACHA / ACTIVIDAD ====================
 
 class ActivityStreak {
