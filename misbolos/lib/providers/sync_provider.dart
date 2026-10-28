@@ -749,6 +749,11 @@ class SyncNotifier extends StateNotifier<SyncState> {
       lastDriveSyncAt: local.lastDriveSyncAt,
       lastCloudSyncAt: local.lastCloudSyncAt,
       cloudSettingsSignature: local.cloudSettingsSignature,
+      // Tampoco se suben a la nube: sin conservarlos, cada descarga los
+      // devolvía a los valores por defecto del constructor.
+      autoCloudSyncEnabled: local.autoCloudSyncEnabled,
+      autoCloudSyncIntervalSeconds: local.autoCloudSyncIntervalSeconds,
+      appThemeMode: local.appThemeMode,
       securityPinEnabled: local.securityPinEnabled,
       securityPinCode: local.securityPinCode,
       securityBiometricEnabled: local.securityBiometricEnabled,
