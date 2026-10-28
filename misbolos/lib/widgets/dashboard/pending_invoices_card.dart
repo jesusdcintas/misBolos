@@ -17,6 +17,9 @@ class PendingInvoicesCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Sin facturas pendientes la sección no aparece.
+    if (pendientes.isEmpty) return const SizedBox.shrink();
+
     final colors = context.colors;
     final theme = Theme.of(context);
     final visibles = pendientes.take(maximo).toList();
@@ -58,27 +61,7 @@ class PendingInvoicesCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(20),
             border: Border.all(color: colors.border, width: 0.6),
           ),
-          child: pendientes.isEmpty
-              ? Row(
-                  children: [
-                    Icon(
-                      Icons.check_circle_outline,
-                      size: 20,
-                      color: colors.success,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'No tienes facturas pendientes de cobro',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: colors.textSecondary,
-                        ),
-                      ),
-                    ),
-                  ],
-                )
-              : Column(
+          child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     for (final p in visibles) ...[
