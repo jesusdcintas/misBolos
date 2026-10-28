@@ -1,7 +1,7 @@
-/// Importes derivados que se muestran en Inicio.
-///
-/// Solo combinan cifras que ya calculan `PeriodDashboardStats` y
-/// `FinancialSummary`: aquí no hay lógica fiscal ni de ingresos nueva.
+// Importes derivados que se muestran en Inicio.
+//
+// Solo combinan cifras que ya calculan PeriodDashboardStats y
+// FinancialSummary: aquí no hay lógica fiscal ni de ingresos nueva.
 
 /// Tramo de ingresos confirmado pero todavía sin facturar.
 ///
