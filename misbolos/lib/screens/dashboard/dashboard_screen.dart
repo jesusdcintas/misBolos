@@ -35,9 +35,8 @@ class DashboardScreen extends ConsumerWidget {
     final statsAsync = ref.watch(periodDashboardStatsProvider(period));
     final fiscalAsync = ref.watch(financialSummaryProvider(period));
     final upcomingAsync = ref.watch(upcomingGigsProvider);
-    final pendingAsync = ref.watch(pendingInvoicesInPeriodProvider(period));
+    final pendingAsync = ref.watch(pendingInvoicesProvider);
     final overdueAsync = ref.watch(overdueInvoicesProvider);
-    final activityAsync = ref.watch(activityStreakProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -60,9 +59,8 @@ class DashboardScreen extends ConsumerWidget {
           ref.invalidate(periodDashboardStatsProvider(period));
           ref.invalidate(financialSummaryProvider(period));
           ref.invalidate(upcomingGigsProvider);
-          ref.invalidate(pendingInvoicesInPeriodProvider(period));
+          ref.invalidate(pendingInvoicesProvider);
           ref.invalidate(overdueInvoicesProvider);
-          ref.invalidate(activityStreakProvider);
         },
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -134,12 +132,6 @@ class DashboardScreen extends ConsumerWidget {
                   label: const Text('Ver todas las métricas'),
                 ),
                 const SizedBox(height: 16),
-
-                activityAsync.when(
-                  data: (activity) => _ActivityCard(activity: activity),
-                  loading: () => const SizedBox.shrink(),
-                  error: (_, __) => const SizedBox.shrink(),
-                ),
 
                 const SizedBox(height: 80),
               ],
@@ -441,63 +433,6 @@ class _OverdueBanner extends StatelessWidget {
             Icon(Icons.chevron_right, size: 18, color: colors.textSecondary),
           ],
         ),
-      ),
-    );
-  }
-}
-
-// ==================== ACTIVITY STREAK ====================
-
-class _ActivityCard extends StatelessWidget {
-  final ActivityStreak activity;
-  const _ActivityCard({required this.activity});
-
-  @override
-  Widget build(BuildContext context) {
-    if (activity.daysSinceLastGig < 0) return const SizedBox.shrink();
-
-    final days = activity.daysSinceLastGig;
-    String emoji;
-    String text;
-    Color color;
-
-    if (days <= 2) {
-      emoji = '🟢';
-      text = days == 0
-          ? 'Al día — último bolo registrado hoy'
-          : 'Al día — último bolo hace $days día${days == 1 ? '' : 's'}';
-      color = AppColors.success;
-    } else if (days <= 7) {
-      emoji = '🟡';
-      text = '$days días sin registrar un bolo';
-      color = AppColors.warning;
-    } else {
-      emoji = '🔴';
-      text = 'Llevas $days días sin actividad';
-      color = AppColors.error;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF7F8FA),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        children: [
-          Text(emoji, style: const TextStyle(fontSize: 16)),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              text,
-              style: TextStyle(
-                fontSize: 13,
-                color: color,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
