@@ -114,6 +114,9 @@ class DashboardScreen extends ConsumerWidget {
 
                 _DosColumnas(
                   activo: dosColumnas,
+                  // Ingresos e impuestos se leen como un par: en dos columnas
+                  // la más baja se estira hasta la altura de la otra.
+                  igualarAltura: true,
                   izquierda: ingresos,
                   derecha: impuestos,
                 ),
@@ -168,11 +171,15 @@ class DashboardScreen extends ConsumerWidget {
 /// Dos secciones en fila cuando hay sitio, y una debajo de otra si no.
 class _DosColumnas extends StatelessWidget {
   final bool activo;
+
+  /// Las dos columnas comparten la altura de la más alta.
+  final bool igualarAltura;
   final Widget izquierda;
   final Widget derecha;
 
   const _DosColumnas({
     required this.activo,
+    this.igualarAltura = false,
     required this.izquierda,
     required this.derecha,
   });
@@ -185,14 +192,21 @@ class _DosColumnas extends StatelessWidget {
         children: [izquierda, const SizedBox(height: 24), derecha],
       );
     }
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+
+    final fila = Row(
+      crossAxisAlignment: igualarAltura
+          ? CrossAxisAlignment.stretch
+          : CrossAxisAlignment.start,
       children: [
         Expanded(child: izquierda),
         const SizedBox(width: 16),
         Expanded(child: derecha),
       ],
     );
+
+    // stretch necesita una altura concreta, y dentro de un ListView la Row no
+    // la tiene: IntrinsicHeight la fija a la del hijo más alto.
+    return igualarAltura ? IntrinsicHeight(child: fila) : fila;
   }
 }
 
@@ -317,6 +331,9 @@ class _UpcomingGigTile extends ConsumerWidget {
     }
 
     return Card(
+      // Sin margen horizontal: el del tema (16 px) metía la lista por dentro
+      // del título, al contrario que la de pendiente de cobro.
+      margin: const EdgeInsets.only(bottom: 10),
       child: ListTile(
         onTap: () => context.push('/gig/${gig.id}'),
         leading: Container(

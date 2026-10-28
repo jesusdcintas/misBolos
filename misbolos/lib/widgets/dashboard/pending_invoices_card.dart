@@ -83,7 +83,7 @@ class PendingInvoicesCard extends StatelessWidget {
                       children: [
                         Expanded(
                           child: Text(
-                            'Total pendiente',
+                            'Total pendiente hasta hoy',
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
