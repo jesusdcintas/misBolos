@@ -301,7 +301,16 @@ class CalendarScreen extends ConsumerWidget {
       floatingActionButton: selectionMode
           ? null
           : FloatingActionButton(
-              onPressed: () => context.push('/gig/new'),
+              onPressed: () {
+                // En la vista de calendario, el nuevo bolo hereda el día
+                // seleccionado; en la vista de lista se mantiene hoy.
+                final fecha = isCalendarView ? selectedDay : null;
+                context.push(
+                  fecha == null
+                      ? '/gig/new'
+                      : '/gig/new?fecha=${DateFormatter.isoDay(fecha)}',
+                );
+              },
               child: const Icon(Icons.add),
             ),
     );

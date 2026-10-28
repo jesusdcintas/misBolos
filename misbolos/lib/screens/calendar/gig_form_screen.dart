@@ -16,7 +16,10 @@ import 'client_picker_screen.dart';
 
 class GigFormScreen extends ConsumerStatefulWidget {
   final String? gigId;
-  const GigFormScreen({super.key, this.gigId});
+
+  /// Fecha con la que abrir el formulario al crear un bolo. Si no llega, hoy.
+  final DateTime? fechaInicial;
+  const GigFormScreen({super.key, this.gigId, this.fechaInicial});
 
   @override
   ConsumerState<GigFormScreen> createState() => _GigFormScreenState();
@@ -35,7 +38,7 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
   @override
   void initState() {
     super.initState();
-    _fecha = DateTime.now();
+    _fecha = widget.fechaInicial ?? DateTime.now();
     if (widget.gigId != null) {
       _loadGig();
     }

@@ -11,6 +11,7 @@ import 'core/config/features.dart';
 import 'core/constants/app_colors.dart';
 import 'core/security/app_lock_manager.dart';
 import 'core/theme/app_theme.dart';
+import 'core/utils/date_formatter.dart';
 import 'database/database_helper.dart';
 import 'models/app_settings.dart';
 import 'providers/assets_provider.dart';
@@ -238,8 +239,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/gig/new',
-        pageBuilder: (context, state) =>
-            _slideUpPage(const GigFormScreen(), state),
+        pageBuilder: (context, state) => _slideUpPage(
+          GigFormScreen(
+            fechaInicial: DateFormatter.parseIsoDay(
+              state.uri.queryParameters['fecha'],
+            ),
+          ),
+          state,
+        ),
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
