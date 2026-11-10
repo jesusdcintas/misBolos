@@ -16,6 +16,7 @@ import '../../services/google_auth_service.dart';
 import '../../services/google_calendar_service.dart';
 import '../../widgets/common/status_badge.dart';
 import '../../widgets/common/facturable_badge.dart';
+import '../../widgets/common/franja_badge.dart';
 import '../../widgets/common/cobrado_confetti_button.dart';
 
 class GigDetailScreen extends ConsumerWidget {
@@ -130,6 +131,8 @@ class _GigDetailContent extends ConsumerWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               FacturableBadge(facturable: gig.facturable, large: true),
+              const SizedBox(width: 6),
+              FranjaBadge(franja: gig.franja),
               const SizedBox(width: 12),
               StatusBadge(
                 status: gig.status,

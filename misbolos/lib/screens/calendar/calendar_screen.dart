@@ -17,6 +17,7 @@ import '../../services/google_auth_service.dart';
 import '../../services/google_calendar_service.dart';
 import '../../widgets/common/status_badge.dart';
 import '../../widgets/common/facturable_badge.dart';
+import '../../widgets/common/franja_badge.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
@@ -1684,6 +1685,8 @@ class _GigListTile extends ConsumerWidget {
                       children: [
                         FacturableBadge(facturable: gig.facturable),
                         const SizedBox(width: 6),
+                        FranjaBadge(franja: gig.franja),
+                        const SizedBox(width: 6),
                         StatusBadge(
                           status: gig.status,
                           facturable: gig.facturable,
@@ -1982,6 +1985,8 @@ class _CalendarGigTile extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             FacturableBadge(facturable: gig.facturable),
+            const SizedBox(width: 6),
+            FranjaBadge(franja: gig.franja),
             const SizedBox(width: 4),
             StatusBadge(status: gig.status, facturable: gig.facturable),
           ],
