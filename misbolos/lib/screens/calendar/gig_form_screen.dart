@@ -6,6 +6,7 @@ import '../../core/constants/app_strings.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../widgets/common/animated_facturable_toggle.dart';
 import '../../models/client.dart';
+import '../../models/franja_bolo.dart';
 import '../../models/gig.dart';
 import '../../providers/gig_provider.dart';
 import '../../providers/client_provider.dart';
@@ -32,6 +33,8 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
   final _cachetController = TextEditingController();
   final _notasController = TextEditingController();
   bool _facturable = true;
+  // Los bolos nuevos nacen como «Todo el día».
+  FranjaBolo _franja = FranjaBolo.diaCompleto;
   bool _isLoading = false;
   Gig? _existingGig;
 
@@ -54,6 +57,7 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
         _cachetController.text = gig.cachet?.toStringAsFixed(2) ?? '';
         _notasController.text = gig.notas ?? '';
         _facturable = gig.facturable;
+        _franja = franjaEfectiva(gig.franja);
       });
     }
   }
@@ -219,6 +223,44 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
             ),
             const SizedBox(height: 24),
 
+            // Franja del día
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Franja',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: SegmentedButton<FranjaBolo>(
+                        segments: [
+                          for (final franja in FranjaBolo.values)
+                            ButtonSegment(
+                              value: franja,
+                              label: Text(franja.label),
+                            ),
+                        ],
+                        selected: {_franja},
+                        showSelectedIcon: false,
+                        onSelectionChanged: (seleccion) {
+                          if (seleccion.isEmpty) return;
+                          setState(() => _franja = seleccion.first);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+
             // Toggle facturable - MUY PROMINENTE
             AnimatedContainer(
               duration: const Duration(milliseconds: 400),
@@ -360,6 +402,7 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
           cachet: cachet,
           notas: notas.isEmpty ? null : notas,
           facturable: _facturable,
+          franja: _franja,
           status: status,
         );
         await ref.read(gigsProvider.notifier).updateGig(savedGig);
@@ -370,6 +413,7 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
           cachet: cachet,
           notas: notas.isEmpty ? null : notas,
           facturable: _facturable,
+          franja: _franja,
           status: _facturable ? GigStatus.confirmado : GigStatus.confirmadoB,
         );
         await ref.read(gigsProvider.notifier).add(savedGig);
