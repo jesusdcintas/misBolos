@@ -221,6 +221,13 @@ class CalendarScreen extends ConsumerWidget {
                 ),
               ),
             ),
+          IconButton(
+            icon: const Icon(Icons.event_available_outlined),
+            tooltip: 'Fechas libres',
+            onPressed: () => context.push(
+              '/fechas-libres?fecha=${DateFormatter.isoDay(focusedDay)}',
+            ),
+          ),
           // Toggle vista
           IconButton(
             icon: Icon(isCalendarView ? Icons.list : Icons.calendar_month),
