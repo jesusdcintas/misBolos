@@ -29,6 +29,7 @@ import 'services/sync_queue_processor.dart';
 import 'screens/dashboard/dashboard_screen.dart';
 import 'screens/calendar/calendar_screen.dart';
 import 'screens/calendar/gig_detail_screen.dart';
+import 'screens/calendar/fechas_libres_screen.dart';
 import 'screens/calendar/gig_form_screen.dart';
 import 'screens/clients/client_detail_screen.dart';
 import 'screens/clients/client_form_screen.dart';
@@ -223,6 +224,16 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/attachments/broken',
         pageBuilder: (context, state) =>
             _slideUpPage(const BrokenAttachmentsScreen(), state),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/fechas-libres',
+        pageBuilder: (context, state) => _slideUpPage(
+          FechasLibresScreen(
+            mes: DateFormatter.parseIsoDay(state.uri.queryParameters['fecha']),
+          ),
+          state,
+        ),
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,

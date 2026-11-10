@@ -221,6 +221,7 @@ class CalendarScreen extends ConsumerWidget {
                 ),
               ),
             ),
+          _BotonFechasLibres(focusedDay: focusedDay),
           // Toggle vista
           IconButton(
             icon: Icon(isCalendarView ? Icons.list : Icons.calendar_month),
@@ -2055,6 +2056,56 @@ class _GoogleAccountBanner extends StatelessWidget {
             style: TextStyle(fontSize: 11, color: AppColors.accentGreen),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Acceso a Fechas libres: icono y texto, en tono suave.
+class _BotonFechasLibres extends StatelessWidget {
+  final DateTime focusedDay;
+
+  const _BotonFechasLibres({required this.focusedDay});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final primary = Theme.of(context).colorScheme.primary;
+    // En pantallas estrechas la barra no da para el texto completo.
+    final ancho = MediaQuery.of(context).size.width >= 700;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+      child: Tooltip(
+        message: 'Generar el texto de tus fechas libres',
+        child: InkWell(
+          onTap: () => context.push(
+            '/fechas-libres?fecha=${DateFormatter.isoDay(focusedDay)}',
+          ),
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: colors.surfaceContainer,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.event_available_outlined, size: 18, color: primary),
+                const SizedBox(width: 6),
+                Text(
+                  ancho ? 'Fechas libres' : 'Libres',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: primary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
