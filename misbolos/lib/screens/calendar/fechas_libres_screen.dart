@@ -8,6 +8,7 @@ import '../../core/theme/app_theme_colors.dart';
 import '../../core/utils/fechas_libres.dart';
 import '../../core/utils/texto_fechas_libres.dart';
 import '../../models/client.dart';
+import '../../models/franja_bolo.dart';
 import '../../models/gig.dart';
 import '../../providers/client_provider.dart';
 import '../../providers/gig_provider.dart';
@@ -15,6 +16,15 @@ import '../../widgets/calendar/mini_calendario_mes.dart';
 
 /// Clave del último patrón de días de la semana. Solo local, no se sincroniza.
 const String fechasLibresDiasSemanaKey = 'fechas_libres_dias_semana';
+
+/// Clave de la última franja pedida. También solo local.
+const String fechasLibresFranjaKey = 'fechas_libres_franja';
+
+const _etiquetasFranja = {
+  FranjaPedida.ambas: 'Ambas',
+  FranjaPedida.soloTardes: 'Solo tardes',
+  FranjaPedida.soloNoches: 'Solo noches',
+};
 
 /// Patrón rápido de días de la semana.
 class _PatronRapido {
@@ -66,6 +76,7 @@ class _FechasLibresScreenState extends ConsumerState<FechasLibresScreen> {
   Set<int> _diasSemana = {DateTime.friday, DateTime.saturday};
   final Set<DateTime> _anadidos = {};
   final Set<DateTime> _quitados = {};
+  FranjaPedida _pedida = FranjaPedida.ambas;
   bool _cabecera = true;
   bool _hayRetoques = false;
 
@@ -78,15 +89,31 @@ class _FechasLibresScreenState extends ConsumerState<FechasLibresScreen> {
 
   Future<void> _cargarPatronGuardado() async {
     final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+
     final guardado = prefs.getStringList(fechasLibresDiasSemanaKey);
-    if (guardado == null || guardado.isEmpty || !mounted) return;
-    final dias = guardado
+    final dias = (guardado ?? const <String>[])
         .map(int.tryParse)
         .whereType<int>()
         .where((d) => d >= DateTime.monday && d <= DateTime.sunday)
         .toSet();
-    if (dias.isEmpty) return;
-    setState(() => _diasSemana = dias);
+
+    final franjaGuardada = prefs.getString(fechasLibresFranjaKey);
+    final pedida = FranjaPedida.values
+        .where((f) => f.name == franjaGuardada)
+        .firstOrNull;
+
+    if (dias.isEmpty && pedida == null) return;
+    setState(() {
+      if (dias.isNotEmpty) _diasSemana = dias;
+      if (pedida != null) _pedida = pedida;
+    });
+  }
+
+  Future<void> _cambiarFranja(FranjaPedida pedida) async {
+    setState(() => _pedida = pedida);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(fechasLibresFranjaKey, pedida.name);
   }
 
   Future<void> _guardarPatron() async {
@@ -179,11 +206,16 @@ class _FechasLibresScreenState extends ConsumerState<FechasLibresScreen> {
       if (gig.status == GigStatus.cancelado) continue;
       porDia
           .putIfAbsent(diaClave(gig.fecha), () => [])
-          .add(nombres[gig.clientId] ?? 'Cliente');
+          .add(
+            '${nombres[gig.clientId] ?? 'Cliente'} · '
+            '${franjaEfectiva(gig.franja).label}',
+          );
     }
-    return porDia.map((dia, clientes) {
-      if (clientes.length == 1) return MapEntry(dia, clientes.first);
-      return MapEntry(dia, '${clientes.length} bolos: ${clientes.join(', ')}');
+    return porDia.map((dia, descripciones) {
+      if (descripciones.length == 1) {
+        return MapEntry(dia, descripciones.first);
+      }
+      return MapEntry(dia, descripciones.join('\n'));
     });
   }
 
@@ -202,11 +234,13 @@ class _FechasLibresScreenState extends ConsumerState<FechasLibresScreen> {
       anadidos: _anadidos,
       quitados: _quitados,
       ocupacion: ocupacion,
+      pedida: _pedida,
     );
     final texto = textoFechasLibres(
       libres,
       year: _mes.year,
       month: _mes.month,
+      pedida: _pedida,
       cabecera: _cabecera,
     );
     final hayLibres = libres.isNotEmpty;
@@ -226,9 +260,18 @@ class _FechasLibresScreenState extends ConsumerState<FechasLibresScreen> {
             diasSemana: _diasSemana,
             onPatron: _cambiarDiasSemana,
             onDiaSemana: _alternarDiaSemana,
-            marcados: libres.toSet(),
+            marcados: libres
+                .where((l) => l.completo)
+                .map((l) => l.fecha)
+                .toSet(),
+            parciales: {
+              for (final l in libres.where((l) => !l.completo))
+                l.fecha: l.tarde ? 'Tarde' : 'Noche',
+            },
             bolosPorDia: bolos,
             onTocarDia: _tocarDia,
+            pedida: _pedida,
+            onFranja: _cambiarFranja,
             hayRetoques: _hayRetoques,
             compacto: !anchura,
           );
@@ -339,7 +382,10 @@ class _TarjetaDias extends StatelessWidget {
   final ValueChanged<Set<int>> onPatron;
   final ValueChanged<int> onDiaSemana;
   final Set<DateTime> marcados;
+  final Map<DateTime, String> parciales;
   final Map<DateTime, String> bolosPorDia;
+  final FranjaPedida pedida;
+  final ValueChanged<FranjaPedida> onFranja;
   final ValueChanged<DateTime> onTocarDia;
   final bool hayRetoques;
   final bool compacto;
@@ -353,7 +399,10 @@ class _TarjetaDias extends StatelessWidget {
     required this.onPatron,
     required this.onDiaSemana,
     required this.marcados,
+    required this.parciales,
     required this.bolosPorDia,
+    required this.pedida,
+    required this.onFranja,
     required this.onTocarDia,
     required this.hayRetoques,
     required this.compacto,
@@ -426,10 +475,27 @@ class _TarjetaDias extends StatelessWidget {
           ),
           const SizedBox(height: 20),
 
+          const _Rotulo('Franja'),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final entrada in _etiquetasFranja.entries)
+                _ChipPatron(
+                  etiqueta: entrada.value,
+                  activo: pedida == entrada.key,
+                  onTocar: () => onFranja(entrada.key),
+                ),
+            ],
+          ),
+          const SizedBox(height: 20),
+
           MiniCalendarioMes(
             year: mes.year,
             month: mes.month,
             marcados: marcados,
+            parciales: parciales,
             bolosPorDia: bolosPorDia,
             altoCelda: compacto ? 46 : 52,
             onTocarDia: onTocarDia,
