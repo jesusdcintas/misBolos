@@ -45,6 +45,8 @@ CREATE TABLE IF NOT EXISTS gigs (
       'cobrado_b',
       'cancelado',
     )),
+  franja TEXT
+    CHECK (franja IS NULL OR franja IN ('tarde', 'noche', 'dia_completo')),
   invoice_id UUID,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
