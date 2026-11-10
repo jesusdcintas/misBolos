@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/theme/app_theme_colors.dart';
 import '../../core/utils/fechas_libres.dart';
+import '../../core/utils/rejilla_mes.dart';
 
 final _diaCorto = DateFormat('EEE', 'es');
 
@@ -51,12 +52,7 @@ class MiniCalendarioMes extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.colors;
     final hoyClave = diaClave(hoy ?? DateTime.now());
-    final primero = DateTime.utc(year, month, 1);
-    final ultimoDia = DateTime.utc(year, month + 1, 0).day;
-    // weekday: 1 lunes … 7 domingo. La rejilla empieza en lunes.
-    final huecosIniciales = primero.weekday - 1;
-    final totalCeldas = huecosIniciales + ultimoDia;
-    final semanas = (totalCeldas / 7).ceil();
+    final semanas = filasDelMes(year, month);
 
     return Column(
       children: [
@@ -92,11 +88,7 @@ class MiniCalendarioMes extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(
                         horizontal: _separacion / 2,
                       ),
-                      child: _celda(
-                        semana * 7 + columna - huecosIniciales,
-                        ultimoDia,
-                        hoyClave,
-                      ),
+                      child: _celda(semana * 7 + columna, hoyClave),
                     ),
                   ),
               ],
@@ -108,8 +100,9 @@ class MiniCalendarioMes extends StatelessWidget {
     );
   }
 
-  Widget _celda(int dia, int ultimoDia, DateTime hoyClave) {
-    if (dia < 1 || dia > ultimoDia) return const SizedBox.shrink();
+  Widget _celda(int indice, DateTime hoyClave) {
+    final dia = diaEnCelda(year: year, month: month, indice: indice);
+    if (dia == null) return const SizedBox.shrink();
 
     final fecha = DateTime.utc(year, month, dia);
     final cliente = bolosPorDia[fecha];
