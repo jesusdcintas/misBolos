@@ -9,6 +9,7 @@ Widget _app({
   int month = 10,
   Set<DateTime> marcados = const {},
   Map<DateTime, String> bolosPorDia = const {},
+  Map<DateTime, String> parciales = const {},
   double altoCelda = 52,
   required DateTime hoy,
   required void Function(DateTime) onTocar,
@@ -24,6 +25,7 @@ Widget _app({
           month: month,
           marcados: marcados,
           bolosPorDia: bolosPorDia,
+          parciales: parciales,
           altoCelda: altoCelda,
           hoy: hoy,
           onTocarDia: onTocar,
@@ -163,6 +165,67 @@ void main() {
     });
   });
 
+  group('días parcialmente libres', () {
+    testWidgets('llevan la etiqueta de la franja que queda libre', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _app(
+          hoy: hoy,
+          parciales: {DateTime.utc(2026, 10, 9): 'Noche'},
+          onTocar: (_) {},
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Noche'), findsOneWidget);
+    });
+
+    testWidgets('el parcial manda sobre el día con bolo', (tester) async {
+      await tester.pumpWidget(
+        _app(
+          hoy: hoy,
+          bolosPorDia: {DateTime.utc(2026, 10, 9): 'Bahía Sur · Tarde'},
+          parciales: {DateTime.utc(2026, 10, 9): 'Noche'},
+          onTocar: (_) {},
+        ),
+      );
+      await tester.pumpAndSettle();
+      // Se ofrece la noche libre, no se anuncia como ocupado.
+      expect(find.text('Noche'), findsOneWidget);
+      expect(find.text('Bolo'), findsNothing);
+    });
+
+    testWidgets('un parcial con bolo conserva el tooltip', (tester) async {
+      await tester.pumpWidget(
+        _app(
+          hoy: hoy,
+          bolosPorDia: {DateTime.utc(2026, 10, 9): 'Bahía Sur · Tarde'},
+          parciales: {DateTime.utc(2026, 10, 9): 'Noche'},
+          onTocar: (_) {},
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final mensajes = tester
+          .widgetList<Tooltip>(find.byType(Tooltip))
+          .map((t) => t.message)
+          .toList();
+      expect(mensajes, contains('Bahía Sur · Tarde'));
+    });
+
+    testWidgets('un día pasado no se ofrece como parcial', (tester) async {
+      await tester.pumpWidget(
+        _app(
+          hoy: DateTime(2026, 10, 15),
+          parciales: {DateTime.utc(2026, 10, 9): 'Noche'},
+          onTocar: (_) {},
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Noche'), findsNothing);
+    });
+  });
+
   group('altura de las celdas', () {
     testWidgets('en escritorio no pasan de 60 px', (tester) async {
       await tester.pumpWidget(_app(hoy: hoy, onTocar: (_) {}));
@@ -209,6 +272,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Libre'), findsOneWidget);
+    expect(find.text('Media libre'), findsOneWidget);
     expect(find.text('Con bolo'), findsOneWidget);
     expect(find.text('Pasado'), findsOneWidget);
   });
