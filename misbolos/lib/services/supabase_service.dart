@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../core/utils/gig_supabase_map.dart';
 import '../models/app_settings.dart';
 import '../models/client.dart';
 import '../models/expense.dart';
@@ -997,37 +998,10 @@ class SupabaseService {
     updatedAt: DateTime.parse(m['updated_at']),
   );
 
-  Map<String, dynamic> _gigToSupabase(Gig g) => {
-    'id': g.id,
-    'user_id': userId,
-    'fecha': g.fecha.toIso8601String().split('T').first,
-    'client_id': g.clientId,
-    'notas': g.notas,
-    'cachet': g.cachet,
-    'facturable': g.facturable,
-    'status': g.status.dbValue,
-    'invoice_id': g.invoiceId,
-    'created_at': g.createdAt.toUtc().toIso8601String(),
-    'updated_at': g.updatedAt.toUtc().toIso8601String(),
-    if (g.deletedAt != null)
-      'deleted_at': g.deletedAt!.toUtc().toIso8601String(),
-  };
+  Map<String, dynamic> _gigToSupabase(Gig g) =>
+      gigToSupabase(g, userId: userId);
 
-  Gig _gigFromSupabase(Map<String, dynamic> m) => Gig(
-    id: m['id'],
-    fecha: DateTime.parse(m['fecha']),
-    clientId: m['client_id'] ?? '',
-    notas: m['notas'],
-    cachet: m['cachet'] != null ? (m['cachet'] as num).toDouble() : null,
-    facturable: m['facturable'] ?? true,
-    status: GigStatusExtension.fromDb(m['status'] ?? 'confirmado'),
-    invoiceId: m['invoice_id'],
-    createdAt: DateTime.parse(m['created_at']),
-    updatedAt: DateTime.parse((m['updated_at'] ?? m['created_at']).toString()),
-    deletedAt: m['deleted_at'] != null
-        ? DateTime.parse(m['deleted_at'].toString())
-        : null,
-  );
+  Gig _gigFromSupabase(Map<String, dynamic> m) => gigFromSupabase(m);
 
   Map<String, dynamic> _invoiceToSupabaseEs(
     Invoice i, {

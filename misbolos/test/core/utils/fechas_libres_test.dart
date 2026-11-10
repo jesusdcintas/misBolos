@@ -1,9 +1,13 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:misbolos/core/utils/fechas_libres.dart';
+import 'package:misbolos/models/franja_bolo.dart';
 import 'package:misbolos/models/gig.dart';
 
-Gig _bolo(DateTime fecha, {GigStatus status = GigStatus.confirmado}) =>
-    Gig(fecha: fecha, clientId: 'cliente', status: status);
+Gig _bolo(
+  DateTime fecha, {
+  GigStatus status = GigStatus.confirmado,
+  FranjaBolo? franja,
+}) => Gig(fecha: fecha, clientId: 'cliente', status: status, franja: franja);
 
 /// Lunes a domingo.
 const _lunes = DateTime.monday;
@@ -12,7 +16,8 @@ const _viernes = DateTime.friday;
 const _sabado = DateTime.saturday;
 const _domingo = DateTime.sunday;
 
-List<int> _dias(List<DateTime> fechas) => fechas.map((f) => f.day).toList();
+List<int> _dias(List<DiaLibre> libres) =>
+    libres.map((l) => l.fecha.day).toList();
 
 void main() {
   // Octubre de 2026 empieza en jueves y acaba en sábado.
@@ -298,7 +303,159 @@ void main() {
         hoy: DateTime(2026, 12, 1),
       );
       expect(_dias(libres), [3, 10, 17, 24, 31]);
-      expect(libres.every((f) => f.month == 12), isTrue);
+      expect(libres.every((l) => l.fecha.month == 12), isTrue);
+    });
+  });
+
+  group('ocupacionDeBolo: franjas', () {
+    test('un bolo de tarde solo ocupa la tarde', () {
+      final ocupacion = ocupacionPorDia([
+        _bolo(DateTime(2026, 10, 2), franja: FranjaBolo.tarde),
+      ]);
+      final dia = ocupacion[DateTime.utc(2026, 10, 2)]!;
+      expect(dia.tarde, isTrue);
+      expect(dia.noche, isFalse);
+    });
+
+    test('un bolo de noche solo ocupa la noche', () {
+      final ocupacion = ocupacionPorDia([
+        _bolo(DateTime(2026, 10, 2), franja: FranjaBolo.noche),
+      ]);
+      final dia = ocupacion[DateTime.utc(2026, 10, 2)]!;
+      expect(dia.tarde, isFalse);
+      expect(dia.noche, isTrue);
+    });
+
+    test('un bolo de todo el día ocupa las dos', () {
+      final ocupacion = ocupacionPorDia([
+        _bolo(DateTime(2026, 10, 2), franja: FranjaBolo.diaCompleto),
+      ]);
+      expect(ocupacion[DateTime.utc(2026, 10, 2)], OcupacionDia.completa);
+    });
+
+    test('un bolo sin franja ocupa las dos, por prudencia', () {
+      final ocupacion = ocupacionPorDia([_bolo(DateTime(2026, 10, 2))]);
+      expect(ocupacion[DateTime.utc(2026, 10, 2)], OcupacionDia.completa);
+    });
+
+    test('una tarde y una noche el mismo día ocupan el día entero', () {
+      final ocupacion = ocupacionPorDia([
+        _bolo(DateTime(2026, 10, 2, 18), franja: FranjaBolo.tarde),
+        _bolo(DateTime(2026, 10, 2, 23), franja: FranjaBolo.noche),
+      ]);
+      expect(ocupacion[DateTime.utc(2026, 10, 2)], OcupacionDia.completa);
+    });
+
+    test('dos bolos de tarde dejan la noche libre', () {
+      final ocupacion = ocupacionPorDia([
+        _bolo(DateTime(2026, 10, 2, 17), franja: FranjaBolo.tarde),
+        _bolo(DateTime(2026, 10, 2, 19), franja: FranjaBolo.tarde),
+      ]);
+      final dia = ocupacion[DateTime.utc(2026, 10, 2)]!;
+      expect(dia.tarde, isTrue);
+      expect(dia.noche, isFalse);
+    });
+
+    test('un bolo de tarde cancelado no ocupa nada', () {
+      final ocupacion = ocupacionPorDia([
+        _bolo(
+          DateTime(2026, 10, 2),
+          franja: FranjaBolo.tarde,
+          status: GigStatus.cancelado,
+        ),
+      ]);
+      expect(ocupacion, isEmpty);
+    });
+  });
+
+  group('diasLibres: franja pedida', () {
+    // Viernes 2: bolo de noche. Sábado 3: bolo de tarde.
+    // Viernes 9: día completo. Sábado 10: libre.
+    final ocupacion = ocupacionPorDia([
+      _bolo(DateTime(2026, 10, 2), franja: FranjaBolo.noche),
+      _bolo(DateTime(2026, 10, 3), franja: FranjaBolo.tarde),
+      _bolo(DateTime(2026, 10, 9), franja: FranjaBolo.diaCompleto),
+    ]);
+
+    List<DiaLibre> conPedida(FranjaPedida pedida) => diasLibres(
+      year: 2026,
+      month: 10,
+      diasSemana: const {_viernes, _sabado},
+      ocupacion: ocupacion,
+      pedida: pedida,
+      hoy: hoyOctubre,
+    );
+
+    test('ambas: entran los días con alguna franja libre', () {
+      final libres = conPedida(FranjaPedida.ambas);
+      // El 9 está entero ocupado y se cae.
+      expect(_dias(libres), [2, 3, 10, 16, 17, 23, 24, 30, 31]);
+    });
+
+    test('ambas: dice qué franja queda libre en los parciales', () {
+      final libres = conPedida(FranjaPedida.ambas);
+      final dia2 = libres.firstWhere((l) => l.fecha.day == 2);
+      expect(dia2.tarde, isTrue);
+      expect(dia2.noche, isFalse);
+      expect(dia2.completo, isFalse);
+
+      final dia3 = libres.firstWhere((l) => l.fecha.day == 3);
+      expect(dia3.tarde, isFalse);
+      expect(dia3.noche, isTrue);
+
+      expect(libres.firstWhere((l) => l.fecha.day == 10).completo, isTrue);
+    });
+
+    test('solo tardes: fuera los días con la tarde ocupada', () {
+      final libres = conPedida(FranjaPedida.soloTardes);
+      // El 3 tiene bolo de tarde y el 9 entero: se caen los dos.
+      expect(_dias(libres), [2, 10, 16, 17, 23, 24, 30, 31]);
+    });
+
+    test('solo noches: fuera los días con la noche ocupada', () {
+      final libres = conPedida(FranjaPedida.soloNoches);
+      // El 2 tiene bolo de noche y el 9 entero.
+      expect(_dias(libres), [3, 10, 16, 17, 23, 24, 30, 31]);
+    });
+
+    test('un día sin bolos entra en los tres modos', () {
+      for (final pedida in FranjaPedida.values) {
+        expect(
+          _dias(conPedida(pedida)),
+          contains(10),
+          reason: 'el 10 está libre y debería entrar con $pedida',
+        );
+      }
+    });
+
+    test('por defecto se piden ambas', () {
+      final porDefecto = diasLibres(
+        year: 2026,
+        month: 10,
+        diasSemana: const {_viernes, _sabado},
+        ocupacion: ocupacion,
+        hoy: hoyOctubre,
+      );
+      expect(_dias(porDefecto), _dias(conPedida(FranjaPedida.ambas)));
+    });
+
+    test('un bolo sin franja tapa el día en los tres modos', () {
+      final sinFranja = ocupacionPorDia([_bolo(DateTime(2026, 10, 2))]);
+      for (final pedida in FranjaPedida.values) {
+        final libres = diasLibres(
+          year: 2026,
+          month: 10,
+          diasSemana: const {_viernes},
+          ocupacion: sinFranja,
+          pedida: pedida,
+          hoy: hoyOctubre,
+        );
+        expect(
+          _dias(libres),
+          isNot(contains(2)),
+          reason: 'sin franja no se puede ofrecer el hueco con $pedida',
+        );
+      }
     });
   });
 

@@ -9,6 +9,7 @@ Widget _app({
   int month = 10,
   Set<DateTime> marcados = const {},
   Map<DateTime, String> bolosPorDia = const {},
+  Map<DateTime, String> parciales = const {},
   double altoCelda = 52,
   required DateTime hoy,
   required void Function(DateTime) onTocar,
@@ -24,6 +25,7 @@ Widget _app({
           month: month,
           marcados: marcados,
           bolosPorDia: bolosPorDia,
+          parciales: parciales,
           altoCelda: altoCelda,
           hoy: hoy,
           onTocarDia: onTocar,
@@ -163,6 +165,178 @@ void main() {
     });
   });
 
+  group('alineación de los días con su columna', () {
+    /// Centro horizontal de un texto.
+    double x(WidgetTester tester, String texto) =>
+        tester.getCenter(find.text(texto)).dx;
+
+    /// Filas de celdas que dibuja la rejilla.
+    int filas(WidgetTester tester, double alto) => tester
+        .widgetList<SizedBox>(find.byType(SizedBox))
+        .where((s) => s.height == alto)
+        .length;
+
+    testWidgets('noviembre de 2026: el 1 va bajo dom, no bajo lun', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _app(month: 11, hoy: DateTime(2026, 11, 1), onTocar: (_) {}),
+      );
+      await tester.pumpAndSettle();
+
+      expect(x(tester, '1'), closeTo(x(tester, 'dom'), 1));
+      expect(x(tester, '1'), isNot(closeTo(x(tester, 'lun'), 1)));
+    });
+
+    testWidgets('noviembre de 2026: el 13 bajo vie y el 10 bajo mar', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _app(month: 11, hoy: DateTime(2026, 11, 1), onTocar: (_) {}),
+      );
+      await tester.pumpAndSettle();
+
+      expect(x(tester, '13'), closeTo(x(tester, 'vie'), 1));
+      expect(x(tester, '10'), closeTo(x(tester, 'mar'), 1));
+    });
+
+    testWidgets('noviembre de 2026: la primera fila no está vacía', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _app(month: 11, hoy: DateTime(2026, 11, 1), onTocar: (_) {}),
+      );
+      await tester.pumpAndSettle();
+
+      // El 1 está en la primera fila de celdas, justo bajo la cabecera.
+      final yCabecera = tester.getCenter(find.text('dom')).dy;
+      final yUno = tester.getCenter(find.text('1')).dy;
+      final yOcho = tester.getCenter(find.text('8')).dy;
+      expect(yUno - yCabecera, lessThan(yOcho - yUno));
+    });
+
+    testWidgets('junio de 2026: el 1 va bajo lun', (tester) async {
+      await tester.pumpWidget(
+        _app(month: 6, hoy: DateTime(2026, 6, 1), onTocar: (_) {}),
+      );
+      await tester.pumpAndSettle();
+      expect(x(tester, '1'), closeTo(x(tester, 'lun'), 1));
+    });
+
+    testWidgets('abril de 2026: el 1 va bajo mié', (tester) async {
+      await tester.pumpWidget(
+        _app(month: 4, hoy: DateTime(2026, 4, 1), onTocar: (_) {}),
+      );
+      await tester.pumpAndSettle();
+      expect(x(tester, '1'), closeTo(x(tester, 'mié'), 1));
+    });
+
+    testWidgets('agosto de 2026: el 1 va bajo sáb', (tester) async {
+      await tester.pumpWidget(
+        _app(month: 8, hoy: DateTime(2026, 8, 1), onTocar: (_) {}),
+      );
+      await tester.pumpAndSettle();
+      expect(x(tester, '1'), closeTo(x(tester, 'sáb'), 1));
+    });
+
+    testWidgets('febrero de 2027: exactamente cuatro filas', (tester) async {
+      await tester.pumpWidget(
+        _app(year: 2027, month: 2, hoy: DateTime(2027, 2, 1), onTocar: (_) {}),
+      );
+      await tester.pumpAndSettle();
+      expect(filas(tester, 52), 4);
+    });
+
+    testWidgets('febrero de 2027: el 28 se dibuja', (tester) async {
+      await tester.pumpWidget(
+        _app(year: 2027, month: 2, hoy: DateTime(2027, 2, 1), onTocar: (_) {}),
+      );
+      await tester.pumpAndSettle();
+      // Con el desfase anterior el 28 se salía de la rejilla.
+      expect(find.text('28'), findsOneWidget);
+      expect(x(tester, '28'), closeTo(x(tester, 'dom'), 1));
+    });
+
+    testWidgets('noviembre de 2026: tocar el 13 devuelve el 13', (
+      tester,
+    ) async {
+      DateTime? tocado;
+      await tester.pumpWidget(
+        _app(
+          month: 11,
+          hoy: DateTime(2026, 11, 1),
+          onTocar: (f) => tocado = f,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('13'));
+      await tester.pumpAndSettle();
+      expect(tocado, DateTime.utc(2026, 11, 13));
+    });
+  });
+
+  group('días parcialmente libres', () {
+    testWidgets('llevan la etiqueta de la franja que queda libre', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _app(
+          hoy: hoy,
+          parciales: {DateTime.utc(2026, 10, 9): 'Noche'},
+          onTocar: (_) {},
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Noche'), findsOneWidget);
+    });
+
+    testWidgets('el parcial manda sobre el día con bolo', (tester) async {
+      await tester.pumpWidget(
+        _app(
+          hoy: hoy,
+          bolosPorDia: {DateTime.utc(2026, 10, 9): 'Bahía Sur · Tarde'},
+          parciales: {DateTime.utc(2026, 10, 9): 'Noche'},
+          onTocar: (_) {},
+        ),
+      );
+      await tester.pumpAndSettle();
+      // Se ofrece la noche libre, no se anuncia como ocupado.
+      expect(find.text('Noche'), findsOneWidget);
+      expect(find.text('Bolo'), findsNothing);
+    });
+
+    testWidgets('un parcial con bolo conserva el tooltip', (tester) async {
+      await tester.pumpWidget(
+        _app(
+          hoy: hoy,
+          bolosPorDia: {DateTime.utc(2026, 10, 9): 'Bahía Sur · Tarde'},
+          parciales: {DateTime.utc(2026, 10, 9): 'Noche'},
+          onTocar: (_) {},
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final mensajes = tester
+          .widgetList<Tooltip>(find.byType(Tooltip))
+          .map((t) => t.message)
+          .toList();
+      expect(mensajes, contains('Bahía Sur · Tarde'));
+    });
+
+    testWidgets('un día pasado no se ofrece como parcial', (tester) async {
+      await tester.pumpWidget(
+        _app(
+          hoy: DateTime(2026, 10, 15),
+          parciales: {DateTime.utc(2026, 10, 9): 'Noche'},
+          onTocar: (_) {},
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Noche'), findsNothing);
+    });
+  });
+
   group('altura de las celdas', () {
     testWidgets('en escritorio no pasan de 60 px', (tester) async {
       await tester.pumpWidget(_app(hoy: hoy, onTocar: (_) {}));
@@ -209,6 +383,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Libre'), findsOneWidget);
+    expect(find.text('Media libre'), findsOneWidget);
     expect(find.text('Con bolo'), findsOneWidget);
     expect(find.text('Pasado'), findsOneWidget);
   });

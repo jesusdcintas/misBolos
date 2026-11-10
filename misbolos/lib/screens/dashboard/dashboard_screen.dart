@@ -15,6 +15,7 @@ import '../../widgets/common/dismissible_alert_banner.dart';
 import '../../widgets/common/dj_refresh_indicator.dart';
 import '../../widgets/common/expandable_fab.dart';
 import '../../widgets/common/facturable_badge.dart';
+import '../../widgets/common/franja_badge.dart';
 import '../../widgets/common/skeleton_loading.dart';
 import '../../widgets/dashboard/income_period_card.dart';
 import '../../widgets/dashboard/pending_invoices_card.dart';
@@ -389,6 +390,8 @@ class _UpcomingGigTile extends ConsumerWidget {
             ),
             const SizedBox(width: 6),
             FacturableBadge(facturable: gig.facturable),
+            const SizedBox(width: 6),
+            FranjaBadge(franja: gig.franja),
           ],
         ),
       ),

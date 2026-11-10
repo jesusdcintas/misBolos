@@ -12,6 +12,7 @@ import '../../providers/gig_provider.dart';
 import '../../services/whatsapp_service.dart';
 import '../../widgets/common/status_badge.dart';
 import '../../widgets/common/facturable_badge.dart';
+import '../../widgets/common/franja_badge.dart';
 
 class ClientDetailScreen extends ConsumerWidget {
   final String clientId;
@@ -214,6 +215,8 @@ class ClientDetailScreen extends ConsumerWidget {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   FacturableBadge(facturable: g.facturable),
+                                  const SizedBox(width: 6),
+                                  FranjaBadge(franja: g.franja),
                                   const SizedBox(width: 4),
                                   StatusBadge(
                                     status: g.status,

@@ -3,11 +3,12 @@ import 'package:intl/intl.dart';
 
 import '../../core/theme/app_theme_colors.dart';
 import '../../core/utils/fechas_libres.dart';
+import '../../core/utils/rejilla_mes.dart';
 
 final _diaCorto = DateFormat('EEE', 'es');
 
 /// Estado en el que se pinta cada celda.
-enum _EstadoDia { pasado, conBolo, marcado, hoy, normal }
+enum _EstadoDia { pasado, parcial, conBolo, marcado, hoy, normal }
 
 /// Rejilla del mes con los días marcados, los que tienen bolo y los pasados.
 ///
@@ -16,8 +17,11 @@ class MiniCalendarioMes extends StatelessWidget {
   final int year;
   final int month;
 
-  /// Días que entran en el texto.
+  /// Días enteros libres que entran en el texto.
   final Set<DateTime> marcados;
+
+  /// Día con solo media franja libre y cuál: «Tarde» o «Noche».
+  final Map<DateTime, String> parciales;
 
   /// Día con bolo y el texto que describe quién, para el tooltip.
   final Map<DateTime, String> bolosPorDia;
@@ -36,6 +40,7 @@ class MiniCalendarioMes extends StatelessWidget {
     required this.month,
     required this.marcados,
     required this.bolosPorDia,
+    this.parciales = const {},
     required this.onTocarDia,
     this.altoCelda = 52,
     this.hoy,
@@ -47,12 +52,7 @@ class MiniCalendarioMes extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.colors;
     final hoyClave = diaClave(hoy ?? DateTime.now());
-    final primero = DateTime.utc(year, month, 1);
-    final ultimoDia = DateTime.utc(year, month + 1, 0).day;
-    // weekday: 1 lunes … 7 domingo. La rejilla empieza en lunes.
-    final huecosIniciales = primero.weekday - 1;
-    final totalCeldas = huecosIniciales + ultimoDia;
-    final semanas = (totalCeldas / 7).ceil();
+    final semanas = filasDelMes(year, month);
 
     return Column(
       children: [
@@ -88,11 +88,7 @@ class MiniCalendarioMes extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(
                         horizontal: _separacion / 2,
                       ),
-                      child: _celda(
-                        semana * 7 + columna - huecosIniciales,
-                        ultimoDia,
-                        hoyClave,
-                      ),
+                      child: _celda(semana * 7 + columna, hoyClave),
                     ),
                   ),
               ],
@@ -104,16 +100,22 @@ class MiniCalendarioMes extends StatelessWidget {
     );
   }
 
-  Widget _celda(int dia, int ultimoDia, DateTime hoyClave) {
-    if (dia < 1 || dia > ultimoDia) return const SizedBox.shrink();
+  Widget _celda(int indice, DateTime hoyClave) {
+    final dia = diaEnCelda(year: year, month: month, indice: indice);
+    if (dia == null) return const SizedBox.shrink();
 
     final fecha = DateTime.utc(year, month, dia);
     final cliente = bolosPorDia[fecha];
     final pasado = fecha.isBefore(hoyClave);
 
+    final parcial = parciales[fecha];
+
     final _EstadoDia estado;
     if (pasado) {
       estado = _EstadoDia.pasado;
+    } else if (parcial != null) {
+      // Media franja libre manda sobre el bolo: es lo que se puede ofrecer.
+      estado = _EstadoDia.parcial;
     } else if (cliente != null) {
       estado = _EstadoDia.conBolo;
     } else if (marcados.contains(fecha)) {
@@ -128,6 +130,7 @@ class MiniCalendarioMes extends StatelessWidget {
       fecha: fecha,
       estado: estado,
       cliente: cliente,
+      etiquetaParcial: parcial,
       onTocar: pasado ? null : () => onTocarDia(fecha),
     );
   }
@@ -137,12 +140,14 @@ class _Celda extends StatelessWidget {
   final DateTime fecha;
   final _EstadoDia estado;
   final String? cliente;
+  final String? etiquetaParcial;
   final VoidCallback? onTocar;
 
   const _Celda({
     required this.fecha,
     required this.estado,
     this.cliente,
+    this.etiquetaParcial,
     this.onTocar,
   });
 
@@ -160,6 +165,11 @@ class _Celda extends StatelessWidget {
       case _EstadoDia.marcado:
         fondo = primary;
         texto = Colors.white;
+      case _EstadoDia.parcial:
+        fondo = primary.withValues(alpha: 0.08);
+        texto = primary;
+        borde = Border.all(color: primary, width: 1.5);
+        etiqueta = etiquetaParcial;
       case _EstadoDia.conBolo:
         fondo = colors.warningBg;
         texto = colors.warning;
@@ -217,7 +227,9 @@ class _Celda extends StatelessWidget {
 
     // El tooltip del cliente solo tiene sentido con ratón.
     final nombre = cliente;
-    if (estado == _EstadoDia.conBolo && nombre != null && nombre.isNotEmpty) {
+    final conTooltip =
+        estado == _EstadoDia.conBolo || estado == _EstadoDia.parcial;
+    if (conTooltip && nombre != null && nombre.isNotEmpty) {
       return Tooltip(message: nombre, child: celda);
     }
     return celda;
@@ -238,6 +250,11 @@ class LeyendaMiniCalendario extends StatelessWidget {
       runSpacing: 6,
       children: [
         _Muestra(color: primary, texto: 'Libre'),
+        _Muestra(
+          color: primary.withValues(alpha: 0.08),
+          borde: primary,
+          texto: 'Media libre',
+        ),
         _Muestra(
           color: colors.warningBg,
           borde: colors.warning,

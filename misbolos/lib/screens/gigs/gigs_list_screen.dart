@@ -16,6 +16,7 @@ import '../../providers/client_provider.dart';
 import '../../providers/sync_provider.dart';
 import '../../widgets/common/status_badge.dart';
 import '../../widgets/common/facturable_badge.dart';
+import '../../widgets/common/franja_badge.dart';
 import '../../widgets/common/skeleton_loading.dart';
 
 // ─── Filter providers ───
@@ -1191,6 +1192,8 @@ class _GigListTile extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 FacturableBadge(facturable: gig.facturable),
+                const SizedBox(width: 6),
+                FranjaBadge(franja: gig.franja),
                 const SizedBox(height: 4),
                 StatusBadge(status: gig.status, facturable: gig.facturable),
               ],
