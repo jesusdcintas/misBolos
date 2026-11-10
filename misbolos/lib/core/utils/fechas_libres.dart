@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../../models/franja_bolo.dart';
 import '../../models/gig.dart';
 
 /// Clave de un día: año, mes y día en UTC, sin horas.
@@ -47,8 +48,46 @@ class OcupacionDia {
   String toString() => 'OcupacionDia(tarde: $tarde, noche: $noche)';
 }
 
-/// Qué ocupa un bolo. De momento, el día entero.
-OcupacionDia ocupacionDeBolo(Gig gig) => OcupacionDia.completa;
+/// Qué ocupa un bolo, según su franja.
+///
+/// Un bolo sin franja guardada ocupa el día entero: ver [franjaEfectiva].
+OcupacionDia ocupacionDeBolo(Gig gig) {
+  final franja = franjaEfectiva(gig.franja);
+  return OcupacionDia(
+    tarde: franja.ocupaTarde,
+    noche: franja.ocupaNoche,
+  );
+}
+
+/// Qué franjas se quieren para el texto.
+enum FranjaPedida { ambas, soloTardes, soloNoches }
+
+/// Un día libre y qué franjas tiene libres.
+@immutable
+class DiaLibre {
+  final DateTime fecha;
+  final bool tarde;
+  final bool noche;
+
+  const DiaLibre({required this.fecha, required this.tarde, required this.noche});
+
+  /// El día entero está libre.
+  bool get completo => tarde && noche;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is DiaLibre &&
+          fecha == other.fecha &&
+          tarde == other.tarde &&
+          noche == other.noche;
+
+  @override
+  int get hashCode => Object.hash(fecha, tarde, noche);
+
+  @override
+  String toString() => 'DiaLibre($fecha, tarde: $tarde, noche: $noche)';
+}
 
 /// Ocupación de cada día a partir de los bolos.
 ///
@@ -68,17 +107,19 @@ Map<DateTime, OcupacionDia> ocupacionPorDia(List<Gig> gigs) {
 
 /// Días libres del mes [month] de [year], en orden.
 ///
-/// Un día entra si está marcado y no tiene ningún bolo. Está marcado si su día
-/// de la semana está en [diasSemana] (1 lunes … 7 domingo) o si se añadió a
-/// mano en [anadidos]. [quitados] manda sobre los dos: un día que esté en
-/// [quitados] nunca entra. Los días anteriores a [hoy] no salen nunca.
-List<DateTime> diasLibres({
+/// Un día entra si está marcado y le queda libre la franja de [pedida]. Está
+/// marcado si su día de la semana está en [diasSemana] (1 lunes … 7 domingo) o
+/// si se añadió a mano en [anadidos]. [quitados] manda sobre los dos: un día
+/// que esté en [quitados] nunca entra. Los días anteriores a [hoy] no salen
+/// nunca.
+List<DiaLibre> diasLibres({
   required int year,
   required int month,
   required Set<int> diasSemana,
   Set<DateTime> anadidos = const {},
   Set<DateTime> quitados = const {},
   Map<DateTime, OcupacionDia> ocupacion = const {},
+  FranjaPedida pedida = FranjaPedida.ambas,
   DateTime? hoy,
 }) {
   final desde = diaClave(hoy ?? DateTime.now());
@@ -87,7 +128,7 @@ List<DateTime> diasLibres({
 
   // El día 0 del mes siguiente es el último de este.
   final ultimoDia = DateTime.utc(year, month + 1, 0).day;
-  final libres = <DateTime>[];
+  final libres = <DiaLibre>[];
 
   for (var dia = 1; dia <= ultimoDia; dia++) {
     final fecha = DateTime.utc(year, month, dia);
@@ -99,9 +140,19 @@ List<DateTime> diasLibres({
     if (!marcado) continue;
 
     final ocupado = ocupacion[fecha] ?? OcupacionDia.libre;
-    if (!ocupado.estaLibre) continue;
+    final tardeLibre = !ocupado.tarde;
+    final nocheLibre = !ocupado.noche;
 
-    libres.add(fecha);
+    final sirve = switch (pedida) {
+      FranjaPedida.ambas => tardeLibre || nocheLibre,
+      FranjaPedida.soloTardes => tardeLibre,
+      FranjaPedida.soloNoches => nocheLibre,
+    };
+    if (!sirve) continue;
+
+    libres.add(
+      DiaLibre(fecha: fecha, tarde: tardeLibre, noche: nocheLibre),
+    );
   }
   return libres;
 }
