@@ -41,6 +41,7 @@ import 'migrations/v38_verifactu.dart';
 import 'migrations/v39_rectifying_invoice_series.dart';
 import 'migrations/v40_security_lock_delay.dart';
 import 'migrations/v41_clients_soft_delete.dart';
+import 'migrations/v42_gig_franja.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._internal();
@@ -64,7 +65,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 41,
+      version: 42,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       onConfigure: (db) async {
@@ -219,6 +220,9 @@ class DatabaseHelper {
     if (version >= 41) {
       await _applyMigration(db, v41ClientsSoftDelete);
     }
+    if (version >= 42) {
+      await _applyMigration(db, v42GigFranja);
+    }
     await _ensureSoftDeleteColumns(db);
   }
 
@@ -342,6 +346,9 @@ class DatabaseHelper {
     }
     if (oldVersion < 41) {
       await _applyMigration(db, v41ClientsSoftDelete);
+    }
+    if (oldVersion < 42) {
+      await _applyMigration(db, v42GigFranja);
     }
     await _ensureSoftDeleteColumns(db);
   }

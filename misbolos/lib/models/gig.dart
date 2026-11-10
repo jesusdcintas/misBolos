@@ -1,5 +1,7 @@
 import 'package:uuid/uuid.dart';
 
+import 'franja_bolo.dart';
+
 enum GigStatus {
   confirmado,
   facturado,
@@ -90,6 +92,10 @@ class Gig {
   final double? cachet;
   final bool facturable;
   final GigStatus status;
+
+  /// Franja que ocupa. Null en los bolos creados antes de que existiera: se
+  /// interpretan como «Todo el día», pero el null se conserva tal cual.
+  final FranjaBolo? franja;
   final String? invoiceId;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -103,6 +109,7 @@ class Gig {
     this.cachet,
     this.facturable = true,
     this.status = GigStatus.confirmado,
+    this.franja,
     this.invoiceId,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -118,6 +125,7 @@ class Gig {
     double? cachet,
     bool? facturable,
     GigStatus? status,
+    FranjaBolo? franja,
     String? invoiceId,
     DateTime? updatedAt,
     DateTime? deletedAt,
@@ -130,6 +138,7 @@ class Gig {
       cachet: cachet ?? this.cachet,
       facturable: facturable ?? this.facturable,
       status: status ?? this.status,
+      franja: franja ?? this.franja,
       invoiceId: invoiceId ?? this.invoiceId,
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -148,6 +157,7 @@ class Gig {
       'cachet': cachet,
       'facturable': facturable ? 1 : 0,
       'status': status.dbValue,
+      'franja': franja?.dbValue,
       'invoice_id': invoiceId,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
@@ -171,6 +181,7 @@ class Gig {
       cachet: map['cachet'] != null ? (map['cachet'] as num).toDouble() : null,
       facturable: facturable,
       status: status,
+      franja: franjaFromDb(map['franja'] as String?),
       invoiceId: map['invoice_id'] as String?,
       createdAt: DateTime.parse(map['created_at'] as String),
       updatedAt: DateTime.parse(
