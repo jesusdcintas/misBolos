@@ -14,9 +14,7 @@ import '../../models/gig.dart';
 import '../../providers/gig_provider.dart';
 import '../../providers/client_provider.dart';
 import '../../providers/sync_provider.dart';
-import '../../widgets/common/status_badge.dart';
-import '../../widgets/common/facturable_badge.dart';
-import '../../widgets/common/franja_badge.dart';
+import '../../widgets/common/gig_card_content.dart';
 import '../../widgets/common/skeleton_loading.dart';
 
 // ─── Filter providers ───
@@ -1157,48 +1155,18 @@ class _GigListTile extends ConsumerWidget {
                 size: 22,
               ),
             ),
-            title: clientAsync.when(
-              data: (client) => Text(
-                client?.displayName ?? 'Cliente desconocido',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.w600),
+            title: GigCardContent(
+              nombre: clientAsync.when(
+                data: (client) => client?.displayName ?? 'Cliente desconocido',
+                loading: () => '...',
+                error: (_, __) => 'Error',
               ),
-              loading: () => const Text('...'),
-              error: (_, __) => const Text('Error'),
+              detalle: DateFormatter.display(gig.fecha),
+              importe: gig.cachet != null
+                  ? CurrencyFormatter.format(gig.cachet!)
+                  : null,
+              gig: gig,
             ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  DateFormatter.display(gig.fecha),
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-                if (gig.cachet != null)
-                  Text(
-                    CurrencyFormatter.format(gig.cachet!),
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primary,
-                    ),
-                  ),
-              ],
-            ),
-            trailing: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                FacturableBadge(facturable: gig.facturable),
-                const SizedBox(width: 6),
-                FranjaBadge(franja: gig.franja),
-                const SizedBox(height: 4),
-                StatusBadge(status: gig.status, facturable: gig.facturable),
-              ],
-            ),
-            isThreeLine: true,
           ),
         ),
       ),

@@ -15,9 +15,7 @@ import '../../providers/invoice_provider.dart';
 import '../../providers/sync_provider.dart';
 import '../../services/google_auth_service.dart';
 import '../../services/google_calendar_service.dart';
-import '../../widgets/common/status_badge.dart';
-import '../../widgets/common/facturable_badge.dart';
-import '../../widgets/common/franja_badge.dart';
+import '../../widgets/common/gig_card_content.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
@@ -1656,7 +1654,7 @@ class _GigListTile extends ConsumerWidget {
                     clientAsync.when(
                       data: (client) => Text(
                         client?.displayName ?? 'Cliente desconocido',
-                        maxLines: 1,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 15,
@@ -1681,18 +1679,7 @@ class _GigListTile extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        FacturableBadge(facturable: gig.facturable),
-                        const SizedBox(width: 6),
-                        FranjaBadge(franja: gig.franja),
-                        const SizedBox(width: 6),
-                        StatusBadge(
-                          status: gig.status,
-                          facturable: gig.facturable,
-                        ),
-                      ],
-                    ),
+                    GigBadges(gig: gig),
                   ],
                 ),
               ),
@@ -1970,26 +1957,23 @@ class _CalendarGigTile extends ConsumerWidget {
     final clientAsync = ref.watch(clientByIdProvider(gig.clientId));
 
     return Card(
-      child: ListTile(
+      child: InkWell(
         onTap: () => context.push('/gig/${gig.id}'),
-        title: clientAsync.when(
-          data: (c) =>
-              Text(c?.alias.isNotEmpty == true ? c!.alias : c?.nombre ?? ''),
-          loading: () => const Text('...'),
-          error: (_, __) => const Text('Error'),
-        ),
-        subtitle: gig.cachet != null
-            ? Text(CurrencyFormatter.format(gig.cachet!))
-            : null,
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            FacturableBadge(facturable: gig.facturable),
-            const SizedBox(width: 6),
-            FranjaBadge(franja: gig.franja),
-            const SizedBox(width: 4),
-            StatusBadge(status: gig.status, facturable: gig.facturable),
-          ],
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: GigCardContent(
+            nombre: clientAsync.when(
+              data: (c) =>
+                  c?.alias.isNotEmpty == true ? c!.alias : c?.nombre ?? '',
+              loading: () => '...',
+              error: (_, __) => 'Error',
+            ),
+            importe: gig.cachet != null
+                ? CurrencyFormatter.format(gig.cachet!)
+                : null,
+            gig: gig,
+          ),
         ),
       ),
     );
