@@ -23,6 +23,22 @@ class AppThemeColors extends ThemeExtension<AppThemeColors> {
   final Color info;
   final Color infoBg;
 
+  /// Acento suave: el fondo tenue que en claro era AppColors.primaryLight.
+  final Color accentSoft;
+  final Color accentSoftBg;
+
+  /// Eventos privados.
+  final Color purple;
+  final Color purpleBg;
+
+  /// Borrador.
+  final Color draft;
+  final Color draftBg;
+
+  /// Registros fiscales y rectificativas.
+  final Color fiscal;
+  final Color fiscalBg;
+
   const AppThemeColors({
     required this.scaffoldBackground,
     required this.surface,
@@ -44,6 +60,14 @@ class AppThemeColors extends ThemeExtension<AppThemeColors> {
     required this.errorBg,
     required this.info,
     required this.infoBg,
+    required this.accentSoft,
+    required this.accentSoftBg,
+    required this.purple,
+    required this.purpleBg,
+    required this.draft,
+    required this.draftBg,
+    required this.fiscal,
+    required this.fiscalBg,
   });
 
   static const light = AppThemeColors(
@@ -67,6 +91,14 @@ class AppThemeColors extends ThemeExtension<AppThemeColors> {
     errorBg: Color(0xFFFDEEEE),
     info: Color(0xFF1B2A4A),
     infoBg: Color(0xFFEEF1F7),
+    accentSoft: Color(0xFF1B2A4A),
+    accentSoftBg: Color(0xFFEEF1F7),
+    purple: Color(0xFF5B2C8D),
+    purpleBg: Color(0xFFF3E8FC),
+    draft: Color(0xFF5F5E5A),
+    draftBg: Color(0xFFF1EFE8),
+    fiscal: Color(0xFF0F5C9E),
+    fiscalBg: Color(0xFFE7F1FB),
   );
 
   static const dark = AppThemeColors(
@@ -90,6 +122,14 @@ class AppThemeColors extends ThemeExtension<AppThemeColors> {
     errorBg: Color(0xFF3F1A1A),
     info: Color(0xFF7BA2FF),
     infoBg: Color(0xFF1B2A4A),
+    accentSoft: Color(0xFF7BA2FF),
+    accentSoftBg: Color(0xFF233049),
+    purple: Color(0xFFC9A6F0),
+    purpleBg: Color(0xFF2D1F45),
+    draft: Color(0xFFA8AEB8),
+    draftBg: Color(0xFF262A33),
+    fiscal: Color(0xFF7BB6FF),
+    fiscalBg: Color(0xFF132B45),
   );
 
   @override
@@ -114,6 +154,14 @@ class AppThemeColors extends ThemeExtension<AppThemeColors> {
     Color? errorBg,
     Color? info,
     Color? infoBg,
+    Color? accentSoft,
+    Color? accentSoftBg,
+    Color? purple,
+    Color? purpleBg,
+    Color? draft,
+    Color? draftBg,
+    Color? fiscal,
+    Color? fiscalBg,
   }) {
     return AppThemeColors(
       scaffoldBackground: scaffoldBackground ?? this.scaffoldBackground,
@@ -136,6 +184,14 @@ class AppThemeColors extends ThemeExtension<AppThemeColors> {
       errorBg: errorBg ?? this.errorBg,
       info: info ?? this.info,
       infoBg: infoBg ?? this.infoBg,
+      accentSoft: accentSoft ?? this.accentSoft,
+      accentSoftBg: accentSoftBg ?? this.accentSoftBg,
+      purple: purple ?? this.purple,
+      purpleBg: purpleBg ?? this.purpleBg,
+      draft: draft ?? this.draft,
+      draftBg: draftBg ?? this.draftBg,
+      fiscal: fiscal ?? this.fiscal,
+      fiscalBg: fiscalBg ?? this.fiscalBg,
     );
   }
 
@@ -163,6 +219,14 @@ class AppThemeColors extends ThemeExtension<AppThemeColors> {
       errorBg: Color.lerp(errorBg, other.errorBg, t)!,
       info: Color.lerp(info, other.info, t)!,
       infoBg: Color.lerp(infoBg, other.infoBg, t)!,
+      accentSoft: Color.lerp(accentSoft, other.accentSoft, t)!,
+      accentSoftBg: Color.lerp(accentSoftBg, other.accentSoftBg, t)!,
+      purple: Color.lerp(purple, other.purple, t)!,
+      purpleBg: Color.lerp(purpleBg, other.purpleBg, t)!,
+      draft: Color.lerp(draft, other.draft, t)!,
+      draftBg: Color.lerp(draftBg, other.draftBg, t)!,
+      fiscal: Color.lerp(fiscal, other.fiscal, t)!,
+      fiscalBg: Color.lerp(fiscalBg, other.fiscalBg, t)!,
     );
   }
 }

@@ -3,11 +3,11 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import '../../core/constants/app_colors.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../providers/client_provider.dart';
 import '../../providers/gig_provider.dart';
 import '../../services/import_service.dart';
+import '../../core/theme/app_theme_colors.dart';
 
 class ImportScreen extends ConsumerStatefulWidget {
   const ImportScreen({super.key});
@@ -116,7 +116,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
           const SizedBox(height: 12),
           Row(
             children: [
-              Icon(Icons.check_circle, color: AppColors.success, size: 18),
+              Icon(Icons.check_circle, color: context.colors.success, size: 18),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -133,22 +133,22 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: AppColors.errorBg,
+              color: context.colors.errorBg,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.error_outline,
-                  color: AppColors.error,
+                  color: context.colors.error,
                   size: 18,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     _fileError!,
-                    style: const TextStyle(
-                      color: AppColors.error,
+                    style: TextStyle(
+                      color: context.colors.error,
                       fontSize: 13,
                     ),
                   ),
@@ -178,7 +178,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
           const SizedBox(height: 16),
           Text(
             '${_rows.length - 1} filas detectadas · ${_columns.length} columnas',
-            style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+            style: TextStyle(color: context.colors.textSecondary, fontSize: 13),
           ),
           const SizedBox(height: 8),
           _buildPreviewTable(),
@@ -235,9 +235,9 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text(
+        Text(
           'Asigna cada columna a su tipo de dato:',
-          style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+          style: TextStyle(fontSize: 13, color: context.colors.textSecondary),
         ),
         const SizedBox(height: 12),
         ..._columns.map(
@@ -262,7 +262,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                           col.sampleValues.first,
                           style: TextStyle(
                             fontSize: 11,
-                            color: AppColors.textSecondary,
+                            color: context.colors.textSecondary,
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -270,10 +270,10 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                const Icon(
+                Icon(
                   Icons.arrow_forward,
                   size: 16,
-                  color: AppColors.textMuted,
+                  color: context.colors.textMuted,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -322,12 +322,12 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppColors.warningBg,
+              color: context.colors.warningBg,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
               children: [
-                Icon(Icons.warning_amber, color: AppColors.warning, size: 18),
+                Icon(Icons.warning_amber, color: context.colors.warning, size: 18),
                 const SizedBox(width: 8),
                 const Expanded(
                   child: Text(
@@ -398,14 +398,14 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: AppColors.successBg,
+            color: context.colors.successBg,
             borderRadius: BorderRadius.circular(8),
           ),
           child: Row(
             children: [
               Icon(
                 Icons.cloud_done_outlined,
-                color: AppColors.success,
+                color: context.colors.success,
                 size: 18,
               ),
               const SizedBox(width: 8),
@@ -439,9 +439,9 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: context.colors.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.cardBorder),
+        border: Border.all(color: context.colors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -476,7 +476,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
         children: [
           Text(
             label,
-            style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+            style: TextStyle(color: context.colors.textSecondary, fontSize: 14),
           ),
           Text(
             value,
@@ -509,15 +509,15 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
         return Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: AppColors.errorBg,
+            color: context.colors.errorBg,
             borderRadius: BorderRadius.circular(14),
           ),
           child: Row(
             children: [
-              Icon(Icons.error, color: AppColors.error),
+              Icon(Icons.error, color: context.colors.error),
               const SizedBox(width: 12),
               Expanded(
-                child: Text(r.error!, style: TextStyle(color: AppColors.error)),
+                child: Text(r.error!, style: TextStyle(color: context.colors.error)),
               ),
             ],
           ),
@@ -527,33 +527,33 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
       return Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: AppColors.successBg,
+          color: context.colors.successBg,
           borderRadius: BorderRadius.circular(14),
         ),
         child: Column(
           children: [
-            Icon(Icons.check_circle, color: AppColors.success, size: 48),
+            Icon(Icons.check_circle, color: context.colors.success, size: 48),
             const SizedBox(height: 12),
             Text(
               '${r.imported} bolos importados correctamente',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 16,
-                color: AppColors.success,
+                color: context.colors.success,
               ),
             ),
             if (r.skipped > 0) ...[
               const SizedBox(height: 4),
               Text(
                 '${r.skipped} ya existían',
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                style: TextStyle(color: context.colors.textSecondary, fontSize: 13),
               ),
             ],
             if (r.clientsCreated > 0) ...[
               const SizedBox(height: 4),
               Text(
                 '${r.clientsCreated} clientes nuevos creados',
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                style: TextStyle(color: context.colors.textSecondary, fontSize: 13),
               ),
             ],
           ],
@@ -596,7 +596,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
             child: ElevatedButton(
               onPressed: canContinue ? details.onStepContinue : null,
               style: isLastStep
-                  ? ElevatedButton.styleFrom(backgroundColor: AppColors.success)
+                  ? ElevatedButton.styleFrom(backgroundColor: context.colors.success)
                   : null,
               child: Text(isLastStep ? 'Importar' : 'Continuar'),
             ),
