@@ -549,7 +549,11 @@ class _TooltipCard extends ConsumerWidget {
           border: Border.all(color: context.colors.border, width: 0.5),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
+              color: Colors.black.withValues(
+                alpha: Theme.of(context).brightness == Brightness.dark
+                    ? 0.0
+                    : 0.06,
+              ),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -632,13 +636,13 @@ BarTouchTooltipData _chartCurrencyTooltipData(
     tooltipRoundedRadius: 8,
     fitInsideHorizontally: true,
     fitInsideVertically: true,
-    getTooltipColor: (_) => context.colors.accentSoft,
+    getTooltipColor: (_) => Theme.of(context).colorScheme.primary,
     getTooltipItem: (group, groupIndex, rod, rodIndex) {
       final value = valueAt(groupIndex);
       return BarTooltipItem(
         CurrencyFormatter.format(value),
-        const TextStyle(
-          color: Colors.white,
+        TextStyle(
+          color: Theme.of(context).colorScheme.onPrimary,
           fontWeight: FontWeight.w800,
           fontSize: 14,
         ),
