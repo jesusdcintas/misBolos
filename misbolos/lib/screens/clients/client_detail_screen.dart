@@ -10,9 +10,7 @@ import '../../models/gig.dart';
 import '../../providers/client_provider.dart';
 import '../../providers/gig_provider.dart';
 import '../../services/whatsapp_service.dart';
-import '../../widgets/common/status_badge.dart';
-import '../../widgets/common/facturable_badge.dart';
-import '../../widgets/common/franja_badge.dart';
+import '../../widgets/common/gig_card_content.dart';
 
 class ClientDetailScreen extends ConsumerWidget {
   final String clientId;
@@ -205,24 +203,21 @@ class ClientDetailScreen extends ConsumerWidget {
                     children: gigs
                         .map(
                           (g) => Card(
-                            child: ListTile(
+                            child: InkWell(
                               onTap: () => context.push('/gig/${g.id}'),
-                              title: Text(DateFormatter.display(g.fecha)),
-                              subtitle: g.cachet != null
-                                  ? Text(CurrencyFormatter.format(g.cachet!))
-                                  : null,
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  FacturableBadge(facturable: g.facturable),
-                                  const SizedBox(width: 6),
-                                  FranjaBadge(franja: g.franja),
-                                  const SizedBox(width: 4),
-                                  StatusBadge(
-                                    status: g.status,
-                                    facturable: g.facturable,
-                                  ),
-                                ],
+                              borderRadius: BorderRadius.circular(14),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
+                                ),
+                                child: GigCardContent(
+                                  nombre: DateFormatter.display(g.fecha),
+                                  importe: g.cachet != null
+                                      ? CurrencyFormatter.format(g.cachet!)
+                                      : null,
+                                  gig: g,
+                                ),
                               ),
                             ),
                           ),

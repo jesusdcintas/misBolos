@@ -14,8 +14,7 @@ import '../../providers/stats_provider.dart';
 import '../../widgets/common/dismissible_alert_banner.dart';
 import '../../widgets/common/dj_refresh_indicator.dart';
 import '../../widgets/common/expandable_fab.dart';
-import '../../widgets/common/facturable_badge.dart';
-import '../../widgets/common/franja_badge.dart';
+import '../../widgets/common/gig_card_content.dart';
 import '../../widgets/common/skeleton_loading.dart';
 import '../../widgets/dashboard/income_period_card.dart';
 import '../../widgets/dashboard/pending_invoices_card.dart';
@@ -350,49 +349,32 @@ class _UpcomingGigTile extends ConsumerWidget {
             size: 22,
           ),
         ),
-        title: clientAsync.when(
-          data: (client) => Text(
-            client?.displayName ?? 'Cliente desconocido',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+        title: GigCardContent(
+          nombre: clientAsync.when(
+            data: (client) => client?.displayName ?? 'Cliente desconocido',
+            loading: () => '...',
+            error: (_, __) => 'Error',
           ),
-          loading: () => const Text('...'),
-          error: (_, __) => const Text('Error'),
-        ),
-        subtitle: Row(
-          children: [
-            Flexible(
-              child: Text(
-                '${DateFormatter.display(gig.fecha)}${gig.cachet != null ? ' · ${CurrencyFormatter.format(gig.cachet!)}' : ''}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+          detalle: DateFormatter.display(gig.fecha),
+          importe: gig.cachet != null
+              ? CurrencyFormatter.format(gig.cachet!)
+              : null,
+          gig: gig,
+          extra: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: badgeBg,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              badgeText,
+              style: TextStyle(
+                fontSize: 11,
+                color: badgeTextColor,
+                fontWeight: FontWeight.w500,
               ),
             ),
-          ],
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: badgeBg,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                badgeText,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: badgeTextColor,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-            const SizedBox(width: 6),
-            FacturableBadge(facturable: gig.facturable),
-            const SizedBox(width: 6),
-            FranjaBadge(franja: gig.franja),
-          ],
+          ),
         ),
       ),
     );
