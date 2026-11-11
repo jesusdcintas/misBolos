@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
-import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../providers/stats_provider.dart';
@@ -14,6 +13,7 @@ import 'package:csv/csv.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'dart:io';
+import '../../core/theme/app_theme_colors.dart';
 
 final _selectedYearProvider = StateProvider<int>((ref) => DateTime.now().year);
 
@@ -40,9 +40,9 @@ class StatsScreen extends ConsumerWidget {
               Tab(text: AppStrings.enB),
               Tab(text: AppStrings.global),
             ],
-            indicatorColor: AppColors.primary,
-            labelColor: AppColors.primary,
-            unselectedLabelColor: AppColors.textSecondary,
+            indicatorColor: context.colors.accentSoft,
+            labelColor: context.colors.accentSoft,
+            unselectedLabelColor: context.colors.textSecondary,
           ),
         ),
         body: const TabBarView(
@@ -87,7 +87,7 @@ class _OfficialTab extends ConsumerWidget {
                 _TotalSummaryBand(
                   title: 'TOTAL OFICIAL',
                   amount: total,
-                  amountColor: AppColors.accentGreen,
+                  amountColor: context.colors.success,
                 ),
                 const SizedBox(height: 16),
                 if (mode == ChartMode.mensual)
@@ -95,7 +95,7 @@ class _OfficialTab extends ConsumerWidget {
                     ref,
                     months,
                     year,
-                    AppColors.accentGreen,
+                    context.colors.success,
                     (m) => m.oficial,
                   )
                 else
@@ -168,7 +168,7 @@ class _EnBTab extends ConsumerWidget {
                 _TotalSummaryBand(
                   title: 'TOTAL PRIVADO',
                   amount: total,
-                  amountColor: AppColors.accentPurple,
+                  amountColor: context.colors.purple,
                 ),
                 const SizedBox(height: 16),
                 if (mode == ChartMode.mensual)
@@ -176,7 +176,7 @@ class _EnBTab extends ConsumerWidget {
                     ref,
                     months,
                     year,
-                    AppColors.accentPurple,
+                    context.colors.purple,
                     (m) => m.enB,
                   )
                 else
@@ -248,7 +248,7 @@ class _GlobalTab extends ConsumerWidget {
                 _TotalSummaryBand(
                   title: 'TOTAL GLOBAL',
                   amount: totalOficial + totalEnB,
-                  amountColor: AppColors.primary,
+                  amountColor: context.colors.accentSoft,
                 ),
                 const SizedBox(height: 16),
 
@@ -263,7 +263,7 @@ class _GlobalTab extends ConsumerWidget {
                     child: BarChart(
                       BarChartData(
                         barTouchData: BarTouchData(
-                          touchTooltipData: _chartCurrencyTooltipData(
+                          touchTooltipData: _chartCurrencyTooltipData(context, 
                             (groupIndex) => months[groupIndex].total,
                           ),
                           touchCallback: (event, response) {
@@ -288,9 +288,9 @@ class _GlobalTab extends ConsumerWidget {
                               toY: m.total * animValue,
                               rodStackItems: [
                                 BarChartRodStackItem(
-                                    0, m.oficial * animValue, AppColors.accentGreen),
+                                    0, m.oficial * animValue, context.colors.success),
                                 BarChartRodStackItem(m.oficial * animValue, m.total * animValue,
-                                    AppColors.accentPurple),
+                                    context.colors.purple),
                               ],
                               width: 16,
                               borderRadius: const BorderRadius.vertical(
@@ -385,7 +385,7 @@ class _ChartModeToggle extends ConsumerWidget {
     final mode = ref.watch(_chartModeProvider);
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.primaryLight,
+        color: context.colors.accentSoftBg,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
@@ -420,7 +420,7 @@ class _ToggleButton extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? AppColors.primary : Colors.transparent,
+          color: selected ? context.colors.accentSoft : Colors.transparent,
           borderRadius: BorderRadius.circular(10),
         ),
         child: Text(
@@ -428,7 +428,7 @@ class _ToggleButton extends StatelessWidget {
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: selected ? Colors.white : AppColors.textSecondary,
+            color: selected ? Colors.white : context.colors.textSecondary,
           ),
         ),
       ),
@@ -456,7 +456,7 @@ class _TotalSummaryBand extends StatelessWidget {
         : const Color(0xFFE3E6EB);
     final border = isDark
         ? colorScheme.outlineVariant.withValues(alpha: 0.45)
-        : AppColors.cardBorder.withValues(alpha: 0.55);
+        : context.colors.border.withValues(alpha: 0.55);
 
     return Container(
       width: double.infinity,
@@ -542,9 +542,9 @@ class _TooltipCard extends ConsumerWidget {
         margin: const EdgeInsets.only(top: 12),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: AppColors.surface,
+          color: context.colors.surface,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.cardBorder, width: 0.5),
+          border: Border.all(color: context.colors.border, width: 0.5),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.06),
@@ -567,31 +567,31 @@ class _TooltipCard extends ConsumerWidget {
                 ),
                 GestureDetector(
                   onTap: () => ref.read(_tooltipDataProvider.notifier).state = null,
-                  child: const Icon(Icons.close, size: 18, color: AppColors.textSecondary),
+                  child: Icon(Icons.close, size: 18, color: context.colors.textSecondary),
                 ),
               ],
             ),
             const SizedBox(height: 8),
             if (data.hasGlobalBreakdown) ...[
-              _tooltipRow(
+              _tooltipRow(context, 
                 'Oficial',
                 CurrencyFormatter.format(data.totalOficial ?? 0),
-                AppColors.accentGreen,
+                context.colors.success,
               ),
-              _tooltipRow(
+              _tooltipRow(context, 
                 'Privado',
                 CurrencyFormatter.format(data.totalPrivado ?? 0),
-                AppColors.accentPurple,
+                context.colors.purple,
               ),
-              _tooltipRow(
+              _tooltipRow(context, 
                 'Total tramo',
                 CurrencyFormatter.format(data.totalCobrado),
-                AppColors.primary,
+                context.colors.accentSoft,
               ),
             ] else ...[
-              _tooltipRow('Cobrado', CurrencyFormatter.format(data.totalCobrado), AppColors.success),
-              _tooltipRow('IVA', CurrencyFormatter.format(data.totalIva), AppColors.warning),
-              _tooltipRow('Facturas cobradas', '${data.numFacturas}', AppColors.primary),
+              _tooltipRow(context, 'Cobrado', CurrencyFormatter.format(data.totalCobrado), context.colors.success),
+              _tooltipRow(context, 'IVA', CurrencyFormatter.format(data.totalIva), context.colors.warning),
+              _tooltipRow(context, 'Facturas cobradas', '${data.numFacturas}', context.colors.accentSoft),
             ],
           ],
         ),
@@ -599,13 +599,18 @@ class _TooltipCard extends ConsumerWidget {
     );
   }
 
-  Widget _tooltipRow(String label, String value, Color color) {
+  Widget _tooltipRow(
+    BuildContext context,
+    String label,
+    String value,
+    Color color,
+  ) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+          Text(label, style: TextStyle(fontSize: 13, color: context.colors.textSecondary)),
           Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: color)),
         ],
       ),
@@ -616,6 +621,7 @@ class _TooltipCard extends ConsumerWidget {
 // ==================== CHART BUILDERS ====================
 
 BarTouchTooltipData _chartCurrencyTooltipData(
+  BuildContext context,
   double Function(int groupIndex) valueAt,
 ) {
   return BarTouchTooltipData(
@@ -624,7 +630,7 @@ BarTouchTooltipData _chartCurrencyTooltipData(
     tooltipRoundedRadius: 8,
     fitInsideHorizontally: true,
     fitInsideVertically: true,
-    getTooltipColor: (_) => AppColors.primary,
+    getTooltipColor: (_) => context.colors.accentSoft,
     getTooltipItem: (group, groupIndex, rod, rodIndex) {
       final value = valueAt(groupIndex);
       return BarTooltipItem(
@@ -655,7 +661,7 @@ Widget _buildMonthlyChart(
     child: BarChart(
       BarChartData(
         barTouchData: BarTouchData(
-          touchTooltipData: _chartCurrencyTooltipData(
+          touchTooltipData: _chartCurrencyTooltipData(context, 
             (groupIndex) => getValue(months[groupIndex]),
           ),
           touchCallback: (event, response) async {
@@ -731,7 +737,7 @@ Widget _buildQuarterlyChart(
     child: BarChart(
       BarChartData(
         barTouchData: BarTouchData(
-          touchTooltipData: _chartCurrencyTooltipData(
+          touchTooltipData: _chartCurrencyTooltipData(context, 
             (groupIndex) => getValue(quarters[groupIndex]),
           ),
           touchCallback: (event, response) async {
@@ -748,11 +754,11 @@ Widget _buildQuarterlyChart(
         barGroups: quarters.map((q) {
           Color color;
           if (q.quarter == currentQuarter) {
-            color = AppColors.primary;
+            color = context.colors.accentSoft;
           } else if (q.quarter < currentQuarter || now.year > year) {
-            color = AppColors.accentGreen;
+            color = context.colors.success;
           } else {
-            color = AppColors.cardBorder;
+            color = context.colors.border;
           }
 
           return BarChartGroupData(x: q.quarter, barRods: [
@@ -810,7 +816,7 @@ Widget _buildQuarterlyStackedChart(
     child: BarChart(
       BarChartData(
         barTouchData: BarTouchData(
-          touchTooltipData: _chartCurrencyTooltipData(
+          touchTooltipData: _chartCurrencyTooltipData(context, 
             (groupIndex) => quarters[groupIndex].total,
           ),
           touchCallback: (event, response) {
@@ -833,8 +839,8 @@ Widget _buildQuarterlyStackedChart(
             BarChartRodData(
               toY: q.total * animValue,
               rodStackItems: [
-                BarChartRodStackItem(0, q.oficial * animValue, AppColors.accentGreen),
-                BarChartRodStackItem(q.oficial * animValue, q.total * animValue, AppColors.accentPurple),
+                BarChartRodStackItem(0, q.oficial * animValue, context.colors.success),
+                BarChartRodStackItem(q.oficial * animValue, q.total * animValue, context.colors.purple),
               ],
               width: 40,
               borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
@@ -890,9 +896,9 @@ class _IvaQuartersSection extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: context.colors.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.cardBorder, width: 0.5),
+        border: Border.all(color: context.colors.border, width: 0.5),
       ),
       child: Column(
         children: [
@@ -919,10 +925,10 @@ class _IvaQuartersSection extends StatelessWidget {
                 const Text('TOTAL ANUAL IVA',
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                 Text(CurrencyFormatter.format(totalIva),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 15,
-                      color: AppColors.warning,
+                      color: context.colors.warning,
                     )),
               ],
             ),
@@ -953,30 +959,30 @@ class _IvaQuarterTileState extends State<_IvaQuarterTile> {
     Widget statusBadge;
     switch (vat.status) {
       case 'pendiente_declarar':
-        statusBadge = _statusPill('Pendiente', AppColors.warningBg, AppColors.warning);
+        statusBadge = _statusPill('Pendiente', context.colors.warningBg, context.colors.warning);
         break;
       case 'en_curso':
-        statusBadge = _statusPill('En curso', AppColors.primaryLight, AppColors.primary);
+        statusBadge = _statusPill('En curso', context.colors.accentSoftBg, context.colors.accentSoft);
         break;
       case 'proximo':
-        statusBadge = _statusPill('Próximo', const Color(0xFFEEF1F7), AppColors.textSecondary);
+        statusBadge = _statusPill('Próximo', const Color(0xFFEEF1F7), context.colors.textSecondary);
         break;
       default:
         statusBadge = const SizedBox.shrink();
     }
 
     // Days color
-    Color daysColor = AppColors.textSecondary;
+    Color daysColor = context.colors.textSecondary;
     String daysLabel;
     if (vat.daysRemaining < 0) {
       daysLabel = 'vencido';
-      daysColor = AppColors.error;
+      daysColor = context.colors.error;
     } else if (vat.daysRemaining < 7) {
       daysLabel = '${vat.daysRemaining}d';
-      daysColor = AppColors.error;
+      daysColor = context.colors.error;
     } else if (vat.daysRemaining < 30) {
       daysLabel = '${vat.daysRemaining}d';
-      daysColor = AppColors.warning;
+      daysColor = context.colors.warning;
     } else {
       daysLabel = '${vat.daysRemaining}d';
     }
@@ -995,14 +1001,14 @@ class _IvaQuarterTileState extends State<_IvaQuarterTile> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
-                        color: AppColors.primaryLight,
+                        color: context.colors.accentSoftBg,
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text('T${vat.quarter}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 12,
-                            color: AppColors.primary,
+                            color: context.colors.accentSoft,
                           )),
                     ),
                     const SizedBox(width: 8),
@@ -1019,7 +1025,7 @@ class _IvaQuarterTileState extends State<_IvaQuarterTile> {
                       Icon(
                         _expanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
                         size: 18,
-                        color: AppColors.textSecondary,
+                        color: context.colors.textSecondary,
                       ),
                     ],
                   ],
@@ -1059,7 +1065,7 @@ class _IvaQuarterTileState extends State<_IvaQuarterTile> {
                       ),
                       const SizedBox(width: 8),
                       Text(DateFormat('dd/MM', 'es').format(inv.fecha),
-                          style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                          style: TextStyle(fontSize: 11, color: context.colors.textSecondary)),
                       const SizedBox(width: 12),
                       SizedBox(
                         width: 70,
@@ -1072,9 +1078,9 @@ class _IvaQuarterTileState extends State<_IvaQuarterTile> {
                         width: 60,
                         child: Text(CurrencyFormatter.format(inv.iva),
                             textAlign: TextAlign.right,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
-                              color: AppColors.warning,
+                              color: context.colors.warning,
                               fontWeight: FontWeight.w500,
                             )),
                       ),
@@ -1088,10 +1094,10 @@ class _IvaQuarterTileState extends State<_IvaQuarterTile> {
                     const Text('Total: ',
                         style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                     Text(CurrencyFormatter.format(vat.ivaTotal),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
-                          color: AppColors.warning,
+                          color: context.colors.warning,
                         )),
                   ],
                 ),
