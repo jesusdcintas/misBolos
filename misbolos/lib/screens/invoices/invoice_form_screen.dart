@@ -17,6 +17,7 @@ import '../../providers/invoice_provider.dart';
 import '../../providers/client_provider.dart';
 import '../../providers/gig_provider.dart';
 import '../../providers/settings_provider.dart';
+import '../../core/theme/app_theme_colors.dart';
 
 class InvoiceFormScreen extends ConsumerStatefulWidget {
   final String? invoiceId;
@@ -259,12 +260,14 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                     child: ElevatedButton.icon(
                       onPressed: _isSaving ? null : _save,
                       icon: _isSaving
-                          ? const SizedBox(
+                          ? SizedBox(
                               width: 20,
                               height: 20,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                color: Colors.white,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onPrimary,
                               ),
                             )
                           : const Icon(Icons.save),
@@ -294,7 +297,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
       style: TextStyle(
         fontSize: 16,
         fontWeight: FontWeight.bold,
-        color: AppColors.primary,
+        color: context.colors.accentSoft,
       ),
     );
   }
@@ -302,7 +305,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
   Widget _buildFechaSelector() {
     return Card(
       child: ListTile(
-        leading: const Icon(Icons.calendar_today, color: AppColors.primary),
+        leading: Icon(Icons.calendar_today, color: context.colors.accentSoft),
         title: const Text('Fecha de factura'),
         subtitle: Text(
           '${_fecha.day.toString().padLeft(2, '0')}/${_fecha.month.toString().padLeft(2, '0')}/${_fecha.year}',
@@ -336,7 +339,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
               'EMISOR',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
-                color: AppColors.primary,
+                color: context.colors.accentSoft,
                 fontSize: 12,
               ),
             ),
@@ -384,7 +387,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
               'FACTURAR A',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
-                color: AppColors.primary,
+                color: context.colors.accentSoft,
                 fontSize: 12,
               ),
             ),
@@ -615,7 +618,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                 ),
                 Switch(
                   value: _applyIrpf,
-                  activeTrackColor: AppColors.primary,
+                  activeTrackColor: context.colors.accentSoft,
                   onChanged: (value) {
                     setState(() {
                       _applyIrpf = value;
@@ -634,9 +637,9 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
             ),
             if (_applyIrpf) ...[
               const SizedBox(height: 12),
-              const Text(
+              Text(
                 'Selecciona el porcentaje de retención:',
-                style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                style: TextStyle(fontSize: 13, color: context.colors.textSecondary),
               ),
               const SizedBox(height: 8),
               Wrap(
@@ -649,7 +652,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                   return ChoiceChip(
                     label: Text(RetencionIrpf.etiqueta(rate)),
                     selected: isSelected,
-                    selectedColor: AppColors.primary.withValues(alpha: 0.2),
+                    selectedColor: context.colors.accentSoft.withValues(alpha: 0.2),
                     onSelected: (selected) {
                       if (selected) {
                         setState(() => _irpfRate = rate);
@@ -667,7 +670,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
 
   Widget _buildTotalsCard() {
     return Card(
-      color: AppColors.primary.withValues(alpha: 0.05),
+      color: context.colors.accentSoft.withValues(alpha: 0.05),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -691,20 +694,20 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
+                Text(
                   'TOTAL',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: AppColors.primary,
+                    color: context.colors.accentSoft,
                   ),
                 ),
                 Text(
                   CurrencyFormatter.format(_total),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
-                    color: AppColors.primary,
+                    color: context.colors.accentSoft,
                   ),
                 ),
               ],
