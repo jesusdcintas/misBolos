@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/theme/app_theme_colors.dart';
 import '../../models/client.dart';
 import '../../providers/client_provider.dart';
 
@@ -23,8 +24,11 @@ Future<Client?> showClientPicker(
   return showDialog<Client>(
     context: context,
     barrierDismissible: true,
-    builder: (_) => Dialog(
+    builder: (dialogContext) => Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      // Sin esto asomaba el fondo claro del Dialog por los bordes.
+      backgroundColor: dialogContext.colors.modalBackground,
+      clipBehavior: Clip.antiAlias,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 820, maxHeight: 720),
         child: ClientPickerScreen(
@@ -113,9 +117,12 @@ class _ClientPickerScreenState extends ConsumerState<ClientPickerScreen> {
   }
 
   Widget _buildHeader(BuildContext context) {
-    final title = const Text(
+    final title = Text(
       'Seleccionar cliente',
-      style: TextStyle(fontWeight: FontWeight.w700),
+      style: TextStyle(
+        fontWeight: FontWeight.w700,
+        color: context.colors.textPrimary,
+      ),
     );
 
     if (!widget.embeddedDialog) {
@@ -158,6 +165,8 @@ class _ClientPickerScreenState extends ConsumerState<ClientPickerScreen> {
   }
 
   Widget _clientTile(Client client, {required bool selected}) {
+    final colors = context.colors;
+    final primary = Theme.of(context).colorScheme.primary;
     final displayName = client.alias.isNotEmpty ? client.alias : client.nombre;
     final subtitleParts = <String>[
       if (client.alias.isNotEmpty) client.nombre,
@@ -169,7 +178,7 @@ class _ClientPickerScreenState extends ConsumerState<ClientPickerScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: Material(
         color: selected
-            ? AppColors.primary.withValues(alpha: 0.08)
+            ? primary.withValues(alpha: 0.12)
             : Colors.transparent,
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
@@ -181,8 +190,8 @@ class _ClientPickerScreenState extends ConsumerState<ClientPickerScreen> {
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: selected
-                    ? AppColors.primary.withValues(alpha: 0.45)
-                    : AppColors.divider,
+                    ? primary.withValues(alpha: 0.65)
+                    : colors.border,
               ),
             ),
             child: Row(
@@ -190,11 +199,14 @@ class _ClientPickerScreenState extends ConsumerState<ClientPickerScreen> {
                 CircleAvatar(
                   radius: 18,
                   backgroundColor: selected
-                      ? AppColors.primary.withValues(alpha: 0.18)
-                      : AppColors.background,
+                      ? primary.withValues(alpha: 0.22)
+                      : colors.surfaceContainer,
                   child: Text(
                     displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
-                    style: const TextStyle(fontWeight: FontWeight.w700),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: selected ? primary : colors.textPrimary,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -206,9 +218,10 @@ class _ClientPickerScreenState extends ConsumerState<ClientPickerScreen> {
                         displayName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.w600,
                           fontSize: 15,
+                          color: colors.textPrimary,
                         ),
                       ),
                       if (subtitleParts.isNotEmpty) ...[
@@ -217,8 +230,8 @@ class _ClientPickerScreenState extends ConsumerState<ClientPickerScreen> {
                           subtitleParts.join(' · '),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: AppColors.textSecondary,
+                          style: TextStyle(
+                            color: colors.textSecondary,
                             fontSize: 12.5,
                           ),
                         ),
@@ -226,8 +239,7 @@ class _ClientPickerScreenState extends ConsumerState<ClientPickerScreen> {
                     ],
                   ),
                 ),
-                if (selected)
-                  const Icon(Icons.check_circle, color: AppColors.primary),
+                if (selected) Icon(Icons.check_circle, color: primary),
               ],
             ),
           ),
@@ -371,7 +383,7 @@ class _ClientPickerScreenState extends ConsumerState<ClientPickerScreen> {
     }
 
     return Material(
-      color: AppColors.surface,
+      color: context.colors.modalBackground,
       child: Column(
         children: [
           _buildHeader(context),
