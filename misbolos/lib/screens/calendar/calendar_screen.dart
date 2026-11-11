@@ -60,14 +60,14 @@ void _clearAllListFilters(WidgetRef ref) {
 class CalendarScreen extends ConsumerWidget {
   const CalendarScreen({super.key});
 
-  Color _markerColor(Gig gig) {
-    if (gig.status == GigStatus.cancelado) return AppColors.error;
+  Color _markerColor(BuildContext context, Gig gig) {
+    if (gig.status == GigStatus.cancelado) return context.colors.error;
     if (gig.status == GigStatus.cobrado || gig.status == GigStatus.cobradoB) {
-      return AppColors.success;
+      return context.colors.success;
     }
-    if (gig.status == GigStatus.facturado) return AppColors.warning;
-    if (!gig.facturable) return AppColors.purple;
-    return AppColors.primary;
+    if (gig.status == GigStatus.facturado) return context.colors.warning;
+    if (!gig.facturable) return context.colors.purple;
+    return context.colors.accentSoft;
   }
 
   Future<void> _syncToGoogleCalendar(
@@ -205,16 +205,16 @@ class CalendarScreen extends ConsumerWidget {
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: AppColors.warningBg,
+                    color: context.colors.warningBg,
                     borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: AppColors.warning),
+                    border: Border.all(color: context.colors.warning),
                   ),
                   child: Text(
                     '$pendingCount',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
-                      color: AppColors.warning,
+                      color: context.colors.warning,
                     ),
                   ),
                 ),
@@ -268,7 +268,7 @@ class CalendarScreen extends ConsumerWidget {
               itemBuilder: (context) {
                 final sortOption = ref.read(_gigSortProvider);
                 return [
-                  ..._sortMenuItems(sortOption),
+                  ..._sortMenuItems(context, sortOption),
                   const PopupMenuDivider(),
                   const PopupMenuItem(
                     value: 'repair',
@@ -361,11 +361,11 @@ class CalendarScreen extends ConsumerWidget {
               startingDayOfWeek: StartingDayOfWeek.monday,
               calendarStyle: CalendarStyle(
                 todayDecoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.3),
+                  color: context.colors.accentSoft.withValues(alpha: 0.3),
                   shape: BoxShape.circle,
                 ),
-                selectedDecoration: const BoxDecoration(
-                  color: AppColors.primary,
+                selectedDecoration: BoxDecoration(
+                  color: context.colors.accentSoft,
                   shape: BoxShape.circle,
                 ),
                 markersMaxCount: 3,
@@ -381,7 +381,7 @@ class CalendarScreen extends ConsumerWidget {
                         height: 7,
                         margin: const EdgeInsets.symmetric(horizontal: 1),
                         decoration: BoxDecoration(
-                          color: _markerColor(gig),
+                          color: _markerColor(context, gig),
                           shape: BoxShape.circle,
                         ),
                       );
@@ -409,16 +409,16 @@ class CalendarScreen extends ConsumerWidget {
                 spacing: 12,
                 runSpacing: 4,
                 children: [
-                  _LegendItem(color: AppColors.primary, label: 'Confirmado'),
+                  _LegendItem(color: context.colors.accentSoft, label: 'Confirmado'),
                   _LegendItem(
-                    color: AppColors.accentPurple,
+                    color: context.colors.purple,
                     label: 'Privado confirmado/realizado',
                   ),
                   _LegendItem(
-                    color: AppColors.accentOrange,
+                    color: context.colors.warning,
                     label: 'Facturado',
                   ),
-                  _LegendItem(color: AppColors.accentGreen, label: 'Cobrado'),
+                  _LegendItem(color: context.colors.success, label: 'Cobrado'),
                   _LegendItem(color: AppColors.accentRed, label: 'Cancelado'),
                 ],
               ),
@@ -429,10 +429,10 @@ class CalendarScreen extends ConsumerWidget {
             // Bolos del día seleccionado
             Expanded(
               child: selectedGigs.isEmpty
-                  ? const Center(
+                  ? Center(
                       child: Text(
                         'Selecciona un día para ver los bolos',
-                        style: TextStyle(color: AppColors.textSecondary),
+                        style: TextStyle(color: context.colors.textSecondary),
                       ),
                     )
                   : ListView.builder(
@@ -571,44 +571,44 @@ class CalendarScreen extends ConsumerWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               color: isDark
                   ? context.colors.surfaceContainer
-                  : AppColors.primaryLight,
+                  : context.colors.accentSoftBg,
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.music_note,
-                    color: AppColors.primary,
+                    color: context.colors.accentSoft,
                     size: 20,
                   ),
                   const SizedBox(width: 6),
                   Text(
                     '$filteredCount bolos',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
-                      color: AppColors.primary,
+                      color: context.colors.accentSoft,
                     ),
                   ),
                   const SizedBox(width: 8),
-                  const Text(
+                  Text(
                     '·',
-                    style: TextStyle(fontSize: 16, color: AppColors.primary),
+                    style: TextStyle(fontSize: 16, color: context.colors.accentSoft),
                   ),
                   const SizedBox(width: 8),
                   Text(
                     CurrencyFormatter.format(filteredCachet),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
-                      color: AppColors.primary,
+                      color: context.colors.accentSoft,
                     ),
                   ),
                   const SizedBox(width: 8),
-                  const Text(
+                  Text(
                     'IVA no incluido',
                     style: TextStyle(
                       fontSize: 13,
-                      color: AppColors.textSecondary,
+                      color: context.colors.textSecondary,
                     ),
                   ),
                 ],
@@ -646,7 +646,7 @@ class CalendarScreen extends ConsumerWidget {
                               option.first;
                         }
                       },
-                      itemBuilder: (context) => _sortMenuItems(sortOption),
+                      itemBuilder: (context) => _sortMenuItems(context, sortOption),
                       child: const _InlineActionButtonContent(
                         icon: Icons.sort,
                         label: 'Ordenar',
@@ -834,14 +834,14 @@ class CalendarScreen extends ConsumerWidget {
                       Icon(
                         Icons.music_off,
                         size: 64,
-                        color: AppColors.textSecondary.withValues(alpha: 0.5),
+                        color: context.colors.textSecondary.withValues(alpha: 0.5),
                       ),
                       const SizedBox(height: 16),
-                      const Text(
+                      Text(
                         'No hay bolos con estos filtros',
                         style: TextStyle(
                           fontSize: 16,
-                          color: AppColors.textSecondary,
+                          color: context.colors.textSecondary,
                         ),
                       ),
                     ],
@@ -899,10 +899,10 @@ class CalendarScreen extends ConsumerWidget {
       height: 56,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
-        color: isDark ? colors.surface : AppColors.surface,
+        color: isDark ? colors.surface : context.colors.surface,
         border: Border(
           bottom: BorderSide(
-            color: isDark ? colors.border : AppColors.cardBorder,
+            color: isDark ? colors.border : context.colors.border,
             width: 0.5,
           ),
         ),
@@ -917,17 +917,17 @@ class CalendarScreen extends ConsumerWidget {
             icon: const Icon(Icons.clear, size: 18),
             label: const Text('Deseleccionar'),
             style: TextButton.styleFrom(
-              foregroundColor: AppColors.textSecondary,
+              foregroundColor: context.colors.textSecondary,
             ),
           ),
           Expanded(
             child: Text(
               '${selected.length} seleccionados',
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 17,
                 fontWeight: FontWeight.w500,
-                color: AppColors.textPrimary,
+                color: context.colors.textPrimary,
               ),
             ),
           ),
@@ -1082,23 +1082,23 @@ class CalendarScreen extends ConsumerWidget {
                       decoration: BoxDecoration(
                         // Keep light mode untouched; only dark uses theme surfaces.
                         color: isSelected
-                            ? (isDark ? colors.infoBg : AppColors.primary)
+                            ? (isDark ? colors.infoBg : context.colors.accentSoft)
                             : hasData
                             ? (Theme.of(context).brightness == Brightness.dark
                                   ? context.colors.surfaceContainer
-                                  : AppColors.primaryLight)
+                                  : context.colors.accentSoftBg)
                             : (Theme.of(context).brightness == Brightness.dark
                                   ? context.colors.cardBackground
-                                  : AppColors.surface),
+                                  : context.colors.surface),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
                           color: isSelected
-                              ? (isDark ? primary : AppColors.primary)
+                              ? (isDark ? primary : context.colors.accentSoft)
                               : hasData
-                              ? (isDark ? colors.border : AppColors.cardBorder)
+                              ? (isDark ? colors.border : context.colors.border)
                               : (isDark
                                     ? colors.border.withValues(alpha: 0.55)
-                                    : AppColors.divider),
+                                    : context.colors.border),
                         ),
                       ),
                       child: Column(
@@ -1116,10 +1116,10 @@ class CalendarScreen extends ConsumerWidget {
                                   : hasData
                                   ? (isDark
                                         ? colors.textPrimary
-                                        : AppColors.textPrimary)
+                                        : context.colors.textPrimary)
                                   : (isDark
                                             ? colors.textSecondary
-                                            : AppColors.textSecondary)
+                                            : context.colors.textSecondary)
                                         .withValues(alpha: 0.4),
                             ),
                           ),
@@ -1134,7 +1134,7 @@ class CalendarScreen extends ConsumerWidget {
                                           : Colors.white70)
                                     : (isDark
                                           ? colors.textSecondary
-                                          : AppColors.textSecondary),
+                                          : context.colors.textSecondary),
                               ),
                             ),
                         ],
@@ -1237,7 +1237,10 @@ class CalendarScreen extends ConsumerWidget {
     );
   }
 
-  List<PopupMenuEntry<String>> _sortMenuItems(GigSortOption current) {
+  List<PopupMenuEntry<String>> _sortMenuItems(
+    BuildContext context,
+    GigSortOption current,
+  ) {
     Widget buildItem(GigSortOption option, String label, IconData icon) {
       final isSelected = current == option;
       return PopupMenuItem<String>(
@@ -1245,18 +1248,18 @@ class CalendarScreen extends ConsumerWidget {
         onTap: () => {},
         child: Row(
           children: [
-            Icon(icon, size: 20, color: isSelected ? AppColors.primary : null),
+            Icon(icon, size: 20, color: isSelected ? context.colors.accentSoft : null),
             const SizedBox(width: 12),
             Text(
               label,
               style: TextStyle(
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                color: isSelected ? AppColors.primary : null,
+                color: isSelected ? context.colors.accentSoft : null,
               ),
             ),
             if (isSelected) ...[
               const Spacer(),
-              const Icon(Icons.check, size: 18, color: AppColors.primary),
+              Icon(Icons.check, size: 18, color: context.colors.accentSoft),
             ],
           ],
         ),
@@ -1310,7 +1313,7 @@ class _StatusChip extends StatelessWidget {
     final selectedText = isDark
         ? Theme.of(context).colorScheme.primary
         : Colors.white;
-    final unselectedText = isDark ? colors.textPrimary : AppColors.textPrimary;
+    final unselectedText = isDark ? colors.textPrimary : context.colors.textPrimary;
     return Padding(
       padding: const EdgeInsets.only(right: 6),
       child: ChoiceChip(
@@ -1324,14 +1327,14 @@ class _StatusChip extends StatelessWidget {
         ),
         selectedColor: isDark
             ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.22)
-            : AppColors.primary,
-        backgroundColor: isDark ? colors.surfaceContainer : AppColors.surface,
+            : context.colors.accentSoft,
+        backgroundColor: isDark ? colors.surfaceContainer : context.colors.surface,
         side: BorderSide(
           color: selected
               ? (isDark
                     ? Theme.of(context).colorScheme.primary
-                    : AppColors.primary)
-              : (isDark ? colors.border : AppColors.cardBorder),
+                    : context.colors.accentSoft)
+              : (isDark ? colors.border : context.colors.border),
         ),
         visualDensity: VisualDensity.compact,
       ),
@@ -1358,15 +1361,15 @@ class _FilterButton extends StatelessWidget {
     final colors = context.colors;
     final disabled = onTap == null;
     final bgColor = active
-        ? (isDark ? colors.surfaceContainer : AppColors.warningBg)
-        : (isDark ? colors.cardBackground : AppColors.surface);
+        ? (isDark ? colors.surfaceContainer : context.colors.warningBg)
+        : (isDark ? colors.cardBackground : context.colors.surface);
     final fgColor = active
-        ? (isDark ? Theme.of(context).colorScheme.primary : AppColors.warning)
+        ? (isDark ? Theme.of(context).colorScheme.primary : context.colors.warning)
         : disabled
         ? (isDark
               ? colors.textSecondary.withValues(alpha: 0.6)
-              : AppColors.textSecondary.withValues(alpha: 0.5))
-        : (isDark ? colors.textSecondary : AppColors.textSecondary);
+              : context.colors.textSecondary.withValues(alpha: 0.5))
+        : (isDark ? colors.textSecondary : context.colors.textSecondary);
 
     return GestureDetector(
       onTap: onTap,
@@ -1381,8 +1384,8 @@ class _FilterButton extends StatelessWidget {
                       ? Theme.of(
                           context,
                         ).colorScheme.primary.withValues(alpha: 0.45)
-                      : AppColors.warning.withValues(alpha: 0.3))
-                : (isDark ? colors.border : AppColors.cardBorder),
+                      : context.colors.warning.withValues(alpha: 0.3))
+                : (isDark ? colors.border : context.colors.border),
           ),
         ),
         child: Row(
@@ -1417,10 +1420,10 @@ class _ClearFiltersButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = context.colors;
-    final fg = isDark ? colors.error.withValues(alpha: 0.95) : AppColors.error;
+    final fg = isDark ? colors.error.withValues(alpha: 0.95) : context.colors.error;
     final bg = isDark
         ? colors.errorBg.withValues(alpha: 0.62)
-        : AppColors.errorBg;
+        : context.colors.errorBg;
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -1504,7 +1507,7 @@ class _ClientSheetContentState extends State<_ClientSheetContent> {
           width: 40,
           height: 4,
           decoration: BoxDecoration(
-            color: AppColors.textSecondary.withValues(alpha: 0.3),
+            color: context.colors.textSecondary.withValues(alpha: 0.3),
             borderRadius: BorderRadius.circular(2),
           ),
         ),
@@ -1595,7 +1598,7 @@ class _GigListTile extends ConsumerWidget {
     return Card(
       color: isDark
           ? (isSelected ? colors.surfaceElevated : colors.cardBackground)
-          : (isSelected ? AppColors.primaryLight : null),
+          : (isSelected ? context.colors.accentSoftBg : null),
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
@@ -1604,7 +1607,7 @@ class _GigListTile extends ConsumerWidget {
               ? (isSelected
                     ? colors.info.withValues(alpha: 0.55)
                     : colors.border.withValues(alpha: 0.75))
-              : (isSelected ? AppColors.primary : AppColors.cardBorder),
+              : (isSelected ? context.colors.accentSoft : context.colors.border),
           width: isSelected ? 1.1 : 0.8,
         ),
       ),
@@ -1621,7 +1624,7 @@ class _GigListTile extends ConsumerWidget {
                 Checkbox(
                   value: isSelected,
                   onChanged: (_) => onToggle(),
-                  activeColor: AppColors.primary,
+                  activeColor: context.colors.accentSoft,
                 ),
                 const SizedBox(width: 8),
               ],
@@ -1632,8 +1635,8 @@ class _GigListTile extends ConsumerWidget {
                   color: isDark
                       ? colors.surfaceContainer
                       : gig.facturable
-                      ? AppColors.primaryLight
-                      : AppColors.purpleBg,
+                      ? context.colors.accentSoftBg
+                      : context.colors.purpleBg,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
@@ -1641,8 +1644,8 @@ class _GigListTile extends ConsumerWidget {
                   color: isDark
                       ? colors.textSecondary
                       : gig.facturable
-                      ? AppColors.primary
-                      : AppColors.purple,
+                      ? context.colors.accentSoft
+                      : context.colors.purple,
                   size: 22,
                 ),
               ),
@@ -1740,7 +1743,7 @@ class _BulkGigsActionsBar extends ConsumerWidget {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text('No se pudo eliminar en lote: $e'),
-                backgroundColor: AppColors.error,
+                backgroundColor: context.colors.error,
               ),
             );
           }
@@ -1754,12 +1757,12 @@ class _BulkGigsActionsBar extends ConsumerWidget {
       decoration: BoxDecoration(
         color: Theme.of(context).brightness == Brightness.dark
             ? context.colors.surface
-            : AppColors.surface,
+            : context.colors.surface,
         border: Border(
           top: BorderSide(
             color: Theme.of(context).brightness == Brightness.dark
                 ? context.colors.border
-                : AppColors.cardBorder,
+                : context.colors.border,
           ),
         ),
       ),
@@ -1770,48 +1773,48 @@ class _BulkGigsActionsBar extends ConsumerWidget {
             _BulkActionButton(
               icon: Icons.check_circle_outline,
               label: 'Cobrar',
-              fgColor: AppColors.success,
-              bgColor: AppColors.successBg,
+              fgColor: context.colors.success,
+              bgColor: context.colors.successBg,
               onTap: () => setStatus(GigStatus.cobrado),
             ),
             const SizedBox(width: 8),
             _BulkActionButton(
               icon: Icons.hourglass_empty,
               label: 'Confirmado',
-              fgColor: AppColors.primary,
-              bgColor: AppColors.primaryLight,
+              fgColor: context.colors.accentSoft,
+              bgColor: context.colors.accentSoftBg,
               onTap: () => setStatus(GigStatus.confirmado),
             ),
             const SizedBox(width: 8),
             _BulkActionButton(
               icon: Icons.schedule,
               label: 'Facturado',
-              fgColor: AppColors.warning,
-              bgColor: AppColors.warningBg,
+              fgColor: context.colors.warning,
+              bgColor: context.colors.warningBg,
               onTap: () => setStatus(GigStatus.facturado),
             ),
             const SizedBox(width: 8),
             _BulkActionButton(
               icon: Icons.receipt_long_outlined,
               label: 'Facturable',
-              fgColor: AppColors.primary,
-              bgColor: AppColors.primaryLight,
+              fgColor: context.colors.accentSoft,
+              bgColor: context.colors.accentSoftBg,
               onTap: () => setFacturable(true),
             ),
             const SizedBox(width: 8),
             _BulkActionButton(
               icon: Icons.payments_outlined,
               label: 'Privado',
-              fgColor: AppColors.purple,
-              bgColor: AppColors.purpleBg,
+              fgColor: context.colors.purple,
+              bgColor: context.colors.purpleBg,
               onTap: () => setFacturable(false),
             ),
             const SizedBox(width: 8),
             _BulkActionButton(
               icon: Icons.delete_outline,
               label: 'Eliminar',
-              fgColor: AppColors.error,
-              bgColor: AppColors.errorBg,
+              fgColor: context.colors.error,
+              bgColor: context.colors.errorBg,
               onTap: removeAll,
             ),
           ],
@@ -1904,17 +1907,17 @@ class _InlineActionButtonContent extends StatelessWidget {
     return Container(
       height: 40,
       decoration: BoxDecoration(
-        color: isDark ? colors.cardBackground : AppColors.surface,
+        color: isDark ? colors.cardBackground : context.colors.surface,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: isDark ? colors.border : AppColors.cardBorder,
+          color: isDark ? colors.border : context.colors.border,
         ),
       ),
       alignment: Alignment.center,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, size: 16, color: AppColors.textSecondary),
+          Icon(icon, size: 16, color: context.colors.textSecondary),
           const SizedBox(width: 6),
           Text(
             label,
@@ -1986,15 +1989,15 @@ class _GoogleSignInBanner extends ConsumerWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      color: AppColors.primary.withValues(alpha: 0.08),
+      color: context.colors.accentSoft.withValues(alpha: 0.08),
       child: Row(
         children: [
-          const Icon(Icons.calendar_month, size: 20, color: AppColors.primary),
+          Icon(Icons.calendar_month, size: 20, color: context.colors.accentSoft),
           const SizedBox(width: 8),
-          const Expanded(
+          Expanded(
             child: Text(
               'Conecta Google Calendar para sincronizar tus bolos',
-              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
             ),
           ),
           TextButton.icon(
@@ -2019,30 +2022,30 @@ class _GoogleAccountBanner extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      color: AppColors.accentGreen.withValues(alpha: 0.08),
+      color: context.colors.success.withValues(alpha: 0.08),
       child: Row(
         children: [
-          const Icon(
+          Icon(
             Icons.check_circle,
             size: 16,
-            color: AppColors.accentGreen,
+            color: context.colors.success,
           ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               displayName != null ? '$displayName • $email' : email,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
-                color: AppColors.textSecondary,
+                color: context.colors.textSecondary,
               ),
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          const Icon(Icons.sync, size: 14, color: AppColors.accentGreen),
+          Icon(Icons.sync, size: 14, color: context.colors.success),
           const SizedBox(width: 4),
-          const Text(
+          Text(
             'Google Calendar',
-            style: TextStyle(fontSize: 11, color: AppColors.accentGreen),
+            style: TextStyle(fontSize: 11, color: context.colors.success),
           ),
         ],
       ),
