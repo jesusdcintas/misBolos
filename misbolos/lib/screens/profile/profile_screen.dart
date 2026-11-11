@@ -19,6 +19,7 @@ import '../../providers/sync_provider.dart';
 import '../../services/google_auth_service.dart';
 import '../../services/platform_auth_service.dart';
 import '../../services/supabase_service.dart';
+import '../../core/theme/app_theme_colors.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -184,7 +185,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     Text(
                       mail,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppColors.textSecondary,
+                        color: context.colors.textSecondary,
                       ),
                     ),
                   const SizedBox(height: 8),
@@ -198,10 +199,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             : Icons.check_circle,
                         size: 16,
                         color: sync.status == SyncStatus.error
-                            ? AppColors.error
+                            ? context.colors.error
                             : sync.status == SyncStatus.syncing
-                            ? AppColors.warning
-                            : AppColors.success,
+                            ? context.colors.warning
+                            : context.colors.success,
                       ),
                       const SizedBox(width: 6),
                       Expanded(
@@ -212,10 +213,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           style: TextStyle(
                             fontWeight: FontWeight.w600,
                             color: sync.status == SyncStatus.error
-                                ? AppColors.error
+                                ? context.colors.error
                                 : sync.status == SyncStatus.syncing
-                                ? AppColors.warning
-                                : AppColors.success,
+                                ? context.colors.warning
+                                : context.colors.success,
                           ),
                         ),
                       ),
@@ -224,9 +225,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   if (sync.lastSync != null)
                     Text(
                       'Última sincronización ${_formatDate(sync.lastSync!)}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: AppColors.textMuted,
+                        color: context.colors.textMuted,
                       ),
                     ),
                 ],
@@ -348,11 +349,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }) {
     final cs = Theme.of(context).colorScheme;
     final toneColor = switch (tone) {
-      _ServiceTone.ready => AppColors.success,
-      _ServiceTone.warning => AppColors.warning,
-      _ServiceTone.error => AppColors.error,
+      _ServiceTone.ready => context.colors.success,
+      _ServiceTone.warning => context.colors.warning,
+      _ServiceTone.error => context.colors.error,
       _ServiceTone.syncing => cs.primary,
-      _ServiceTone.neutral => AppColors.textMuted,
+      _ServiceTone.neutral => context.colors.textMuted,
     };
     return TweenAnimationBuilder<double>(
       duration: const Duration(milliseconds: 260),
@@ -394,18 +395,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       const SizedBox(height: 2),
                       Text(
                         subtitle,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: AppColors.textSecondary,
+                          color: context.colors.textSecondary,
                         ),
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(width: 8),
-                const Icon(
+                Icon(
                   Icons.chevron_right_rounded,
-                  color: AppColors.textMuted,
+                  color: context.colors.textMuted,
                 ),
               ],
             ),
@@ -796,7 +797,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 subtitle,
                 style: Theme.of(
                   context,
-                ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+                ).textTheme.bodySmall?.copyWith(color: context.colors.textSecondary),
               ),
             ],
           ),
@@ -853,7 +854,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ),
                 FilledButton.tonal(
                   style: FilledButton.styleFrom(
-                    foregroundColor: AppColors.error,
+                    foregroundColor: context.colors.error,
                   ),
                   onPressed: _confirmDeleteAccount,
                   child: const Text('Eliminar cuenta'),
@@ -944,15 +945,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         padding: const EdgeInsets.only(bottom: 8),
         child: RichText(
           text: TextSpan(
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
-              color: AppColors.textSecondary,
+              color: context.colors.textSecondary,
             ),
             children: [
               TextSpan(
                 text: '$title: ',
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
+                style: TextStyle(
+                  color: context.colors.textPrimary,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -964,7 +965,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
 
     return Card(
-      color: AppColors.primaryLight.withValues(alpha: 0.35),
+      color: context.colors.accentSoftBg.withValues(alpha: 0.35),
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -1020,7 +1021,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               connected
                   ? 'Calendario conectado'
                   : 'Sincronización de calendario no conectada',
-              style: const TextStyle(color: AppColors.textSecondary),
+              style: TextStyle(color: context.colors.textSecondary),
             ),
             const SizedBox(height: 10),
             Wrap(
@@ -1069,15 +1070,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         ? 'Requiere configuración'
         : 'Drive no conectado';
     final statusBg = !driveReady && !hasFolder && !hasDriveAccount
-        ? AppColors.errorBg
+        ? context.colors.errorBg
         : driveReady
-        ? AppColors.successBg
-        : AppColors.warningBg;
+        ? context.colors.successBg
+        : context.colors.warningBg;
     final statusFg = !driveReady && !hasFolder && !hasDriveAccount
-        ? AppColors.error
+        ? context.colors.error
         : driveReady
-        ? AppColors.success
-        : AppColors.warning;
+        ? context.colors.success
+        : context.colors.warning;
     final statusIcon = !driveReady && !hasFolder && !hasDriveAccount
         ? Icons.error_outline
         : driveReady
@@ -1094,7 +1095,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               children: [
                 Icon(
                   connected ? Icons.add_to_drive : Icons.add_to_drive_outlined,
-                  color: connected ? AppColors.success : AppColors.primary,
+                  color: connected ? context.colors.success : context.colors.accentSoft,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -1108,11 +1109,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-                      const Text(
+                      Text(
                         'Estado de cuenta y carpeta de trabajo',
                         style: TextStyle(
                           fontSize: 13,
-                          color: AppColors.textSecondary,
+                          color: context.colors.textSecondary,
                         ),
                       ),
                     ],
@@ -1141,9 +1142,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     (_driveProgressValue != null
                         ? ' · ${(_driveProgressValue! * 100).toStringAsFixed(0)}%'
                         : ''),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
-                  color: AppColors.textSecondary,
+                  color: context.colors.textSecondary,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -1177,11 +1178,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               builder: (context, snapshot) {
                 final check = snapshot.data;
                 if (check == null) {
-                  return const Text(
+                  return Text(
                     'Diagnosticando conexión de Drive...',
                     style: TextStyle(
                       fontSize: 12,
-                      color: AppColors.textSecondary,
+                      color: context.colors.textSecondary,
                     ),
                   );
                 }
@@ -1190,8 +1191,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   style: TextStyle(
                     fontSize: 12,
                     color: check.isConnected
-                        ? AppColors.success
-                        : AppColors.warning,
+                        ? context.colors.success
+                        : context.colors.warning,
                     fontWeight: FontWeight.w600,
                   ),
                 );
@@ -1203,7 +1204,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppColors.divider),
+                border: Border.all(color: context.colors.border),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1216,8 +1217,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             : Icons.radio_button_unchecked,
                         size: 18,
                         color: connected
-                            ? AppColors.success
-                            : AppColors.textMuted,
+                            ? context.colors.success
+                            : context.colors.textMuted,
                       ),
                       const SizedBox(width: 8),
                       Text(
@@ -1225,8 +1226,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         style: TextStyle(
                           fontWeight: FontWeight.w700,
                           color: connected
-                              ? AppColors.success
-                              : AppColors.textSecondary,
+                              ? context.colors.success
+                              : context.colors.textSecondary,
                         ),
                       ),
                     ],
@@ -1236,18 +1237,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     connected || hasDriveAccount
                         ? accountLabel
                         : 'Conecta Google Drive para activar la sincronización documental.',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: AppColors.textSecondary,
+                      color: context.colors.textSecondary,
                     ),
                   ),
                   if (settings.lastDriveSyncAt != null) ...[
                     const SizedBox(height: 6),
                     Text(
                       'Última subida: ${_formatDate(settings.lastDriveSyncAt!)}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: AppColors.textSecondary,
+                        color: context.colors.textSecondary,
                       ),
                     ),
                   ],
@@ -1285,7 +1286,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppColors.divider),
+                border: Border.all(color: context.colors.border),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1298,8 +1299,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             : Icons.warning_amber_rounded,
                         size: 18,
                         color: hasFolder
-                            ? AppColors.success
-                            : AppColors.warning,
+                            ? context.colors.success
+                            : context.colors.warning,
                       ),
                       const SizedBox(width: 8),
                       Text(
@@ -1309,8 +1310,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         style: TextStyle(
                           fontWeight: FontWeight.w700,
                           color: hasFolder
-                              ? AppColors.success
-                              : AppColors.warning,
+                              ? context.colors.success
+                              : context.colors.warning,
                         ),
                       ),
                     ],
@@ -1325,11 +1326,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       ),
                     ),
                   ] else
-                    const Text(
+                    Text(
                       'Selecciona dónde guardar facturas, gastos e inversiones.',
                       style: TextStyle(
                         fontSize: 12,
-                        color: AppColors.textSecondary,
+                        color: context.colors.textSecondary,
                       ),
                     ),
                   const SizedBox(height: 10),
@@ -1512,8 +1513,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       style: TextStyle(
                         fontSize: 12,
                         color: s.totalPending > 0
-                            ? AppColors.warning
-                            : AppColors.textSecondary,
+                            ? context.colors.warning
+                            : context.colors.textSecondary,
                         fontWeight: FontWeight.w600,
                       ),
                     );
@@ -1528,9 +1529,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     }
                     return Text(
                       'Adjuntos rotos: ${s.invalidMissingFile + s.invalidDevicePath} · no encontrado ${s.invalidMissingFile} · otro dispositivo ${s.invalidDevicePath}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11,
-                        color: AppColors.textSecondary,
+                        color: context.colors.textSecondary,
                       ),
                     );
                   },
@@ -1538,9 +1539,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ],
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'La app solo creará o reutilizará carpetas dentro de la carpeta seleccionada. No borra, mueve ni renombra archivos.',
-              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
             ),
           ],
         ),
@@ -1892,10 +1893,10 @@ class _GoogleSection extends ConsumerWidget {
           padding: const EdgeInsets.all(16),
           child: Column(
             children: [
-              const Icon(
+              Icon(
                 Icons.account_circle,
                 size: 64,
-                color: AppColors.textSecondary,
+                color: context.colors.textSecondary,
               ),
               const SizedBox(height: 12),
               const Text(
@@ -1903,9 +1904,9 @@ class _GoogleSection extends ConsumerWidget {
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 4),
-              const Text(
+              Text(
                 'Conecta Calendar para sincronizar bolos y agenda',
-                style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                style: TextStyle(fontSize: 13, color: context.colors.textSecondary),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
@@ -1958,9 +1959,9 @@ class _GoogleSection extends ConsumerWidget {
                       if (auth.email != null)
                         Text(
                           auth.email!,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13,
-                            color: AppColors.textSecondary,
+                            color: context.colors.textSecondary,
                           ),
                         ),
                     ],
@@ -1972,13 +1973,13 @@ class _GoogleSection extends ConsumerWidget {
           const Divider(height: 1),
           // ── Google Calendar ──
           if (auth.calendarConnected)
-            const ListTile(
-              leading: Icon(Icons.calendar_month, color: AppColors.primary),
+            ListTile(
+              leading: Icon(Icons.calendar_month, color: context.colors.accentSoft),
               title: Text('Google Calendar'),
               subtitle: Text('Bolos sincronizados'),
               trailing: Icon(
                 Icons.check_circle,
-                color: AppColors.accentGreen,
+                color: context.colors.success,
                 size: 20,
               ),
             )
@@ -1996,8 +1997,8 @@ class _GoogleSection extends ConsumerWidget {
                   ref.read(googleAuthProvider.notifier).connectCalendarOnly(),
             ),
           const Divider(height: 1),
-          const ListTile(
-            leading: Icon(Icons.info_outline, color: AppColors.textSecondary),
+          ListTile(
+            leading: Icon(Icons.info_outline, color: context.colors.textSecondary),
             title: Text('Sesión principal'),
             subtitle: Text(
               'Para salir de MisBolos usa "Cerrar sesión" en Sincronización en la nube.',
@@ -2489,18 +2490,18 @@ class _LogoSelector extends StatelessWidget {
             width: 100,
             height: 50,
             decoration: BoxDecoration(
-              border: Border.all(color: AppColors.divider),
+              border: Border.all(color: context.colors.border),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Column(
+            child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.image, color: AppColors.textSecondary, size: 24),
+                Icon(Icons.image, color: context.colors.textSecondary, size: 24),
                 Text(
                   'Sin logo',
                   style: TextStyle(
                     fontSize: 10,
-                    color: AppColors.textSecondary,
+                    color: context.colors.textSecondary,
                   ),
                 ),
               ],
@@ -2655,8 +2656,8 @@ class _SyncSection extends ConsumerWidget {
                 Icon(
                   isCloudAuth ? Icons.cloud_done : Icons.cloud_off,
                   color: isCloudAuth
-                      ? AppColors.success
-                      : AppColors.textSecondary,
+                      ? context.colors.success
+                      : context.colors.textSecondary,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -2677,8 +2678,8 @@ class _SyncSection extends ConsumerWidget {
                         style: TextStyle(
                           fontSize: 13,
                           color: isCloudAuth
-                              ? AppColors.success
-                              : AppColors.textSecondary,
+                              ? context.colors.success
+                              : context.colors.textSecondary,
                         ),
                       ),
                     ],
@@ -2689,9 +2690,9 @@ class _SyncSection extends ConsumerWidget {
             const SizedBox(height: 8),
             Text(
               statusLabel,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
-                color: AppColors.textSecondary,
+                color: context.colors.textSecondary,
               ),
             ),
             if (isCloudAuth) ...[
@@ -2702,8 +2703,8 @@ class _SyncSection extends ConsumerWidget {
                     pendingCount > 0 ? Icons.schedule : Icons.check_circle,
                     size: 16,
                     color: pendingCount > 0
-                        ? AppColors.warning
-                        : AppColors.success,
+                        ? context.colors.warning
+                        : context.colors.success,
                   ),
                   const SizedBox(width: 6),
                   Text(
@@ -2713,8 +2714,8 @@ class _SyncSection extends ConsumerWidget {
                     style: TextStyle(
                       fontSize: 12,
                       color: pendingCount > 0
-                          ? AppColors.warning
-                          : AppColors.success,
+                          ? context.colors.warning
+                          : context.colors.success,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -2743,14 +2744,14 @@ class _SyncSection extends ConsumerWidget {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppColors.warningBg,
+                  color: context.colors.warningBg,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
                     Icon(
                       Icons.info_outline,
-                      color: AppColors.warning,
+                      color: context.colors.warning,
                       size: 20,
                     ),
                     SizedBox(width: 8),
@@ -2759,7 +2760,7 @@ class _SyncSection extends ConsumerWidget {
                         'La sincronización en la nube solo está disponible en iOS, Android y macOS.',
                         style: TextStyle(
                           fontSize: 13,
-                          color: AppColors.warning,
+                          color: context.colors.warning,
                         ),
                       ),
                     ),
@@ -2825,7 +2826,7 @@ class _SyncSection extends ConsumerWidget {
                         vertical: 10,
                       ),
                       decoration: BoxDecoration(
-                        border: Border.all(color: AppColors.divider),
+                        border: Border.all(color: context.colors.border),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: const Row(
@@ -2857,10 +2858,10 @@ class _SyncSection extends ConsumerWidget {
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     color: syncState.status == SyncStatus.error
-                        ? AppColors.errorBg
+                        ? context.colors.errorBg
                         : syncState.status == SyncStatus.success
-                        ? AppColors.successBg
-                        : AppColors.primaryLight,
+                        ? context.colors.successBg
+                        : context.colors.accentSoftBg,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Row(
@@ -2873,10 +2874,10 @@ class _SyncSection extends ConsumerWidget {
                             : Icons.info_outline,
                         size: 18,
                         color: syncState.status == SyncStatus.error
-                            ? AppColors.error
+                            ? context.colors.error
                             : syncState.status == SyncStatus.success
-                            ? AppColors.success
-                            : AppColors.primary,
+                            ? context.colors.success
+                            : context.colors.accentSoft,
                       ),
                       const SizedBox(width: 8),
                       Expanded(
@@ -2885,10 +2886,10 @@ class _SyncSection extends ConsumerWidget {
                           style: TextStyle(
                             fontSize: 12,
                             color: syncState.status == SyncStatus.error
-                                ? AppColors.error
+                                ? context.colors.error
                                 : syncState.status == SyncStatus.success
-                                ? AppColors.success
-                                : AppColors.primary,
+                                ? context.colors.success
+                                : context.colors.accentSoft,
                           ),
                         ),
                       ),
@@ -2902,9 +2903,9 @@ class _SyncSection extends ConsumerWidget {
                 const SizedBox(height: 8),
                 Text(
                   'Última sincronización: ${_formatDate(syncState.lastSync!)}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
-                    color: AppColors.textMuted,
+                    color: context.colors.textMuted,
                   ),
                 ),
               ],
