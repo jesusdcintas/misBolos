@@ -428,7 +428,9 @@ class _ToggleButton extends StatelessWidget {
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: selected ? Colors.white : context.colors.textSecondary,
+            color: selected
+                ? Theme.of(context).colorScheme.onPrimary
+                : context.colors.textSecondary,
           ),
         ),
       ),

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../core/constants/app_colors.dart';
 import '../../core/theme/app_theme_colors.dart';
 import '../../models/client.dart';
 import '../../providers/client_provider.dart';
@@ -308,10 +307,10 @@ class _ClientPickerScreenState extends ConsumerState<ClientPickerScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.people_outline,
                           size: 42,
-                          color: AppColors.textSecondary,
+                          color: context.colors.textSecondary,
                         ),
                         const SizedBox(height: 12),
                         const Text('No tienes clientes creados todavía'),

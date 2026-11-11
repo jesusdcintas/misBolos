@@ -817,7 +817,9 @@ class _BotonDiaSemana extends StatelessWidget {
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.bold,
-            color: activo ? Colors.white : colors.textSecondary,
+            color: activo
+                ? Theme.of(context).colorScheme.onPrimary
+                : colors.textSecondary,
           ),
         ),
       ),

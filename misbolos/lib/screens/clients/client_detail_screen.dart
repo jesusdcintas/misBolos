@@ -286,7 +286,7 @@ class ClientDetailScreen extends ConsumerWidget {
           FilledButton(
             style: FilledButton.styleFrom(
               backgroundColor: context.colors.error,
-              foregroundColor: Colors.white,
+              foregroundColor: Theme.of(context).colorScheme.onPrimary,
             ),
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('Eliminar'),

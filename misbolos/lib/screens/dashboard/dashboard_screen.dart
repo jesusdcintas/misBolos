@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/theme/app_theme_colors.dart';
 import '../../core/utils/currency_formatter.dart';
@@ -147,19 +146,19 @@ class DashboardScreen extends ConsumerWidget {
           FABAction(
             icon: Icons.music_note,
             label: 'Nuevo bolo',
-            color: AppColors.primary,
+            color: context.colors.accentSoft,
             onTap: (ctx) => ctx.push('/gig/new'),
           ),
           FABAction(
             icon: Icons.person_add,
             label: 'Nuevo cliente',
-            color: AppColors.purple,
+            color: context.colors.purple,
             onTap: (ctx) => ctx.push('/client/new'),
           ),
           FABAction(
             icon: Icons.euro_outlined,
             label: 'Nuevo gasto o inversión',
-            color: AppColors.warning,
+            color: context.colors.warning,
             onTap: (ctx) => ctx.push('/expense/new'),
           ),
         ],
@@ -318,12 +317,12 @@ class _UpcomingGigTile extends ConsumerWidget {
     Color badgeTextColor;
     if (daysLeft == 0) {
       badgeText = 'hoy';
-      badgeBg = AppColors.successBg;
-      badgeTextColor = AppColors.success;
+      badgeBg = context.colors.successBg;
+      badgeTextColor = context.colors.success;
     } else if (daysLeft == 1) {
       badgeText = 'mañana';
-      badgeBg = AppColors.warningBg;
-      badgeTextColor = AppColors.warning;
+      badgeBg = context.colors.warningBg;
+      badgeTextColor = context.colors.warning;
     } else {
       badgeText = 'en $daysLeft días';
       badgeBg = colors.infoBg;
@@ -340,12 +339,12 @@ class _UpcomingGigTile extends ConsumerWidget {
           width: 44,
           height: 44,
           decoration: BoxDecoration(
-            color: gig.facturable ? colors.infoBg : AppColors.purpleBg,
+            color: gig.facturable ? colors.infoBg : context.colors.purpleBg,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(
             Icons.music_note_outlined,
-            color: gig.facturable ? primary : AppColors.purple,
+            color: gig.facturable ? primary : context.colors.purple,
             size: 22,
           ),
         ),

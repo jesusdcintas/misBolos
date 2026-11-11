@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../core/constants/app_colors.dart';
 import '../../core/theme/app_theme_colors.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/utils/date_formatter.dart';
@@ -155,8 +154,8 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
                             fontSize: 15,
                             fontWeight: FontWeight.w600,
                             color: selectedName == null
-                                ? AppColors.textSecondary
-                                : AppColors.textPrimary,
+                                ? context.colors.textSecondary
+                                : context.colors.textPrimary,
                           ),
                         ),
                         if (selectedDetails != null &&
@@ -164,9 +163,9 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
                           const SizedBox(height: 3),
                           Text(
                             selectedDetails,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12.5,
-                              color: AppColors.textSecondary,
+                              color: context.colors.textSecondary,
                             ),
                           ),
                         ],
@@ -283,13 +282,13 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: _facturable
-                    ? AppColors.accentGreen.withValues(alpha: 0.1)
-                    : AppColors.accentPurple.withValues(alpha: 0.1),
+                    ? context.colors.success.withValues(alpha: 0.1)
+                    : context.colors.purple.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
                   color: _facturable
-                      ? AppColors.accentGreen
-                      : AppColors.accentPurple,
+                      ? context.colors.success
+                      : context.colors.purple,
                   width: 2,
                 ),
               ),
@@ -303,8 +302,8 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
                         style: Theme.of(context).textTheme.titleLarge!.copyWith(
                           fontWeight: FontWeight.bold,
                           color: _facturable
-                              ? AppColors.accentGreen
-                              : AppColors.accentPurple,
+                              ? context.colors.success
+                              : context.colors.purple,
                         ),
                         child: Text(AppStrings.facturable),
                       ),
@@ -326,8 +325,8 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
                       style: TextStyle(
                         fontSize: 12,
                         color: _facturable
-                            ? AppColors.accentGreen
-                            : AppColors.accentPurple,
+                            ? context.colors.success
+                            : context.colors.purple,
                       ),
                     ),
                   ),
