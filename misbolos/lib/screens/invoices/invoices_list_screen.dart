@@ -2058,28 +2058,30 @@ class _InvoiceNumberBadge extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = context.colors;
     final isRectifying = invoice.isRectifying;
-    final background = isRectifying && invoice.status == InvoiceStatus.pagada
-        ? AppColors.fiscalBg
-        : isRectifying && invoice.status == InvoiceStatus.enviada
-        ? AppColors.purpleBg
-        : isRectifying && invoice.status == InvoiceStatus.borrador
-        ? AppColors.draftBg
-        : switch (invoice.status) {
-            InvoiceStatus.borrador => AppColors.draftBg,
-            InvoiceStatus.enviada => AppColors.warningBg,
-            InvoiceStatus.pagada => AppColors.successBg,
-          };
-    final foreground = isRectifying && invoice.status == InvoiceStatus.pagada
-        ? AppColors.fiscal
-        : isRectifying && invoice.status == InvoiceStatus.enviada
-        ? AppColors.purple
-        : isRectifying && invoice.status == InvoiceStatus.borrador
-        ? AppColors.draft
-        : switch (invoice.status) {
-            InvoiceStatus.borrador => AppColors.draft,
-            InvoiceStatus.enviada => AppColors.warning,
-            InvoiceStatus.pagada => AppColors.success,
-          };
+
+    // En oscuro los fondos salen del tema: los *Bg de AppColors son claros y
+    // dejaban el recuadro en blanco sobre la pantalla oscura. El color por
+    // estado se mantiene.
+    final (Color background, Color foreground) = switch ((
+      isRectifying,
+      invoice.status,
+    )) {
+      (true, InvoiceStatus.pagada) => isDark
+          ? (colors.infoBg, colors.info)
+          : (AppColors.fiscalBg, AppColors.fiscal),
+      (true, InvoiceStatus.enviada) => isDark
+          ? (colors.infoBg, colors.info)
+          : (AppColors.purpleBg, AppColors.purple),
+      (_, InvoiceStatus.borrador) => isDark
+          ? (colors.surfaceContainer, colors.textSecondary)
+          : (AppColors.draftBg, AppColors.draft),
+      (_, InvoiceStatus.enviada) => isDark
+          ? (colors.warningBg, colors.warning)
+          : (AppColors.warningBg, AppColors.warning),
+      (_, InvoiceStatus.pagada) => isDark
+          ? (colors.successBg, colors.success)
+          : (AppColors.successBg, AppColors.success),
+    };
     final width = compact ? 78.0 : 84.0;
     final height = compact ? 62.0 : 64.0;
 
