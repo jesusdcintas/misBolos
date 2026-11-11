@@ -20,6 +20,7 @@ import '../../services/google_auth_service.dart';
 import '../../services/google_calendar_service.dart';
 import '../../widgets/common/serpentina_celebration.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../core/theme/app_theme_colors.dart';
 
 class InvoiceDetailScreen extends ConsumerStatefulWidget {
   final String invoiceId;
@@ -188,6 +189,9 @@ class _InvoiceDetailContent extends ConsumerWidget {
       children: [
         // Preview card
         Card(
+          // Sin el margen horizontal del tema, para alinearse con los
+          // botones de ancho completo de más abajo.
+          margin: EdgeInsets.zero,
           child: Padding(
             padding: const EdgeInsets.all(20),
             child: Column(
@@ -201,7 +205,7 @@ class _InvoiceDetailContent extends ConsumerWidget {
                       style: TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
-                        color: AppColors.primary,
+                        color: context.colors.accentSoft,
                       ),
                     ),
                     Column(
@@ -214,15 +218,15 @@ class _InvoiceDetailContent extends ConsumerWidget {
                               vertical: 3,
                             ),
                             decoration: BoxDecoration(
-                              color: AppColors.primaryLight,
+                              color: context.colors.accentSoftBg,
                               borderRadius: BorderRadius.circular(999),
                             ),
-                            child: const Text(
+                            child: Text(
                               'RECTIFICATIVA',
                               style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w700,
-                                color: AppColors.primary,
+                                color: context.colors.accentSoft,
                               ),
                             ),
                           ),
@@ -244,18 +248,18 @@ class _InvoiceDetailContent extends ConsumerWidget {
                     width: double.infinity,
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: AppColors.warningBg,
+                      color: context.colors.warningBg,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
+                        Text(
                           'Factura rectificativa',
                           style: TextStyle(
                             fontWeight: FontWeight.w700,
                             fontSize: 13,
-                            color: AppColors.warning,
+                            color: context.colors.warning,
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -297,7 +301,7 @@ class _InvoiceDetailContent extends ConsumerWidget {
                             AppStrings.emisor,
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
-                              color: AppColors.primary,
+                              color: context.colors.accentSoft,
                               fontSize: 12,
                             ),
                           ),
@@ -362,7 +366,7 @@ class _InvoiceDetailContent extends ConsumerWidget {
                             AppStrings.facturarA,
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
-                              color: AppColors.primary,
+                              color: context.colors.accentSoft,
                               fontSize: 12,
                             ),
                           ),
@@ -438,7 +442,7 @@ class _InvoiceDetailContent extends ConsumerWidget {
 
                 // Items table
                 Table(
-                  border: TableBorder.all(color: AppColors.divider),
+                  border: TableBorder.all(color: context.colors.border),
                   columnWidths: const {
                     0: FlexColumnWidth(1),
                     1: FlexColumnWidth(3),
@@ -447,12 +451,14 @@ class _InvoiceDetailContent extends ConsumerWidget {
                   },
                   children: [
                     TableRow(
-                      decoration: BoxDecoration(color: AppColors.primary),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
                       children: [
-                        _tableHeader(AppStrings.cantidad),
-                        _tableHeader(AppStrings.descripcion),
-                        _tableHeader(AppStrings.precioUnidad),
-                        _tableHeader(AppStrings.totalLinea),
+                        _tableHeader(context, AppStrings.cantidad),
+                        _tableHeader(context, AppStrings.descripcion),
+                        _tableHeader(context, AppStrings.precioUnidad),
+                        _tableHeader(context, AppStrings.totalLinea),
                       ],
                     ),
                     for (final item in invoice.items)
@@ -503,13 +509,13 @@ class _InvoiceDetailContent extends ConsumerWidget {
                           vertical: 10,
                         ),
                         decoration: BoxDecoration(
-                          color: AppColors.primary,
+                          color: Theme.of(context).colorScheme.primary,
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
                           'TOTAL: ${CurrencyFormatter.format(invoice.total)}',
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.onPrimary,
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
                           ),
@@ -550,15 +556,15 @@ class _InvoiceDetailContent extends ConsumerWidget {
                                 vertical: 4,
                               ),
                               decoration: BoxDecoration(
-                                color: AppColors.primaryLight,
+                                color: context.colors.accentSoftBg,
                                 borderRadius: BorderRadius.circular(999),
                               ),
-                              child: const Text(
+                              child: Text(
                                 'RECTIFICATIVA',
                                 style: TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.w700,
-                                  color: AppColors.primary,
+                                  color: context.colors.accentSoft,
                                 ),
                               ),
                             ),
@@ -587,13 +593,13 @@ class _InvoiceDetailContent extends ConsumerWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             decoration: BoxDecoration(
-              color: _statusBgColor,
+              color: _statusBgColor(context),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
               invoice.status.label,
               style: TextStyle(
-                color: _statusTextColor,
+                color: _statusTextColor(context),
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -605,13 +611,13 @@ class _InvoiceDetailContent extends ConsumerWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: AppColors.primaryLight,
+                color: context.colors.accentSoftBg,
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: const Text(
+              child: Text(
                 'Rectificativa',
                 style: TextStyle(
-                  color: AppColors.primary,
+                  color: context.colors.accentSoft,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -625,7 +631,7 @@ class _InvoiceDetailContent extends ConsumerWidget {
             width: double.infinity,
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppColors.primaryLight,
+              color: context.colors.accentSoftBg,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
@@ -641,14 +647,14 @@ class _InvoiceDetailContent extends ConsumerWidget {
             width: double.infinity,
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppColors.warningBg,
+              color: context.colors.warningBg,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppColors.warning),
+              border: Border.all(color: context.colors.warning),
             ),
-            child: const Text(
+            child: Text(
               'Factura bloqueada por modo fiscal estricto',
               style: TextStyle(
-                color: AppColors.warning,
+                color: context.colors.warning,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -664,7 +670,7 @@ class _InvoiceDetailContent extends ConsumerWidget {
               onPressed: () => _markAs(context, ref, InvoiceStatus.enviada),
               icon: const Icon(Icons.send),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.warning,
+                backgroundColor: context.colors.warning,
               ),
               label: const Text('Marcar como facturada'),
             ),
@@ -676,7 +682,7 @@ class _InvoiceDetailContent extends ConsumerWidget {
               onPressed: () => _markAs(context, ref, InvoiceStatus.pagada),
               icon: const Icon(Icons.check_circle),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.success,
+                backgroundColor: context.colors.success,
               ),
               label: const Text('Marcar como cobrada'),
             ),
@@ -750,7 +756,7 @@ class _InvoiceDetailContent extends ConsumerWidget {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.mark_email_read_outlined),
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+            style: ElevatedButton.styleFrom(backgroundColor: context.colors.accentSoft),
             label: const Text('Enviar por email'),
           ),
         ),
@@ -783,47 +789,47 @@ class _InvoiceDetailContent extends ConsumerWidget {
     );
   }
 
-  Color get _statusBgColor {
+  Color _statusBgColor(BuildContext context) {
     if (invoice.isRectifying && invoice.status == InvoiceStatus.pagada) {
-      return AppColors.fiscalBg;
+      return context.colors.fiscalBg;
     }
     if (invoice.isRectifying && invoice.status == InvoiceStatus.enviada) {
-      return AppColors.purpleBg;
+      return context.colors.purpleBg;
     }
     switch (invoice.status) {
       case InvoiceStatus.borrador:
-        return AppColors.primaryLight;
+        return context.colors.accentSoftBg;
       case InvoiceStatus.enviada:
-        return AppColors.warningBg;
+        return context.colors.warningBg;
       case InvoiceStatus.pagada:
-        return AppColors.successBg;
+        return context.colors.successBg;
     }
   }
 
-  Color get _statusTextColor {
+  Color _statusTextColor(BuildContext context) {
     if (invoice.isRectifying && invoice.status == InvoiceStatus.pagada) {
-      return AppColors.fiscal;
+      return context.colors.fiscal;
     }
     if (invoice.isRectifying && invoice.status == InvoiceStatus.enviada) {
-      return AppColors.purple;
+      return context.colors.purple;
     }
     switch (invoice.status) {
       case InvoiceStatus.borrador:
-        return AppColors.primary;
+        return context.colors.accentSoft;
       case InvoiceStatus.enviada:
-        return AppColors.warning;
+        return context.colors.warning;
       case InvoiceStatus.pagada:
-        return AppColors.success;
+        return context.colors.success;
     }
   }
 
-  Widget _tableHeader(String text) {
+  Widget _tableHeader(BuildContext context, String text) {
     return Padding(
       padding: const EdgeInsets.all(8),
       child: Text(
         text,
-        style: const TextStyle(
-          color: Colors.white,
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.onPrimary,
           fontWeight: FontWeight.bold,
           fontSize: 11,
         ),
@@ -1226,15 +1232,15 @@ class _InvoiceDetailContent extends ConsumerWidget {
                             color:
                                 selectedRectificationType ==
                                     RectificationType.substitution
-                                ? AppColors.primaryLight
+                                ? context.colors.accentSoftBg
                                 : Colors.transparent,
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
                               color:
                                   selectedRectificationType ==
                                       RectificationType.substitution
-                                  ? AppColors.primary
-                                  : AppColors.divider,
+                                  ? context.colors.accentSoft
+                                  : context.colors.border,
                             ),
                           ),
                           child: Column(
@@ -1273,15 +1279,15 @@ class _InvoiceDetailContent extends ConsumerWidget {
                             color:
                                 selectedRectificationType ==
                                     RectificationType.difference
-                                ? AppColors.primaryLight
+                                ? context.colors.accentSoftBg
                                 : Colors.transparent,
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
                               color:
                                   selectedRectificationType ==
                                       RectificationType.difference
-                                  ? AppColors.primary
-                                  : AppColors.divider,
+                                  ? context.colors.accentSoft
+                                  : context.colors.border,
                             ),
                           ),
                           child: const Column(
@@ -1423,15 +1429,15 @@ class _RecommendedChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: AppColors.primaryLight,
+        color: context.colors.accentSoftBg,
         borderRadius: BorderRadius.circular(999),
       ),
-      child: const Text(
+      child: Text(
         'Recomendado',
         style: TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.w700,
-          color: AppColors.primary,
+          color: context.colors.accentSoft,
         ),
       ),
     );
@@ -1448,9 +1454,9 @@ class _EmailLogSection extends StatelessWidget {
     if (logs.isEmpty) return const SizedBox.shrink();
     final latest = logs.first;
     final color = switch (latest.status) {
-      InvoiceEmailStatus.sent => AppColors.success,
-      InvoiceEmailStatus.failed => AppColors.error,
-      InvoiceEmailStatus.pending => AppColors.warning,
+      InvoiceEmailStatus.sent => context.colors.success,
+      InvoiceEmailStatus.failed => context.colors.error,
+      InvoiceEmailStatus.pending => context.colors.warning,
     };
     final label = switch (latest.status) {
       InvoiceEmailStatus.sent => 'Enviada por email',
@@ -1472,9 +1478,9 @@ class _EmailLogSection extends StatelessWidget {
         ),
         trailing: Text(
           '${logs.length}',
-          style: const TextStyle(
+          style: TextStyle(
             fontWeight: FontWeight.bold,
-            color: AppColors.textSecondary,
+            color: context.colors.textSecondary,
           ),
         ),
       ),
