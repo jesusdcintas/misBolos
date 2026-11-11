@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/theme/app_theme_colors.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../widgets/common/animated_facturable_toggle.dart';
@@ -85,10 +86,13 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
           children: [
             // Fecha
             Card(
+              // Sin el margen horizontal del tema, que metía esta tarjeta
+              // 16 px por dentro de los campos de alrededor.
+              margin: EdgeInsets.zero,
               child: ListTile(
-                leading: const Icon(
+                leading: Icon(
                   Icons.calendar_today,
-                  color: AppColors.primary,
+                  color: Theme.of(context).colorScheme.primary,
                 ),
                 title: const Text(AppStrings.fecha),
                 subtitle: Text(DateFormatter.display(_fecha)),
@@ -225,6 +229,7 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
 
             // Franja del día
             Card(
+              margin: EdgeInsets.zero,
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -248,7 +253,17 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
                             ),
                         ],
                         selected: {_franja},
-                        showSelectedIcon: false,
+                        // La opción elegida se marca con el color de acento y
+                        // un check; sin esto apenas se distinguía en oscuro.
+                        style: SegmentedButton.styleFrom(
+                          selectedBackgroundColor: Theme.of(
+                            context,
+                          ).colorScheme.primary,
+                          selectedForegroundColor: Theme.of(
+                            context,
+                          ).colorScheme.onPrimary,
+                          foregroundColor: context.colors.textPrimary,
+                        ),
                         onSelectionChanged: (seleccion) {
                           if (seleccion.isEmpty) return;
                           setState(() => _franja = seleccion.first);
@@ -327,12 +342,12 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
               child: ElevatedButton.icon(
                 onPressed: _isLoading ? null : _save,
                 icon: _isLoading
-                    ? const SizedBox(
+                    ? SizedBox(
                         width: 20,
                         height: 20,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white,
+                          color: Theme.of(context).colorScheme.onPrimary,
                         ),
                       )
                     : const Icon(Icons.save),

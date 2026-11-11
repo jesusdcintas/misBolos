@@ -32,7 +32,9 @@ class AppTheme {
       primary: primary,
       surface: colors.surface,
       error: colors.error,
-      onPrimary: Colors.white,
+      // En oscuro el primary es un azul claro: el texto blanco encima se
+      // quedaba en 2,48:1. Con el fondo de la app encima sube a 7,54:1.
+      onPrimary: isDark ? colors.scaffoldBackground : Colors.white,
       onSurface: colors.textPrimary,
       onSurfaceVariant: colors.textSecondary,
     );
@@ -154,7 +156,7 @@ class AppTheme {
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: primary,
-          foregroundColor: Colors.white,
+          foregroundColor: isDark ? colors.scaffoldBackground : Colors.white,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           elevation: 0,
