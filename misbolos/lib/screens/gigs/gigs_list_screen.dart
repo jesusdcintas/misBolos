@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/theme/app_theme_colors.dart';
 import '../../core/utils/currency_formatter.dart';
@@ -426,16 +425,16 @@ class _GigsListScreenState extends ConsumerState<GigsListScreen> {
                           Icon(
                             Icons.music_off,
                             size: 64,
-                            color: AppColors.textSecondary.withValues(
+                            color: context.colors.textSecondary.withValues(
                               alpha: 0.5,
                             ),
                           ),
                           const SizedBox(height: 16),
-                          const Text(
+                          Text(
                             'No hay bolos con estos filtros',
                             style: TextStyle(
                               fontSize: 16,
-                              color: AppColors.textSecondary,
+                              color: context.colors.textSecondary,
                             ),
                           ),
                         ],
@@ -580,8 +579,8 @@ class _GigsListScreenState extends ConsumerState<GigsListScreen> {
                     ? Icons.radio_button_checked
                     : Icons.radio_button_unchecked,
                 color: selectedMonth == null
-                    ? AppColors.primary
-                    : AppColors.textSecondary,
+                    ? context.colors.accentSoft
+                    : context.colors.textSecondary,
               ),
               title: const Text('Todos los meses'),
               contentPadding: EdgeInsets.zero,
@@ -620,17 +619,17 @@ class _GigsListScreenState extends ConsumerState<GigsListScreen> {
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: isSelected
-                          ? AppColors.primary
+                          ? Theme.of(context).colorScheme.primary
                           : hasData
-                          ? AppColors.primaryLight
-                          : AppColors.surface,
+                          ? context.colors.accentSoftBg
+                          : context.colors.surface,
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
                         color: isSelected
-                            ? AppColors.primary
+                            ? context.colors.accentSoft
                             : hasData
-                            ? AppColors.cardBorder
-                            : AppColors.divider,
+                            ? context.colors.border
+                            : context.colors.border,
                       ),
                     ),
                     child: Column(
@@ -644,10 +643,10 @@ class _GigsListScreenState extends ConsumerState<GigsListScreen> {
                                 ? FontWeight.bold
                                 : FontWeight.normal,
                             color: isSelected
-                                ? Colors.white
+                                ? Theme.of(context).colorScheme.onPrimary
                                 : hasData
-                                ? AppColors.textPrimary
-                                : AppColors.textSecondary.withValues(
+                                ? context.colors.textPrimary
+                                : context.colors.textSecondary.withValues(
                                     alpha: 0.4,
                                   ),
                           ),
@@ -658,8 +657,8 @@ class _GigsListScreenState extends ConsumerState<GigsListScreen> {
                             style: TextStyle(
                               fontSize: 10,
                               color: isSelected
-                                  ? Colors.white70
-                                  : AppColors.textSecondary,
+                                  ? Theme.of(context).colorScheme.onPrimary.withValues(alpha: 0.75)
+                                  : context.colors.textSecondary,
                             ),
                           ),
                       ],
@@ -993,7 +992,7 @@ class _ClientSheetContentState extends State<_ClientSheetContent> {
           width: 40,
           height: 4,
           decoration: BoxDecoration(
-            color: AppColors.textSecondary.withValues(alpha: 0.3),
+            color: context.colors.textSecondary.withValues(alpha: 0.3),
             borderRadius: BorderRadius.circular(2),
           ),
         ),
@@ -1086,20 +1085,20 @@ class _GigListTile extends ConsumerWidget {
       background: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         decoration: BoxDecoration(
-          color: AppColors.primary,
+          color: Theme.of(context).colorScheme.primary,
           borderRadius: BorderRadius.circular(14),
         ),
         alignment: Alignment.centerLeft,
         padding: const EdgeInsets.only(left: 20),
-        child: const Column(
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.more_horiz, color: Colors.white, size: 24),
-            SizedBox(height: 4),
+            Icon(Icons.more_horiz, color: Theme.of(context).colorScheme.onPrimary, size: 24),
+            const SizedBox(height: 4),
             Text(
               'Opciones',
               style: TextStyle(
-                color: Colors.white,
+                color: Theme.of(context).colorScheme.onPrimary,
                 fontSize: 11,
                 fontWeight: FontWeight.w500,
               ),
@@ -1110,20 +1109,20 @@ class _GigListTile extends ConsumerWidget {
       secondaryBackground: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         decoration: BoxDecoration(
-          color: AppColors.success,
+          color: context.colors.success,
           borderRadius: BorderRadius.circular(14),
         ),
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20),
-        child: const Column(
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.visibility, color: Colors.white, size: 24),
-            SizedBox(height: 4),
+            Icon(Icons.visibility, color: Theme.of(context).colorScheme.onPrimary, size: 24),
+            const SizedBox(height: 4),
             Text(
               'Ver',
               style: TextStyle(
-                color: Colors.white,
+                color: Theme.of(context).colorScheme.onPrimary,
                 fontSize: 11,
                 fontWeight: FontWeight.w500,
               ),
@@ -1145,13 +1144,13 @@ class _GigListTile extends ConsumerWidget {
               height: 44,
               decoration: BoxDecoration(
                 color: gig.facturable
-                    ? AppColors.primaryLight
-                    : AppColors.purpleBg,
+                    ? context.colors.accentSoftBg
+                    : context.colors.purpleBg,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
                 Icons.music_note_outlined,
-                color: gig.facturable ? AppColors.primary : AppColors.purple,
+                color: gig.facturable ? context.colors.accentSoft : context.colors.purple,
                 size: 22,
               ),
             ),
@@ -1189,13 +1188,13 @@ class _GigListTile extends ConsumerWidget {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: AppColors.textSecondary.withValues(alpha: 0.3),
+                  color: context.colors.textSecondary.withValues(alpha: 0.3),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
               const SizedBox(height: 16),
               ListTile(
-                leading: const Icon(Icons.edit, color: AppColors.primary),
+                leading: Icon(Icons.edit, color: context.colors.accentSoft),
                 title: const Text('Editar bolo'),
                 onTap: () {
                   Navigator.pop(ctx);
@@ -1205,9 +1204,9 @@ class _GigListTile extends ConsumerWidget {
               if (gig.facturable &&
                   (gig.invoiceId == null || gig.invoiceId!.isEmpty))
                 ListTile(
-                  leading: const Icon(
+                  leading: Icon(
                     Icons.receipt_long,
-                    color: AppColors.success,
+                    color: context.colors.success,
                   ),
                   title: const Text('Generar factura'),
                   onTap: () {
@@ -1217,7 +1216,7 @@ class _GigListTile extends ConsumerWidget {
                 ),
               if (gig.invoiceId != null && gig.invoiceId!.isNotEmpty)
                 ListTile(
-                  leading: const Icon(Icons.receipt, color: AppColors.success),
+                  leading: Icon(Icons.receipt, color: context.colors.success),
                   title: const Text('Ver factura'),
                   onTap: () {
                     Navigator.pop(ctx);
@@ -1225,7 +1224,7 @@ class _GigListTile extends ConsumerWidget {
                   },
                 ),
               ListTile(
-                leading: const Icon(Icons.cancel, color: AppColors.warning),
+                leading: Icon(Icons.cancel, color: context.colors.warning),
                 title: const Text('Marcar como cancelado'),
                 onTap: () {
                   AppHaptics.medium();
