@@ -60,7 +60,9 @@ class PeriodSelector extends ConsumerWidget {
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: isSelected ? Colors.white : primary,
+                        color: isSelected
+                            ? Theme.of(context).colorScheme.onPrimary
+                            : primary,
                       ),
                     ),
                   ),

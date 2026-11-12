@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import '../../core/constants/app_colors.dart';
 import '../../models/expense.dart';
 import '../../providers/expenses_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../services/ai_attachment_service.dart';
 import '../../services/document_text_extractor.dart';
 import '../../services/expense_pdf_parser.dart';
+import '../../core/theme/app_theme_colors.dart';
 
 class ExpenseFormScreen extends ConsumerStatefulWidget {
   final int? expenseId;
@@ -300,10 +300,10 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
           padding: const EdgeInsets.all(16),
           children: [
             if (_avisoAutorrelleno) ...[
-              const _AvisoPdf(
+              _AvisoPdf(
                 icon: Icons.fact_check_outlined,
-                color: AppColors.warning,
-                background: AppColors.warningBg,
+                color: context.colors.warning,
+                background: context.colors.warningBg,
                 texto:
                     'Los datos se han leído automáticamente del PDF. Comprueba '
                     'la fecha, el total y el proveedor antes de guardar.',
@@ -314,9 +314,9 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
             // Fecha
             ListTile(
               contentPadding: EdgeInsets.zero,
-              leading: const Icon(
+              leading: Icon(
                 Icons.calendar_today_outlined,
-                color: AppColors.primary,
+                color: context.colors.accentSoft,
               ),
               title: const Text('Fecha'),
               subtitle: Text(dateFmt.format(_fecha)),
@@ -398,9 +398,9 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
             const SizedBox(height: 16),
 
             // Justificante
-            const Text(
+            Text(
               'Justificante',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+              style: TextStyle(color: context.colors.textSecondary, fontSize: 13),
             ),
             const SizedBox(height: 6),
             if (_documentoPath != null)
@@ -426,10 +426,10 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
             ),
             if (_pdfSinTexto) ...[
               const SizedBox(height: 8),
-              const _AvisoPdf(
+              _AvisoPdf(
                 icon: Icons.info_outline,
-                color: AppColors.textSecondary,
-                background: AppColors.primaryLight,
+                color: context.colors.textSecondary,
+                background: context.colors.accentSoftBg,
                 texto:
                     'Este PDF no tiene texto legible. Introduce los datos '
                     'manualmente.',
@@ -437,10 +437,10 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
             ],
             if (widget.expenseId == null) ...[
               const SizedBox(height: 8),
-              const _AvisoPdf(
+              _AvisoPdf(
                 icon: Icons.phone_iphone,
-                color: AppColors.textSecondary,
-                background: AppColors.primaryLight,
+                color: context.colors.textSecondary,
+                background: context.colors.accentSoftBg,
                 texto:
                     '¿Tienes una foto del ticket? En iPhone puedes convertirla '
                     'a PDF: Compartir → Imprimir → Guardar como PDF, o usa '
@@ -474,20 +474,20 @@ class _EtiquetaSugerido extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: AppColors.warningBg,
+        color: context.colors.warningBg,
         borderRadius: BorderRadius.circular(10),
       ),
-      child: const Row(
+      child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.auto_fix_high, size: 12, color: AppColors.warning),
+          Icon(Icons.auto_fix_high, size: 12, color: context.colors.warning),
           SizedBox(width: 4),
           Text(
             'Sugerido',
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w600,
-              color: AppColors.warning,
+              color: context.colors.warning,
             ),
           ),
         ],

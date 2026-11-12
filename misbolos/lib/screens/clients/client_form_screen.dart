@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_strings.dart';
 import '../../models/client.dart';
 import '../../providers/client_provider.dart';
+import '../../core/theme/app_theme_colors.dart';
 
 class ClientFormScreen extends ConsumerStatefulWidget {
   final String? clientId;
@@ -135,9 +135,9 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
                               onDeleted: () {
                                 setState(() => _aliases.remove(a));
                               },
-                              backgroundColor: AppColors.primaryLight,
-                              labelStyle: const TextStyle(
-                                color: AppColors.primary,
+                              backgroundColor: context.colors.accentSoftBg,
+                              labelStyle: TextStyle(
+                                color: context.colors.accentSoft,
                               ),
                             ),
                           )
@@ -159,9 +159,9 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
                         ),
                       ),
                       IconButton(
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.add_circle_outline,
-                          color: AppColors.primary,
+                          color: context.colors.accentSoft,
                         ),
                         onPressed: _addAlias,
                         tooltip: 'Añadir',
@@ -257,12 +257,12 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
               child: ElevatedButton.icon(
                 onPressed: _isLoading ? null : _save,
                 icon: _isLoading
-                    ? const SizedBox(
+                    ? SizedBox(
                         width: 20,
                         height: 20,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white,
+                          color: Theme.of(context).colorScheme.onPrimary,
                         ),
                       )
                     : const Icon(Icons.save),

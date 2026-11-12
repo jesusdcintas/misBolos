@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/constants/app_colors.dart';
 import '../../database/database_helper.dart';
 import '../../models/client.dart';
 import '../../providers/client_provider.dart';
 import '../../providers/gig_provider.dart';
 import '../../providers/invoice_provider.dart';
+import '../../core/theme/app_theme_colors.dart';
 
 // ==================== UTILIDADES ====================
 
@@ -229,7 +229,7 @@ class _DuplicateClientsScreenState
         SnackBar(
           content: Text(
               'Fusionados ${duplicates.length + 1} clientes → ${keep.nombre}'),
-          backgroundColor: AppColors.success,
+          backgroundColor: context.colors.success,
         ),
       );
     }
@@ -250,13 +250,13 @@ class _DuplicateClientsScreenState
                     children: [
                       Icon(Icons.check_circle_outline,
                           size: 64,
-                          color: AppColors.success.withValues(alpha: 0.5)),
+                          color: context.colors.success.withValues(alpha: 0.5)),
                       const SizedBox(height: 16),
                       Text(
                         'No se encontraron duplicados',
                         style: TextStyle(
                           fontSize: 16,
-                          color: AppColors.textSecondary,
+                          color: context.colors.textSecondary,
                         ),
                       ),
                     ],
@@ -318,7 +318,7 @@ class _DuplicateGroupCardState extends State<_DuplicateGroupCard> {
             Row(
               children: [
                 Icon(Icons.warning_amber_rounded,
-                    color: AppColors.warning, size: 20),
+                    color: context.colors.warning, size: 20),
                 const SizedBox(width: 8),
                 Text(
                   '${widget.group.length} posibles duplicados',
@@ -330,9 +330,9 @@ class _DuplicateGroupCardState extends State<_DuplicateGroupCard> {
               ],
             ),
             const SizedBox(height: 12),
-            const Text(
+            Text(
               'Selecciona el cliente que quieres conservar:',
-              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              style: TextStyle(fontSize: 13, color: context.colors.textSecondary),
             ),
             const SizedBox(height: 8),
             RadioGroup<String>(
@@ -359,15 +359,15 @@ class _DuplicateGroupCardState extends State<_DuplicateGroupCard> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 2),
                             decoration: BoxDecoration(
-                              color: AppColors.successBg,
+                              color: context.colors.successBg,
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            child: const Text(
+                            child: Text(
                               'Recomendado',
                               style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold,
-                                color: AppColors.success,
+                                color: context.colors.success,
                               ),
                             ),
                           ),
@@ -420,7 +420,7 @@ class _DuplicateGroupCardState extends State<_DuplicateGroupCard> {
                               ElevatedButton(
                                 onPressed: () => Navigator.pop(ctx, true),
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.warning,
+                                  backgroundColor: context.colors.warning,
                                 ),
                                 child: const Text('Fusionar'),
                               ),
@@ -434,11 +434,13 @@ class _DuplicateGroupCardState extends State<_DuplicateGroupCard> {
                         }
                       },
                 icon: _merging
-                    ? const SizedBox(
+                    ? SizedBox(
                         width: 18,
                         height: 18,
                         child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white),
+                            strokeWidth: 2,
+                            color: Theme.of(context).colorScheme.onPrimary,
+                          ),
                       )
                     : const Icon(Icons.merge_type),
                 label: const Text('Fusionar'),

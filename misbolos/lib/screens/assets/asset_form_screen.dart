@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import '../../core/constants/app_colors.dart';
 import '../../models/asset.dart';
 import '../../providers/assets_provider.dart';
 import '../../services/ai_attachment_service.dart';
+import '../../core/theme/app_theme_colors.dart';
 
 class AssetFormScreen extends ConsumerStatefulWidget {
   final int? assetId;
@@ -247,10 +247,10 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(
+                Icon(
                   Icons.lock_outline,
                   size: 48,
-                  color: AppColors.textSecondary,
+                  color: context.colors.textSecondary,
                 ),
                 const SizedBox(height: 16),
                 const Text(
@@ -259,13 +259,13 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 8),
-                const Text(
+                Text(
                   'Crea el movimiento como "gasto o inversión" y tu gestoría '
                   'decidirá su clasificación.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 13,
-                    color: AppColors.textSecondary,
+                    color: context.colors.textSecondary,
                   ),
                 ),
                 const SizedBox(height: 24),
@@ -331,16 +331,16 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
                           Icon(
                             cat.icono,
                             size: 18,
-                            color: AppColors.textSecondary,
+                            color: context.colors.textSecondary,
                           ),
                           const SizedBox(width: 8),
                           Text(cat.label),
                           const SizedBox(width: 4),
                           Text(
                             '(${(cat.coeficienteMaxHacienda * 100).toStringAsFixed(0)}% máx.)',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 11,
-                              color: AppColors.textSecondary,
+                              color: context.colors.textSecondary,
                             ),
                           ),
                         ],
@@ -355,9 +355,9 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
             // Fecha de compra
             ListTile(
               contentPadding: EdgeInsets.zero,
-              leading: const Icon(
+              leading: Icon(
                 Icons.calendar_today_outlined,
-                color: AppColors.primary,
+                color: context.colors.accentSoft,
               ),
               title: const Text('Fecha de compra'),
               subtitle: Text(dateFmt.format(_fechaCompra)),
@@ -411,9 +411,9 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppColors.primaryLight,
+                  color: context.colors.accentSoftBg,
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppColors.cardBorder),
+                  border: Border.all(color: context.colors.border),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -434,11 +434,11 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
                       ).format(_ivaAmount),
                     ),
                     const SizedBox(height: 4),
-                    const Text(
+                    Text(
                       'El IVA se deduce como gasto en el trimestre de compra',
                       style: TextStyle(
                         fontSize: 11,
-                        color: AppColors.textSecondary,
+                        color: context.colors.textSecondary,
                         fontStyle: FontStyle.italic,
                       ),
                     ),
@@ -486,18 +486,18 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppColors.primaryLight,
+                  color: context.colors.accentSoftBg,
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppColors.cardBorder),
+                  border: Border.all(color: context.colors.border),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'Preview amortización lineal',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: AppColors.primary,
+                        color: context.colors.accentSoft,
                         fontSize: 13,
                       ),
                     ),
@@ -527,19 +527,19 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppColors.successBg,
+                    color: context.colors.successBg,
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                      color: AppColors.success.withValues(alpha: 0.3),
+                      color: context.colors.success.withValues(alpha: 0.3),
                     ),
                   ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.savings_outlined,
                         size: 18,
-                        color: AppColors.success,
+                        color: context.colors.success,
                       ),
                       const SizedBox(width: 8),
                       Expanded(
@@ -548,18 +548,18 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
                           children: [
                             Text(
                               'IVA deducible este trimestre: ${moneyFmt.format(_ivaAmount)}',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 13,
-                                color: AppColors.success,
+                                color: context.colors.success,
                               ),
                             ),
                             const SizedBox(height: 2),
-                            const Text(
+                            Text(
                               'Se deduce como gasto en el trimestre de la compra, no se amortiza',
                               style: TextStyle(
                                 fontSize: 11,
-                                color: AppColors.success,
+                                color: context.colors.success,
                               ),
                             ),
                           ],
@@ -572,9 +572,9 @@ class _AssetFormScreenState extends ConsumerState<AssetFormScreen> {
             const SizedBox(height: 16),
 
             // Justificante
-            const Text(
+            Text(
               'Justificante (factura de compra)',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+              style: TextStyle(color: context.colors.textSecondary, fontSize: 13),
             ),
             const SizedBox(height: 6),
             if (_documentoPath != null)
@@ -638,7 +638,7 @@ class _PreviewRow extends StatelessWidget {
             label,
             style: TextStyle(
               fontSize: 12,
-              color: AppColors.textSecondary,
+              color: context.colors.textSecondary,
               fontWeight: bold ? FontWeight.bold : FontWeight.normal,
             ),
           ),
@@ -647,7 +647,7 @@ class _PreviewRow extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: bold ? FontWeight.bold : FontWeight.normal,
-              color: bold ? AppColors.primary : AppColors.textPrimary,
+              color: bold ? context.colors.accentSoft : context.colors.textPrimary,
             ),
           ),
         ],

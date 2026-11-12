@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../providers/stats_provider.dart';
 import 'period_selector.dart';
 import 'summary_card.dart';
+import '../../core/theme/app_theme_colors.dart';
 
 /// Grupo de métricas que muestra una sección.
 enum PeriodMetricsScope { oficial, privado, global }
@@ -82,7 +82,7 @@ class _MetricasOficial extends StatelessWidget {
               title: 'Cobrado',
               value: CurrencyFormatter.format(stats.cobradoOficial),
               numericValue: stats.cobradoOficial,
-              color: AppColors.success,
+              color: context.colors.success,
               icon: Icons.check_circle_outline,
               showChevron: true,
               onTap: () => context.push('/financial'),
@@ -91,19 +91,19 @@ class _MetricasOficial extends StatelessWidget {
                 children: [
                   Text(
                     '(facturas: ${CurrencyFormatter.format(stats.cobradoFacturas)}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
-                      color: Color(0xFF8C95A6),
+                      color: context.colors.textSecondary,
                     ),
                   ),
                   Text(
                     ' + histórico: ${CurrencyFormatter.format(stats.cobradoHistorico)})',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
-                      color: Color(0xFF8C95A6),
+                      color: context.colors.textSecondary,
                     ),
                   ),
-                  _buildComparison(
+                  _buildComparison(context, 
                     stats.cobradoOficial,
                     stats.prevCobrado,
                     stats.prevLabel,
@@ -123,15 +123,15 @@ class _MetricasOficial extends StatelessWidget {
               title: 'Pendiente de cobro',
               value: CurrencyFormatter.format(stats.pendiente),
               numericValue: stats.pendiente,
-              color: AppColors.warning,
+              color: context.colors.warning,
               icon: Icons.schedule,
               showChevron: true,
               onTap: () => context.go('/finanzas'),
               subtitle: Text(
                 '(${stats.pendienteCount} factura${stats.pendienteCount == 1 ? '' : 's'} emitida${stats.pendienteCount == 1 ? '' : 's'} sin cobrar)',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
-                  color: Color(0xFF8C95A6),
+                  color: context.colors.textSecondary,
                 ),
               ),
               onInfoTap: () => _showMetricInfo(
@@ -151,12 +151,12 @@ class _MetricasOficial extends StatelessWidget {
           title: 'Confirmado',
           value: CurrencyFormatter.format(stats.previstoConfirmado),
           numericValue: stats.previstoConfirmado,
-          color: AppColors.primary,
+          color: context.colors.accentSoft,
           icon: Icons.event_available,
-          backgroundColor: const Color(0xFFEEF1F7),
+          backgroundColor: context.colors.accentSoftBg,
           subtitle: Text(
             '(${stats.previstoConfirmadoCount} bolo${stats.previstoConfirmadoCount == 1 ? '' : 's'} confirmado${stats.previstoConfirmadoCount == 1 ? '' : 's'} en agenda\n aún no realizado${stats.previstoConfirmadoCount == 1 ? '' : 's'} ni facturado${stats.previstoConfirmadoCount == 1 ? '' : 's'})',
-            style: const TextStyle(fontSize: 11, color: Color(0xFF8C95A6)),
+            style: TextStyle(fontSize: 11, color: context.colors.textSecondary),
           ),
               onInfoTap: () => _showMetricInfo(
             context,
@@ -175,13 +175,13 @@ class _MetricasOficial extends StatelessWidget {
               title: 'Acumulado',
               value: CurrencyFormatter.format(stats.acumulado),
               numericValue: stats.acumulado,
-              color: const Color(0xFF0F5C3A),
+              color: context.colors.success,
               icon: Icons.account_balance,
               subtitle: Text(
                 '(cobrado oficial ${CurrencyFormatter.format(stats.cobradoOficial)}\n + pendiente de cobro ${CurrencyFormatter.format(stats.pendiente)})',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
-                  color: Color(0xFF8C95A6),
+                  color: context.colors.textSecondary,
                 ),
               ),
               onInfoTap: () => _showMetricInfo(
@@ -197,7 +197,7 @@ class _MetricasOficial extends StatelessWidget {
               title: 'Proyección oficial',
               value: CurrencyFormatter.format(stats.totalPrevisto),
               numericValue: stats.totalPrevisto,
-              color: const Color(0xFF5F5E5A),
+              color: context.colors.draft,
               icon: Icons.trending_up,
               subtitle: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -206,17 +206,17 @@ class _MetricasOficial extends StatelessWidget {
                     '(acumulado ${CurrencyFormatter.format(stats.acumulado)}'
                     '\n + confirmado ${CurrencyFormatter.format(stats.previstoConfirmado)}'
                     '\n + borrador ${CurrencyFormatter.format(stats.previstoBorrador)})',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
-                      color: Color(0xFF8C95A6),
+                      color: context.colors.textSecondary,
                     ),
                   ),
-                  const Text(
+                  Text(
                     '· proyección',
                     style: TextStyle(
                       fontSize: 10,
                       fontStyle: FontStyle.italic,
-                      color: Color(0xFF8C95A6),
+                      color: context.colors.textSecondary,
                     ),
                   ),
                 ],
@@ -243,16 +243,16 @@ class _MetricasOficial extends StatelessWidget {
                 : 'IVA acumulado',
             value: CurrencyFormatter.format(stats.ivaTotalEstimado),
             numericValue: stats.ivaTotalEstimado,
-            color: AppColors.primary,
+            color: context.colors.accentSoft,
             icon: Icons.description_outlined,
             showChevron: true,
             onTap: () => context.push('/stats'),
             subtitle: stats.ivaHistoricoEstimado > 0
                 ? Text(
                     '(facturas: ${CurrencyFormatter.format(stats.ivaAcumulado)} + est. histórico: ${CurrencyFormatter.format(stats.ivaHistoricoEstimado)})',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
-                      color: Color(0xFF8C95A6),
+                      color: context.colors.textSecondary,
                     ),
                   )
                 : null,
@@ -280,7 +280,7 @@ class _MetricasPrivado extends StatelessWidget {
         AppStrings.ingresosEnB,
         style: Theme.of(context).textTheme.titleMedium?.copyWith(
           fontWeight: FontWeight.bold,
-          color: AppColors.purple,
+          color: context.colors.purple,
         ),
       ),
       const SizedBox(height: 8),
@@ -291,15 +291,15 @@ class _MetricasPrivado extends StatelessWidget {
               title: 'Cobrado privado',
               value: CurrencyFormatter.format(stats.cobradoEnB),
               numericValue: stats.cobradoEnB,
-              color: AppColors.purple,
+              color: context.colors.purple,
               icon: Icons.money_off_outlined,
               showChevron: true,
               onTap: () => context.push('/financial'),
               subtitle: Text(
                 '(${stats.numBolosB} evento${stats.numBolosB == 1 ? '' : 's'} privado${stats.numBolosB == 1 ? '' : 's'})',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
-                  color: Color(0xFF8C95A6),
+                  color: context.colors.textSecondary,
                 ),
               ),
             ),
@@ -310,15 +310,15 @@ class _MetricasPrivado extends StatelessWidget {
               title: 'Pendiente de cobro privado',
               value: CurrencyFormatter.format(stats.pendienteEnB),
               numericValue: stats.pendienteEnB,
-              color: AppColors.purple,
+              color: context.colors.purple,
               icon: Icons.hourglass_empty_outlined,
               showChevron: true,
               onTap: () => context.push('/financial'),
               subtitle: Text(
                 '(${stats.pendienteEnBCount} evento${stats.pendienteEnBCount == 1 ? '' : 's'} privado${stats.pendienteEnBCount == 1 ? '' : 's'} realizado${stats.pendienteEnBCount == 1 ? '' : 's'} sin cobrar)',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
-                  color: Color(0xFF8C95A6),
+                  color: context.colors.textSecondary,
                 ),
               ),
             ),
@@ -333,13 +333,13 @@ class _MetricasPrivado extends StatelessWidget {
               title: 'Confirmado privado',
               value: CurrencyFormatter.format(stats.previstoEnB),
               numericValue: stats.previstoEnB,
-              color: AppColors.purple,
+              color: context.colors.purple,
               icon: Icons.account_balance,
               subtitle: Text(
                 '(${stats.previstoEnBCount} evento${stats.previstoEnBCount == 1 ? '' : 's'} privado${stats.previstoEnBCount == 1 ? '' : 's'} cerrado${stats.previstoEnBCount == 1 ? '' : 's'})',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
-                  color: Color(0xFF8C95A6),
+                  color: context.colors.textSecondary,
                 ),
               ),
               onInfoTap: () => _showMetricInfo(
@@ -355,13 +355,13 @@ class _MetricasPrivado extends StatelessWidget {
               title: 'Proyección privada',
               value: CurrencyFormatter.format(stats.totalPrevistoEnB),
               numericValue: stats.totalPrevistoEnB,
-              color: AppColors.purple,
+              color: context.colors.purple,
               icon: Icons.trending_up,
               subtitle: Text(
                 '(cobrado ${CurrencyFormatter.format(stats.cobradoEnB)}\n + pendiente ${CurrencyFormatter.format(stats.pendienteEnB)}\n + confirmado ${CurrencyFormatter.format(stats.previstoEnB)})',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
-                  color: Color(0xFF8C95A6),
+                  color: context.colors.textSecondary,
                 ),
               ),
               onInfoTap: () => _showMetricInfo(
@@ -403,13 +403,13 @@ class _MetricasGlobal extends StatelessWidget {
               title: 'Cobrado total',
               value: CurrencyFormatter.format(stats.cobrado),
               numericValue: stats.cobrado,
-              color: AppColors.success,
+              color: context.colors.success,
               icon: Icons.check_circle_outline,
               subtitle: Text(
                 '(oficial ${CurrencyFormatter.format(stats.cobradoOficial)}\n + privado ${CurrencyFormatter.format(stats.cobradoEnB)})',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
-                  color: Color(0xFF8C95A6),
+                  color: context.colors.textSecondary,
                 ),
               ),
               onInfoTap: () => _showMetricInfo(
@@ -425,15 +425,15 @@ class _MetricasGlobal extends StatelessWidget {
               title: 'Proyección global',
               value: CurrencyFormatter.format(stats.totalPrevistoGlobal),
               numericValue: stats.totalPrevistoGlobal,
-              color: AppColors.warning,
+              color: context.colors.warning,
               icon: Icons.schedule,
               subtitle: Text(
                 '(acumulado ${CurrencyFormatter.format(stats.acumuladoTotal)}'
                 '\n + confirmado ${CurrencyFormatter.format(stats.previstoConfirmado + stats.previstoEnB)}'
                 '\n + borrador ${CurrencyFormatter.format(stats.previstoBorrador)})',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
-                  color: Color(0xFF8C95A6),
+                  color: context.colors.textSecondary,
                 ),
               ),
               onInfoTap: () => _showMetricInfo(
@@ -451,12 +451,12 @@ class _MetricasGlobal extends StatelessWidget {
           title: 'Confirmado total',
           value: CurrencyFormatter.format(stats.previstoTotal),
           numericValue: stats.previstoTotal,
-          color: AppColors.primary,
+          color: context.colors.accentSoft,
           icon: Icons.event_available,
-          backgroundColor: const Color(0xFFEEF1F7),
+          backgroundColor: context.colors.accentSoftBg,
           subtitle: Text(
             '(oficial ${CurrencyFormatter.format(stats.previsto)} + B ${CurrencyFormatter.format(stats.previstoEnB)})',
-            style: const TextStyle(fontSize: 11, color: Color(0xFF8C95A6)),
+            style: TextStyle(fontSize: 11, color: context.colors.textSecondary),
           ),
           onInfoTap: () => _showMetricInfo(
             context,
@@ -473,7 +473,7 @@ class _MetricasGlobal extends StatelessWidget {
               title: 'Acumulado total',
               value: CurrencyFormatter.format(stats.acumuladoTotal),
               numericValue: stats.acumuladoTotal,
-              color: const Color(0xFF0F5C3A),
+              color: context.colors.success,
               icon: Icons.account_balance,
               onInfoTap: () => _showMetricInfo(
                 context,
@@ -488,7 +488,7 @@ class _MetricasGlobal extends StatelessWidget {
               title: 'Proyección global (máxima)',
               value: CurrencyFormatter.format(stats.totalPrevistoGlobal),
               numericValue: stats.totalPrevistoGlobal,
-              color: const Color(0xFF5F5E5A),
+              color: context.colors.draft,
               icon: Icons.trending_up,
               onInfoTap: () => _showMetricInfo(
                 context,
@@ -505,7 +505,7 @@ class _MetricasGlobal extends StatelessWidget {
       SummaryCard(
         title: 'Bolos en el periodo',
         value: '${stats.totalBolos}',
-        color: AppColors.primary,
+        color: context.colors.accentSoft,
         icon: Icons.music_note_outlined,
         showChevron: true,
         onTap: () => context.go('/calendar'),
@@ -539,9 +539,9 @@ void _showMetricInfo(BuildContext context, String title, String explanation) {
           const SizedBox(height: 12),
           Text(
             explanation,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
-              color: Color(0xFF5A6070),
+              color: context.colors.textSecondary,
               height: 1.5,
             ),
           ),
@@ -551,19 +551,24 @@ void _showMetricInfo(BuildContext context, String title, String explanation) {
   );
 }
 
-Widget _buildComparison(double current, double? previous, String? label) {
+Widget _buildComparison(
+  BuildContext context,
+  double current,
+  double? previous,
+  String? label,
+) {
   if (previous == null || label == null) return const SizedBox.shrink();
 
   if (previous == 0 && current == 0) {
     return Text(
       '= igual que $label',
-      style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+      style: TextStyle(fontSize: 11, color: context.colors.textSecondary),
     );
   }
   if (previous == 0) {
     return Text(
       '↑ nuevo vs $label',
-      style: const TextStyle(fontSize: 11, color: Color(0xFF1B8A56)),
+      style: TextStyle(fontSize: 11, color: context.colors.success),
     );
   }
 
@@ -571,7 +576,7 @@ Widget _buildComparison(double current, double? previous, String? label) {
   if (pct == 0) {
     return Text(
       '= igual que $label',
-      style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+      style: TextStyle(fontSize: 11, color: context.colors.textSecondary),
     );
   }
 
@@ -580,7 +585,7 @@ Widget _buildComparison(double current, double? previous, String? label) {
     '${isUp ? '↑' : '↓'} ${isUp ? '+' : ''}$pct% vs $label',
     style: TextStyle(
       fontSize: 11,
-      color: isUp ? const Color(0xFF1B8A56) : const Color(0xFFC0392B),
+      color: isUp ? context.colors.success : context.colors.error,
     ),
   );
 }

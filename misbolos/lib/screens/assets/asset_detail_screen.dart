@@ -3,10 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import '../../core/constants/app_colors.dart';
 import '../../models/asset.dart';
 import '../../providers/assets_provider.dart';
 import '../../services/ai_attachment_service.dart';
+import '../../core/theme/app_theme_colors.dart';
 
 class AssetDetailScreen extends ConsumerWidget {
   final int assetId;
@@ -67,6 +67,7 @@ class _AssetDetailContent extends StatelessWidget {
         children: [
           // Encabezado
           Card(
+            margin: EdgeInsets.zero,
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -77,13 +78,13 @@ class _AssetDetailContent extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: AppColors.primaryLight,
+                          color: context.colors.accentSoftBg,
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Icon(
                           asset.categoria.icono,
                           size: 24,
-                          color: AppColors.primary,
+                          color: context.colors.accentSoft,
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -100,8 +101,8 @@ class _AssetDetailContent extends StatelessWidget {
                             ),
                             Text(
                               asset.categoria.label,
-                              style: const TextStyle(
-                                color: AppColors.textSecondary,
+                              style: TextStyle(
+                                color: context.colors.textSecondary,
                               ),
                             ),
                           ],
@@ -114,14 +115,14 @@ class _AssetDetailContent extends StatelessWidget {
                             vertical: 4,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.grey.shade100,
+                            color: context.colors.draftBg,
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: const Text(
+                          child: Text(
                             'Dado de baja',
                             style: TextStyle(
                               fontSize: 11,
-                              color: AppColors.textSecondary,
+                              color: context.colors.textSecondary,
                             ),
                           ),
                         ),
@@ -153,6 +154,7 @@ class _AssetDetailContent extends StatelessWidget {
 
           // Situación actual
           Card(
+            margin: EdgeInsets.zero,
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -169,7 +171,7 @@ class _AssetDetailContent extends StatelessWidget {
                         child: _ValueBox(
                           label: 'Valor contable',
                           value: moneyFmt.format(asset.valorContable),
-                          color: AppColors.primary,
+                          color: context.colors.accentSoft,
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -177,7 +179,7 @@ class _AssetDetailContent extends StatelessWidget {
                         child: _ValueBox(
                           label: 'Amortizado',
                           value: moneyFmt.format(asset.amortizacionAcumulada),
-                          color: AppColors.success,
+                          color: context.colors.success,
                         ),
                       ),
                     ],
@@ -188,10 +190,10 @@ class _AssetDetailContent extends StatelessWidget {
                     child: LinearProgressIndicator(
                       value: pct,
                       minHeight: 8,
-                      backgroundColor: AppColors.cardBorder,
+                      backgroundColor: context.colors.border,
                       color: asset.estaAmortizado
-                          ? AppColors.success
-                          : AppColors.primary,
+                          ? context.colors.success
+                          : context.colors.accentSoft,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -200,16 +202,16 @@ class _AssetDetailContent extends StatelessWidget {
                     children: [
                       Text(
                         '${(pct * 100).toStringAsFixed(1)}% amortizado',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
-                          color: AppColors.textSecondary,
+                          color: context.colors.textSecondary,
                         ),
                       ),
                       Text(
                         '${asset.anosTranscurridos} de ${asset.vidaUtilAnos} años',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
-                          color: AppColors.textSecondary,
+                          color: context.colors.textSecondary,
                         ),
                       ),
                     ],
@@ -235,6 +237,7 @@ class _AssetDetailContent extends StatelessWidget {
 
           // Tabla de amortización año a año
           Card(
+            margin: EdgeInsets.zero,
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -253,11 +256,13 @@ class _AssetDetailContent extends StatelessWidget {
                     },
                     children: [
                       TableRow(
-                        decoration: BoxDecoration(color: AppColors.primary),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
                         children: [
-                          _tableHeader('Año'),
-                          _tableHeader('Cuota'),
-                          _tableHeader('Valor contable'),
+                          _tableHeader(context, 'Año'),
+                          _tableHeader(context, 'Cuota'),
+                          _tableHeader(context, 'Valor contable'),
                         ],
                       ),
                       ...List.generate(asset.vidaUtilAnos, (i) {
@@ -269,10 +274,10 @@ class _AssetDetailContent extends StatelessWidget {
                         return TableRow(
                           decoration: BoxDecoration(
                             color: esActual
-                                ? AppColors.primaryLight
+                                ? context.colors.accentSoftBg
                                 : (i.isEven
-                                      ? Colors.white
-                                      : Colors.grey.shade50),
+                                      ? context.colors.cardBackground
+                                      : context.colors.surfaceContainer),
                           ),
                           children: [
                             _tableCell(
@@ -305,6 +310,7 @@ class _AssetDetailContent extends StatelessWidget {
           if (asset.documentoPath != null) ...[
             if (_attachmentWarning(asset.documentoPath!) case final warning?)
               Card(
+                margin: EdgeInsets.zero,
                 color: Colors.orange.shade50,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -327,10 +333,11 @@ class _AssetDetailContent extends StatelessWidget {
                 ),
               ),
             Card(
+              margin: EdgeInsets.zero,
               child: ListTile(
-                leading: const Icon(
+                leading: Icon(
                   Icons.attach_file,
-                  color: AppColors.primary,
+                  color: context.colors.accentSoft,
                 ),
                 title: Text(
                   asset.attachmentDisplayName ??
@@ -347,6 +354,7 @@ class _AssetDetailContent extends StatelessWidget {
           // Notas
           if (asset.notas != null && asset.notas!.isNotEmpty)
             Card(
+              margin: EdgeInsets.zero,
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -374,13 +382,13 @@ class _AssetDetailContent extends StatelessWidget {
               width: double.infinity,
               child: OutlinedButton.icon(
                 onPressed: () => _darDeBaja(buildContext),
-                icon: const Icon(
+                icon: Icon(
                   Icons.archive_outlined,
-                  color: AppColors.warning,
+                  color: context.colors.warning,
                 ),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.warning,
-                  side: const BorderSide(color: AppColors.warning),
+                  foregroundColor: context.colors.warning,
+                  side: BorderSide(color: context.colors.warning),
                 ),
                 label: const Text('Dar de baja'),
               ),
@@ -441,7 +449,7 @@ class _AssetDetailContent extends StatelessWidget {
             child: const Text('Cancelar'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.warning),
+            style: ElevatedButton.styleFrom(backgroundColor: context.colors.warning),
             onPressed: () => Navigator.pop(dlgCtx, true),
             child: const Text('Dar de baja'),
           ),
@@ -513,12 +521,12 @@ class _AssetDetailContent extends StatelessWidget {
     }
   }
 
-  Widget _tableHeader(String text) => Padding(
+  Widget _tableHeader(BuildContext context, String text) => Padding(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
     child: Text(
       text,
-      style: const TextStyle(
-        color: Colors.white,
+      style: TextStyle(
+        color: Theme.of(context).colorScheme.onPrimary,
         fontWeight: FontWeight.bold,
         fontSize: 11,
       ),
@@ -555,8 +563,8 @@ class _InfoRow extends StatelessWidget {
         children: [
           Text(
             label,
-            style: const TextStyle(
-              color: AppColors.textSecondary,
+            style: TextStyle(
+              color: context.colors.textSecondary,
               fontSize: 13,
             ),
           ),
@@ -603,9 +611,9 @@ class _ValueBox extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 10,
-              color: AppColors.textSecondary,
+              color: context.colors.textSecondary,
             ),
           ),
         ],

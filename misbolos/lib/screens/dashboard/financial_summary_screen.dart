@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
-import '../../core/constants/app_colors.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../models/financial_summary.dart';
 import '../../models/gig.dart';
@@ -11,6 +10,7 @@ import '../../providers/financial_summary_provider.dart';
 import '../../providers/stats_provider.dart';
 import '../../services/pdf_service.dart';
 import '../../widgets/common/dj_refresh_indicator.dart';
+import '../../core/theme/app_theme_colors.dart';
 
 class FinancialSummaryScreen extends ConsumerWidget {
   const FinancialSummaryScreen({super.key});
@@ -184,7 +184,7 @@ class _FiscalSection extends StatelessWidget {
             _bigNumber(
               context,
               icon: Icons.account_balance,
-              color: AppColors.warning,
+              color: context.colors.warning,
               label: 'IVA repercutido bruto',
               value: summary.ivaRepercutidoBruto,
             ),
@@ -201,17 +201,17 @@ class _FiscalSection extends StatelessWidget {
             ),
             if (summary.retencionSuperaIrpf) ...[
               const SizedBox(height: 4),
-              const Text(
+              Text(
                 'Los clientes han retenido más IRPF del que corresponde en '
                 'este periodo',
-                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
               ),
             ],
             const SizedBox(height: 12),
             _bigNumber(
               context,
               icon: Icons.payments,
-              color: AppColors.primary,
+              color: context.colors.accentSoft,
               label: 'Total IRPF (retenido + a ingresar)',
               value: summary.irpfTotal,
             ),
@@ -219,7 +219,7 @@ class _FiscalSection extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: AppColors.warningBg,
+                color: context.colors.warningBg,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Text(
@@ -276,9 +276,9 @@ class _FiscalSection extends StatelessWidget {
             children: [
               Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
-                  color: AppColors.textSecondary,
+                  color: context.colors.textSecondary,
                 ),
               ),
               const SizedBox(height: 2),
@@ -312,7 +312,7 @@ class _PeriodHeader extends ConsumerWidget {
           // Mode toggle
           Container(
             decoration: BoxDecoration(
-              color: AppColors.primaryLight,
+              color: context.colors.accentSoftBg,
               borderRadius: BorderRadius.circular(10),
             ),
             padding: const EdgeInsets.all(3),
@@ -335,7 +335,7 @@ class _PeriodHeader extends ConsumerWidget {
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       decoration: BoxDecoration(
                         color: isSelected
-                            ? AppColors.primary
+                            ? Theme.of(context).colorScheme.primary
                             : Colors.transparent,
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -345,7 +345,9 @@ class _PeriodHeader extends ConsumerWidget {
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: isSelected ? Colors.white : AppColors.primary,
+                          color: isSelected
+                              ? Theme.of(context).colorScheme.onPrimary
+                              : context.colors.accentSoft,
                         ),
                       ),
                     ),
@@ -385,15 +387,15 @@ class _PeriodHeader extends ConsumerWidget {
                     vertical: 8,
                   ),
                   decoration: BoxDecoration(
-                    color: AppColors.primaryLight,
+                    color: context.colors.accentSoftBg,
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
                     period.label,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
-                      color: AppColors.primary,
+                      color: context.colors.accentSoft,
                     ),
                   ),
                 ),
@@ -402,7 +404,7 @@ class _PeriodHeader extends ConsumerWidget {
                 icon: Icon(
                   Icons.chevron_right,
                   size: 28,
-                  color: period.isFuture ? AppColors.cardBorder : null,
+                  color: period.isFuture ? context.colors.border : null,
                 ),
                 onPressed: period.isFuture
                     ? null
@@ -448,9 +450,9 @@ class _SummaryCard extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               '${summary.numBolos} bolos · ${summary.numFacturasPagadas} facturas cobradas · ${summary.pendienteCount} pendientes de cobro',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
-                color: AppColors.textSecondary,
+                color: context.colors.textSecondary,
               ),
             ),
             const Divider(height: 24),
@@ -458,7 +460,7 @@ class _SummaryCard extends StatelessWidget {
             // Cobrado oficial
             _statRow(
               icon: Icons.check_circle,
-              color: AppColors.success,
+              color: context.colors.success,
               label: 'Cobrado (Facturas)',
               value: summary.cobradoFacturas,
             ),
@@ -467,7 +469,7 @@ class _SummaryCard extends StatelessWidget {
               const SizedBox(height: 14),
               _statRow(
                 icon: Icons.history,
-                color: AppColors.success,
+                color: context.colors.success,
                 label: 'Cobrado (Histórico)',
                 value: summary.cobradoHistorico,
               ),
@@ -477,7 +479,7 @@ class _SummaryCard extends StatelessWidget {
             // Pendiente
             _statRow(
               icon: Icons.schedule,
-              color: AppColors.warning,
+              color: context.colors.warning,
               label: 'Pendiente de cobro',
               value: summary.pendiente,
             ),
@@ -486,7 +488,7 @@ class _SummaryCard extends StatelessWidget {
             // Eventos privados
             _statRow(
               icon: Icons.money_off,
-              color: AppColors.purple,
+              color: context.colors.purple,
               label: 'Cobrado privado',
               value: summary.cobradoEnB,
             ),
@@ -495,7 +497,7 @@ class _SummaryCard extends StatelessWidget {
               const SizedBox(height: 14),
               _statRow(
                 icon: Icons.hourglass_empty,
-                color: AppColors.purple,
+                color: context.colors.purple,
                 label: 'Pendiente de cobro privado',
                 value: summary.pendienteEnB,
               ),
@@ -505,7 +507,7 @@ class _SummaryCard extends StatelessWidget {
               const SizedBox(height: 14),
               _statRow(
                 icon: Icons.event_available,
-                color: AppColors.purple,
+                color: context.colors.purple,
                 label: 'Previsto privado',
                 value: summary.previstoEnB,
               ),
@@ -515,7 +517,7 @@ class _SummaryCard extends StatelessWidget {
               const SizedBox(height: 14),
               _statRow(
                 icon: Icons.event_available,
-                color: AppColors.primary,
+                color: context.colors.accentSoft,
                 label: 'Previsto',
                 value: summary.previsto,
               ),
@@ -527,7 +529,7 @@ class _SummaryCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: AppColors.primaryLight,
+                color: context.colors.accentSoftBg,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Column(
@@ -537,7 +539,7 @@ class _SummaryCard extends StatelessWidget {
                     children: [
                       Icon(
                         Icons.trending_up,
-                        color: AppColors.primary,
+                        color: context.colors.accentSoft,
                         size: 28,
                       ),
                       const SizedBox(width: 12),
@@ -545,22 +547,22 @@ class _SummaryCard extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
+                            Text(
                               'TOTAL PREVISTO',
                               style: TextStyle(
                                 fontWeight: FontWeight.w600,
                                 fontSize: 11,
-                                color: AppColors.textSecondary,
+                                color: context.colors.textSecondary,
                               ),
                             ),
                             Text(
                               CurrencyFormatter.format(
                                 summary.totalPrevistoGlobal,
                               ),
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 22,
-                                color: AppColors.primary,
+                                color: context.colors.accentSoft,
                               ),
                             ),
                           ],
@@ -574,9 +576,9 @@ class _SummaryCard extends StatelessWidget {
                     child: LinearProgressIndicator(
                       value: progress,
                       minHeight: 8,
-                      backgroundColor: AppColors.cardBorder,
-                      valueColor: const AlwaysStoppedAnimation<Color>(
-                        AppColors.success,
+                      backgroundColor: context.colors.border,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        context.colors.success,
                       ),
                     ),
                   ),
@@ -586,10 +588,10 @@ class _SummaryCard extends StatelessWidget {
                     children: [
                       Text(
                         '${(progress * 100).toStringAsFixed(1)}% cobrado',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: AppColors.success,
+                          color: context.colors.success,
                         ),
                       ),
                       Text(
@@ -608,7 +610,7 @@ class _SummaryCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: AppColors.successBg,
+                color: context.colors.successBg,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Column(
@@ -625,10 +627,10 @@ class _SummaryCard extends StatelessWidget {
                       ),
                       Text(
                         CurrencyFormatter.format(summary.acumuladoTotal),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 18,
-                          color: AppColors.success,
+                          color: context.colors.success,
                         ),
                       ),
                     ],
@@ -637,7 +639,7 @@ class _SummaryCard extends StatelessWidget {
                   if (summary.prevCobradoTotal != null &&
                       summary.prevLabel != null) ...[
                     const SizedBox(height: 8),
-                    _buildComparison(
+                    _buildComparison(context, 
                       totalCobrado,
                       summary.prevCobradoTotal!,
                       summary.prevLabel!,
@@ -687,7 +689,12 @@ class _SummaryCard extends StatelessWidget {
     );
   }
 
-  Widget _buildComparison(double current, double prev, String label) {
+  Widget _buildComparison(
+    BuildContext context,
+    double current,
+    double prev,
+    String label,
+  ) {
     if (prev == 0 && current == 0) return const SizedBox.shrink();
 
     final pct = prev > 0 ? ((current - prev) / prev * 100).round() : 100;
@@ -698,7 +705,7 @@ class _SummaryCard extends StatelessWidget {
         Icon(
           isUp ? Icons.arrow_upward : Icons.arrow_downward,
           size: 14,
-          color: isUp ? AppColors.success : AppColors.error,
+          color: isUp ? context.colors.success : context.colors.error,
         ),
         const SizedBox(width: 4),
         Text(
@@ -706,7 +713,7 @@ class _SummaryCard extends StatelessWidget {
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w500,
-            color: isUp ? AppColors.success : AppColors.error,
+            color: isUp ? context.colors.success : context.colors.error,
           ),
         ),
       ],
@@ -789,15 +796,15 @@ class _SubPeriodCard extends StatelessWidget {
           width: 44,
           height: 44,
           decoration: BoxDecoration(
-            color: AppColors.primaryLight,
+            color: context.colors.accentSoftBg,
             borderRadius: BorderRadius.circular(10),
           ),
           child: Center(
             child: Text(
               stats.label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.bold,
-                color: AppColors.primary,
+                color: context.colors.accentSoft,
               ),
             ),
           ),
@@ -808,7 +815,7 @@ class _SubPeriodCard extends StatelessWidget {
         ),
         subtitle: Text(
           'Cobrado: ${CurrencyFormatter.format(stats.total)}',
-          style: const TextStyle(color: AppColors.success, fontSize: 13),
+          style: TextStyle(color: context.colors.success, fontSize: 13),
         ),
         children: [
           Padding(
@@ -819,43 +826,43 @@ class _SubPeriodCard extends StatelessWidget {
                 _detailRow(
                   'Cobrado (facturas)',
                   stats.cobrado,
-                  AppColors.success,
+                  context.colors.success,
                 ),
                 if (stats.cobradoHistorico > 0)
                   _detailRow(
                     'Cobrado (histórico)',
                     stats.cobradoHistorico,
-                    AppColors.success,
+                    context.colors.success,
                   ),
                 _detailRow(
                   'Pendiente de cobro',
                   stats.pendiente,
-                  AppColors.warning,
+                  context.colors.warning,
                 ),
                 _detailRow(
                   'Cobrado privado',
                   stats.cobradoEnB,
-                  AppColors.purple,
+                  context.colors.purple,
                 ),
                 if (stats.pendienteEnB > 0)
                   _detailRow(
                     'Pendiente de cobro privado',
                     stats.pendienteEnB,
-                    AppColors.purple,
+                    context.colors.purple,
                   ),
                 if (stats.previsto > 0)
-                  _detailRow('Previsto', stats.previsto, AppColors.primary),
+                  _detailRow('Previsto', stats.previsto, context.colors.accentSoft),
                 if (stats.previstoEnB > 0)
                   _detailRow(
                     'Previsto privado',
                     stats.previstoEnB,
-                    AppColors.purple,
+                    context.colors.purple,
                   ),
                 const Divider(),
                 _detailRow(
                   'Total previsto',
                   stats.totalPrevistoGlobal,
-                  AppColors.primary,
+                  context.colors.accentSoft,
                   bold: true,
                 ),
                 const SizedBox(height: 8),
@@ -864,18 +871,18 @@ class _SubPeriodCard extends StatelessWidget {
                 if (stats.gigs.isNotEmpty) ...[
                   Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.music_note,
                         size: 14,
-                        color: AppColors.textSecondary,
+                        color: context.colors.textSecondary,
                       ),
                       const SizedBox(width: 4),
                       Text(
                         '${stats.numBolos} bolos',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: AppColors.primary,
+                          color: context.colors.accentSoft,
                         ),
                       ),
                     ],
@@ -907,9 +914,9 @@ class _SubPeriodCard extends StatelessWidget {
                                       'dd MMM',
                                       'es',
                                     ).format(gig.fecha),
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 11,
-                                      color: AppColors.textSecondary,
+                                      color: context.colors.textSecondary,
                                     ),
                                   ),
                                 ],
@@ -923,7 +930,7 @@ class _SubPeriodCard extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(width: 8),
-                            _statusPill(gig.status),
+                            _statusPill(context, gig.status),
                           ],
                         ),
                       ),
@@ -967,28 +974,28 @@ class _SubPeriodCard extends StatelessWidget {
     );
   }
 
-  Widget _statusPill(GigStatus status) {
+  Widget _statusPill(BuildContext context, GigStatus status) {
     Color bg;
     Color text;
     switch (status) {
       case GigStatus.cobrado:
-        bg = AppColors.successBg;
-        text = AppColors.success;
+        bg = context.colors.successBg;
+        text = context.colors.success;
         break;
       case GigStatus.cobradoB:
-        bg = AppColors.purpleBg;
-        text = AppColors.purple;
+        bg = context.colors.purpleBg;
+        text = context.colors.purple;
         break;
       case GigStatus.facturado:
       case GigStatus.confirmado:
       case GigStatus.confirmadoB:
       case GigStatus.realizadoB:
-        bg = AppColors.warningBg;
-        text = AppColors.warning;
+        bg = context.colors.warningBg;
+        text = context.colors.warning;
         break;
       case GigStatus.cancelado:
-        bg = AppColors.errorBg;
-        text = AppColors.error;
+        bg = context.colors.errorBg;
+        text = context.colors.error;
         break;
     }
     return Container(
@@ -1022,7 +1029,7 @@ class _GigsList extends StatelessWidget {
       children: [
         Row(
           children: [
-            const Icon(Icons.music_note, size: 16, color: AppColors.primary),
+            Icon(Icons.music_note, size: 16, color: context.colors.accentSoft),
             const SizedBox(width: 6),
             Text(
               '${gigs.length} bolos',
@@ -1043,16 +1050,16 @@ class _GigsList extends StatelessWidget {
                 height: 40,
                 decoration: BoxDecoration(
                   color: gig.status == GigStatus.cobradoB
-                      ? AppColors.purpleBg
-                      : AppColors.primaryLight,
+                      ? context.colors.purpleBg
+                      : context.colors.accentSoftBg,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(
                   Icons.music_note_outlined,
                   size: 20,
                   color: gig.status == GigStatus.cobradoB
-                      ? AppColors.purple
-                      : AppColors.primary,
+                      ? context.colors.purple
+                      : context.colors.accentSoft,
                 ),
               ),
               title: Text(
@@ -1066,9 +1073,9 @@ class _GigsList extends StatelessWidget {
               ),
               subtitle: Text(
                 DateFormat('dd MMM yyyy', 'es').format(gig.fecha),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
-                  color: AppColors.textSecondary,
+                  color: context.colors.textSecondary,
                 ),
               ),
               trailing: Row(
@@ -1082,7 +1089,7 @@ class _GigsList extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  _statusPill(gig.status),
+                  _statusPill(context, gig.status),
                 ],
               ),
             ),
@@ -1092,28 +1099,28 @@ class _GigsList extends StatelessWidget {
     );
   }
 
-  Widget _statusPill(GigStatus status) {
+  Widget _statusPill(BuildContext context, GigStatus status) {
     Color bg;
     Color text;
     switch (status) {
       case GigStatus.cobrado:
-        bg = AppColors.successBg;
-        text = AppColors.success;
+        bg = context.colors.successBg;
+        text = context.colors.success;
         break;
       case GigStatus.cobradoB:
-        bg = AppColors.purpleBg;
-        text = AppColors.purple;
+        bg = context.colors.purpleBg;
+        text = context.colors.purple;
         break;
       case GigStatus.facturado:
       case GigStatus.confirmado:
       case GigStatus.confirmadoB:
       case GigStatus.realizadoB:
-        bg = AppColors.warningBg;
-        text = AppColors.warning;
+        bg = context.colors.warningBg;
+        text = context.colors.warning;
         break;
       case GigStatus.cancelado:
-        bg = AppColors.errorBg;
-        text = AppColors.error;
+        bg = context.colors.errorBg;
+        text = context.colors.error;
         break;
     }
     return Container(

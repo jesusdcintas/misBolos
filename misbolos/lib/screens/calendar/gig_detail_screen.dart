@@ -18,6 +18,7 @@ import '../../widgets/common/status_badge.dart';
 import '../../widgets/common/facturable_badge.dart';
 import '../../widgets/common/franja_badge.dart';
 import '../../widgets/common/cobrado_confetti_button.dart';
+import '../../core/theme/app_theme_colors.dart';
 
 class GigDetailScreen extends ConsumerWidget {
   final String gigId;
@@ -77,10 +78,11 @@ class _GigDetailContent extends ConsumerWidget {
           Hero(
             tag: 'gig-${gig.id}',
             child: Card(
+              margin: EdgeInsets.zero,
               child: ListTile(
-                leading: const Icon(
+                leading: Icon(
                   Icons.calendar_today,
-                  color: AppColors.primary,
+                  color: context.colors.accentSoft,
                 ),
                 title: const Text(AppStrings.fecha),
                 subtitle: Text(DateFormatter.dayOfWeek(gig.fecha)),
@@ -90,9 +92,10 @@ class _GigDetailContent extends ConsumerWidget {
 
           // Cliente
           Card(
+            margin: EdgeInsets.zero,
             child: clientAsync.when(
               data: (client) => ListTile(
-                leading: const Icon(Icons.person, color: AppColors.primary),
+                leading: Icon(Icons.person, color: context.colors.accentSoft),
                 title: const Text(AppStrings.cliente),
                 subtitle: Text(client?.displayName ?? 'Desconocido'),
                 onTap: client != null
@@ -107,8 +110,9 @@ class _GigDetailContent extends ConsumerWidget {
           // Caché
           if (gig.cachet != null)
             Card(
+              margin: EdgeInsets.zero,
               child: ListTile(
-                leading: const Icon(Icons.euro, color: AppColors.primary),
+                leading: Icon(Icons.euro, color: context.colors.accentSoft),
                 title: const Text(AppStrings.cachet),
                 subtitle: Text(CurrencyFormatter.format(gig.cachet!)),
               ),
@@ -117,8 +121,9 @@ class _GigDetailContent extends ConsumerWidget {
           // Notas
           if (gig.notas != null && gig.notas!.isNotEmpty)
             Card(
+              margin: EdgeInsets.zero,
               child: ListTile(
-                leading: const Icon(Icons.notes, color: AppColors.primary),
+                leading: Icon(Icons.notes, color: context.colors.accentSoft),
                 title: const Text(AppStrings.notas),
                 subtitle: Text(gig.notas!),
               ),
@@ -166,7 +171,7 @@ class _GigDetailContent extends ConsumerWidget {
             _ActionButton(
               label: AppStrings.generarFactura,
               icon: Icons.receipt_long,
-              color: AppColors.primary,
+              color: context.colors.accentSoft,
               onPressed: () => _generateInvoice(context, ref, gig),
             ),
           );
@@ -176,7 +181,7 @@ class _GigDetailContent extends ConsumerWidget {
             _ActionButton(
               label: 'Ver factura',
               icon: Icons.picture_as_pdf,
-              color: AppColors.primary,
+              color: context.colors.accentSoft,
               onPressed: () => _viewPdf(context, ref, gig),
             ),
           ]);
@@ -186,7 +191,7 @@ class _GigDetailContent extends ConsumerWidget {
             _ActionButton(
               label: 'Ver factura',
               icon: Icons.picture_as_pdf,
-              color: AppColors.primary,
+              color: context.colors.accentSoft,
               onPressed: () => _viewPdf(context, ref, gig),
             ),
           );
@@ -201,7 +206,7 @@ class _GigDetailContent extends ConsumerWidget {
           _ActionButton(
             label: 'Marcar realizado privado',
             icon: Icons.task_alt,
-            color: AppColors.purple,
+            color: context.colors.purple,
             onPressed: () => _markAsRealizadoEnB(context, ref, gig),
           ),
         );
@@ -210,7 +215,7 @@ class _GigDetailContent extends ConsumerWidget {
           CobradoConfettiButton(
             label: AppStrings.marcarCobradoEnB,
             icon: Icons.money_off,
-            color: AppColors.accentPurple,
+            color: context.colors.purple,
             onPressed: () => _markAsCobradoEnB(context, ref, gig),
           ),
         );
@@ -238,7 +243,7 @@ class _GigDetailContent extends ConsumerWidget {
       _ActionButton(
         label: 'Eliminar bolo',
         icon: Icons.delete_forever,
-        color: AppColors.error,
+        color: context.colors.error,
         onPressed: () => _deleteGig(context, ref, gig),
         outlined: true,
       ),
@@ -392,9 +397,9 @@ class _GigDetailContent extends ConsumerWidget {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text(
+            child: Text(
               'Eliminar',
-              style: TextStyle(color: AppColors.error),
+              style: TextStyle(color: context.colors.error),
             ),
           ),
         ],

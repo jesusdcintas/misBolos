@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../core/utils/date_formatter.dart';
@@ -11,6 +10,7 @@ import '../../providers/client_provider.dart';
 import '../../providers/gig_provider.dart';
 import '../../services/whatsapp_service.dart';
 import '../../widgets/common/gig_card_content.dart';
+import '../../core/theme/app_theme_colors.dart';
 
 class ClientDetailScreen extends ConsumerWidget {
   final String clientId;
@@ -131,7 +131,7 @@ class ClientDetailScreen extends ConsumerWidget {
                     children: [
                       Expanded(
                         child: Card(
-                          color: AppColors.accentGreen.withValues(alpha: 0.1),
+                          color: context.colors.success.withValues(alpha: 0.1),
                           child: Padding(
                             padding: const EdgeInsets.all(12),
                             child: Column(
@@ -142,10 +142,10 @@ class ClientDetailScreen extends ConsumerWidget {
                                 ),
                                 Text(
                                   CurrencyFormatter.format(totalOficial),
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.bold,
-                                    color: AppColors.accentGreen,
+                                    color: context.colors.success,
                                   ),
                                 ),
                               ],
@@ -155,7 +155,7 @@ class ClientDetailScreen extends ConsumerWidget {
                       ),
                       Expanded(
                         child: Card(
-                          color: AppColors.accentPurple.withValues(alpha: 0.1),
+                          color: context.colors.purple.withValues(alpha: 0.1),
                           child: Padding(
                             padding: const EdgeInsets.all(12),
                             child: Column(
@@ -166,10 +166,10 @@ class ClientDetailScreen extends ConsumerWidget {
                                 ),
                                 Text(
                                   CurrencyFormatter.format(totalEnB),
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.bold,
-                                    color: AppColors.accentPurple,
+                                    color: context.colors.purple,
                                   ),
                                 ),
                               ],
@@ -285,8 +285,8 @@ class ClientDetailScreen extends ConsumerWidget {
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: AppColors.error,
-              foregroundColor: Colors.white,
+              backgroundColor: context.colors.error,
+              foregroundColor: Theme.of(context).colorScheme.onPrimary,
             ),
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('Eliminar'),
@@ -356,10 +356,10 @@ class _InfoRow extends StatelessWidget {
             width: 100,
             child: Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.w600,
                 fontSize: 13,
-                color: AppColors.textSecondary,
+                color: context.colors.textSecondary,
               ),
             ),
           ),

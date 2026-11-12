@@ -164,7 +164,7 @@ class _Celda extends StatelessWidget {
     switch (estado) {
       case _EstadoDia.marcado:
         fondo = primary;
-        texto = Colors.white;
+        texto = Theme.of(context).colorScheme.onPrimary;
       case _EstadoDia.parcial:
         fondo = primary.withValues(alpha: 0.08);
         texto = primary;

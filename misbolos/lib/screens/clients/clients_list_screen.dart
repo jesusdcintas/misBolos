@@ -213,7 +213,7 @@ class _ClientsListScreenState extends ConsumerState<ClientsListScreen> {
           FilledButton(
             style: FilledButton.styleFrom(
               backgroundColor: AppColors.error,
-              foregroundColor: Colors.white,
+              foregroundColor: Theme.of(context).colorScheme.onPrimary,
             ),
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('Eliminar'),

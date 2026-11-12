@@ -3,10 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import '../../core/constants/app_colors.dart';
 import '../../models/expense.dart';
 import '../../providers/expenses_provider.dart';
 import '../../services/ai_attachment_service.dart';
+import '../../core/theme/app_theme_colors.dart';
 
 class ExpenseDetailScreen extends ConsumerWidget {
   final int expenseId;
@@ -63,10 +63,11 @@ class _ExpenseDetail extends StatelessWidget {
       children: [
         // Cabecera
         Card(
+          margin: EdgeInsets.zero,
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
-            side: const BorderSide(color: AppColors.cardBorder),
+            side: BorderSide(color: context.colors.border),
           ),
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -78,12 +79,12 @@ class _ExpenseDetail extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: AppColors.primaryLight,
+                        color: context.colors.accentSoftBg,
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Icon(
                         _categoryIcon(expense.categoria),
-                        color: AppColors.primary,
+                        color: context.colors.accentSoft,
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -93,16 +94,16 @@ class _ExpenseDetail extends StatelessWidget {
                         children: [
                           Text(
                             expense.concepto,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
-                              color: AppColors.textPrimary,
+                              color: context.colors.textPrimary,
                             ),
                           ),
                           Text(
                             expense.categoria.label,
-                            style: const TextStyle(
-                              color: AppColors.textSecondary,
+                            style: TextStyle(
+                              color: context.colors.textSecondary,
                             ),
                           ),
                         ],
@@ -122,10 +123,11 @@ class _ExpenseDetail extends StatelessWidget {
 
         // Importe
         Card(
+          margin: EdgeInsets.zero,
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
-            side: const BorderSide(color: AppColors.cardBorder),
+            side: BorderSide(color: context.colors.border),
           ),
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -142,6 +144,7 @@ class _ExpenseDetail extends StatelessWidget {
           const SizedBox(height: 12),
           if (_attachmentWarning(expense.documentoPath!) != null)
             Card(
+              margin: EdgeInsets.zero,
               elevation: 0,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -166,13 +169,14 @@ class _ExpenseDetail extends StatelessWidget {
           if (_attachmentWarning(expense.documentoPath!) != null)
             const SizedBox(height: 12),
           Card(
+            margin: EdgeInsets.zero,
             elevation: 0,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
-              side: const BorderSide(color: AppColors.cardBorder),
+              side: BorderSide(color: context.colors.border),
             ),
             child: ListTile(
-              leading: const Icon(Icons.attach_file, color: AppColors.primary),
+              leading: Icon(Icons.attach_file, color: context.colors.accentSoft),
               title: Text(
                 expense.attachmentDisplayName ??
                     expense.documentoPath!.split('/').last,
@@ -189,20 +193,21 @@ class _ExpenseDetail extends StatelessWidget {
         if (expense.notas != null) ...[
           const SizedBox(height: 12),
           Card(
+            margin: EdgeInsets.zero,
             elevation: 0,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
-              side: const BorderSide(color: AppColors.cardBorder),
+              side: BorderSide(color: context.colors.border),
             ),
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Notas',
                     style: TextStyle(
-                      color: AppColors.textSecondary,
+                      color: context.colors.textSecondary,
                       fontSize: 12,
                     ),
                   ),
@@ -218,7 +223,7 @@ class _ExpenseDetail extends StatelessWidget {
 
         // Botón eliminar
         TextButton.icon(
-          style: TextButton.styleFrom(foregroundColor: AppColors.error),
+          style: TextButton.styleFrom(foregroundColor: context.colors.error),
           icon: const Icon(Icons.delete_outline),
           label: const Text('Eliminar gasto'),
           onPressed: () => _confirmDelete(context, ref),
@@ -240,7 +245,7 @@ class _ExpenseDetail extends StatelessWidget {
             child: const Text('Cancelar'),
           ),
           TextButton(
-            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            style: TextButton.styleFrom(foregroundColor: context.colors.error),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Eliminar'),
           ),
@@ -346,12 +351,12 @@ class _Row extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(color: AppColors.textSecondary)),
+          Text(label, style: TextStyle(color: context.colors.textSecondary)),
           Text(
             value,
             style: TextStyle(
               fontWeight: bold ? FontWeight.bold : FontWeight.normal,
-              color: AppColors.textPrimary,
+              color: context.colors.textPrimary,
             ),
           ),
         ],
