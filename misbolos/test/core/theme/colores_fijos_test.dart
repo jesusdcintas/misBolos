@@ -47,7 +47,6 @@ const _excepciones = <String, String>{
 /// No son excepciones: son trabajo pendiente. La lista solo evita que el test
 /// falle por algo que ya se sabe, y debe ir vaciándose.
 const _pendientes = <String>{
-  'screens/invoices/invoices_list_screen.dart',
   'screens/expenses/expenses_screen.dart',
   'screens/assets/assets_screen.dart',
   // La pantalla del asistente está oculta tras el flag de IA.
