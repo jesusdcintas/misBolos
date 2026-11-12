@@ -92,15 +92,6 @@ class AssetRepository {
     await db.delete('assets', where: 'id = ?', whereArgs: [id]);
   }
 
-  /// Suma cuotaTrimestreConcreto de todos los assets activos en ese trimestre
-  Future<double> getTotalAmortizacionTrimestre(int year, int quarter) async {
-    final activos = await getActivos();
-    return activos.fold<double>(
-      0.0,
-      (sum, a) => sum + a.cuotaTrimestreConcreto(year, quarter),
-    );
-  }
-
   /// Assets cuya amortización termina en los próximos N meses
   Future<List<Asset>> getProximosAmortizar(int meses) async {
     final activos = await getActivos();

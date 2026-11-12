@@ -428,13 +428,6 @@ final assetsActivosProvider = FutureProvider<List<Asset>>((ref) {
   return ref.read(assetRepositoryProvider).getActivos();
 });
 
-final assetAmortizacionTrimestreProvider =
-    FutureProvider.family<double, ({int year, int quarter})>((ref, params) {
-      return ref
-          .read(assetRepositoryProvider)
-          .getTotalAmortizacionTrimestre(params.year, params.quarter);
-    });
-
 final assetsProximosAmortizarProvider = FutureProvider.family<List<Asset>, int>(
   (ref, meses) {
     return ref.read(assetRepositoryProvider).getProximosAmortizar(meses);

@@ -184,23 +184,6 @@ class Asset {
 
   double get amortizacionAcumulada => importeTotal - valorContable;
 
-  /// Cuota trimestral si el asset estaba activo en ese trimestre, 0.0 si no
-  double cuotaTrimestreConcreto(int year, int quarter) {
-    if (!activo) return 0.0;
-    final inicioTrimestre = DateTime(year, (quarter - 1) * 3 + 1, 1);
-    final finTrimestre = DateTime(year, quarter * 3 + 1, 0);
-    // El asset debe haberse comprado antes del fin del trimestre
-    if (fechaCompra.isAfter(finTrimestre)) return 0.0;
-    // Ya estaba completamente amortizado al inicio del trimestre
-    final anosAlInicio = max(0, inicioTrimestre.year - fechaCompra.year);
-    final valorAlInicio = max(
-      valorResidual,
-      importeTotal - cuotaAnual * anosAlInicio,
-    );
-    if (valorAlInicio <= valorResidual) return 0.0;
-    return cuotaTrimestral;
-  }
-
   // ── Persistencia ────────────────────────────────────────────────────────────
 
   Map<String, dynamic> toMap() {
