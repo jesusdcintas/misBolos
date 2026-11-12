@@ -48,7 +48,6 @@ const _excepciones = <String, String>{
 /// falle por algo que ya se sabe, y debe ir vaciándose.
 const _pendientes = <String>{
   'screens/expenses/expenses_screen.dart',
-  'screens/assets/assets_screen.dart',
   // La pantalla del asistente está oculta tras el flag de IA.
   'screens/ai/ai_assistant_screen.dart',
 };
