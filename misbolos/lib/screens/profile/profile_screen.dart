@@ -21,6 +21,7 @@ import '../../services/platform_auth_service.dart';
 import '../../services/supabase_service.dart';
 import '../../core/services/estado_tutorial.dart';
 import '../../core/theme/app_theme_colors.dart';
+import '../../widgets/tutorial/boton_ayuda_tour.dart';
 import '../../widgets/tutorial/lanzador_tour.dart';
 import '../../widgets/tutorial/tour.dart';
 
@@ -87,7 +88,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
     final pantalla = Scaffold(
       resizeToAvoidBottomInset: true,
-      appBar: AppBar(title: const Text('Perfil')),
+      appBar: AppBar(
+        title: const Text('Perfil'),
+        actions: [
+          BotonAyudaTour(
+            tour: Tour.perfil,
+            pasos: () => pasosDePerfil(
+              datosFiscales: _claveTourDatosFiscales,
+              google: _claveTourGoogle,
+            ),
+          ),
+        ],
+      ),
       body: settingsAsync.when(
         data: (settings) {
           return SafeArea(

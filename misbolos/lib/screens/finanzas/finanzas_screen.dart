@@ -6,6 +6,8 @@ import '../../providers/invoice_provider.dart';
 import '../invoices/invoices_list_screen.dart';
 import 'gastos_inversiones_screen.dart';
 import '../clients/clients_list_screen.dart';
+import '../../core/services/estado_tutorial.dart';
+import '../../widgets/tutorial/boton_ayuda_tour.dart';
 
 /// Qué pestaña de Finanzas se está viendo. La usan los tours de Facturas y de
 /// Gastos, que no deben saltar hasta que su pestaña esté a la vista.
@@ -55,6 +57,8 @@ class _FinanzasScreenState extends ConsumerState<FinanzasScreen> {
   Widget build(BuildContext context) {
     final colors = context.colors;
     final scheme = Theme.of(context).colorScheme;
+    // Facturas y Gastos tienen tour; Clientes no.
+    final pestana = ref.watch(finanzasTabProvider);
     return DefaultTabController(
       length: 3,
       child: Column(
@@ -62,18 +66,31 @@ class _FinanzasScreenState extends ConsumerState<FinanzasScreen> {
           const SafeArea(bottom: false, child: SizedBox(height: 12)),
           Material(
             color: colors.surface,
-            child: TabBar(
-              labelColor: scheme.primary,
-              unselectedLabelColor: colors.textSecondary,
-              indicatorColor: scheme.primary,
-              indicatorWeight: 3,
-              tabs: const [
-                Tab(icon: Icon(Icons.receipt_long_outlined), text: 'Facturas'),
-                Tab(
-                  icon: Icon(Icons.euro_outlined),
-                  text: 'Gastos e Inversiones',
+            child: Row(
+              children: [
+                Expanded(
+                  child: TabBar(
+                    labelColor: scheme.primary,
+                    unselectedLabelColor: colors.textSecondary,
+                    indicatorColor: scheme.primary,
+                    indicatorWeight: 3,
+                    tabs: const [
+                      Tab(
+                        icon: Icon(Icons.receipt_long_outlined),
+                        text: 'Facturas',
+                      ),
+                      Tab(
+                        icon: Icon(Icons.euro_outlined),
+                        text: 'Gastos e Inversiones',
+                      ),
+                      Tab(icon: Icon(Icons.people_outline), text: 'Clientes'),
+                    ],
+                  ),
                 ),
-                Tab(icon: Icon(Icons.people_outline), text: 'Clientes'),
+                if (pestana == 0)
+                  BotonAyudaTour(tour: Tour.facturas, pasos: pasosTourFacturas)
+                else if (pestana == 1)
+                  BotonAyudaTour(tour: Tour.gastos, pasos: pasosTourGastos),
               ],
             ),
           ),

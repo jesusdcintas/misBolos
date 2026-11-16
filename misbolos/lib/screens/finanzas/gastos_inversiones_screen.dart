@@ -37,6 +37,10 @@ final _movimientoSortProvider = StateProvider<_MovimientoSortOption>(
 final _claveTourAnadir = GlobalKey();
 final _claveTourGasto = GlobalKey();
 
+/// Los pasos del tour de Gastos, para el botón de ayuda de Finanzas.
+List<PasoTour> pasosTourGastos() =>
+    pasosDeGastos(anadir: _claveTourAnadir, gasto: _claveTourGasto);
+
 class GastosInversionesScreen extends ConsumerStatefulWidget {
   const GastosInversionesScreen({super.key});
 

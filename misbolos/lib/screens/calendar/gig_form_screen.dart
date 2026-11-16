@@ -6,6 +6,7 @@ import '../../core/constants/app_strings.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../core/services/estado_tutorial.dart';
 import '../../widgets/common/animated_facturable_toggle.dart';
+import '../../widgets/tutorial/boton_ayuda_tour.dart';
 import '../../widgets/tutorial/lanzador_tour.dart';
 import '../../widgets/tutorial/tour.dart';
 import '../../models/client.dart';
@@ -143,6 +144,18 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: Text(isEditing ? AppStrings.editarBolo : AppStrings.nuevoBolo),
+          actions: [
+            BotonAyudaTour(
+              tour: Tour.nuevoBolo,
+              pasos: () => pasosDeNuevoBolo(
+                cliente: _claveTourCliente,
+                cachet: _claveTourCachet,
+                franja: _claveTourFranja,
+                facturable: _claveTourFacturable,
+                guardar: _claveTourGuardar,
+              ),
+            ),
+          ],
         ),
         body: Form(
           key: _formKey,

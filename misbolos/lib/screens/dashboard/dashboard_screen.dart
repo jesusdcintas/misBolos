@@ -25,6 +25,7 @@ import '../../widgets/common/deslizar_horizontal.dart';
 import '../../core/services/estado_tutorial.dart';
 import '../../widgets/common/acciones_bolo.dart';
 import '../../widgets/common/menu_acciones.dart';
+import '../../widgets/tutorial/boton_ayuda_tour.dart';
 import '../../widgets/tutorial/lanzador_tour.dart';
 import '../../widgets/tutorial/tour.dart';
 import '../../core/utils/primeros_pasos.dart';
@@ -68,6 +69,15 @@ class DashboardScreen extends ConsumerWidget {
             icon: const Icon(Icons.bar_chart),
             tooltip: 'Estadísticas',
             onPressed: () => context.push('/stats'),
+          ),
+          BotonAyudaTour(
+            tour: Tour.inicio,
+            pasos: () => pasosDeInicio(
+              periodo: _claveTourPeriodo,
+              ingresos: _claveTourIngresos,
+              impuestos: _claveTourImpuestos,
+              anadir: _claveTourAnadir,
+            ),
           ),
         ],
       ),

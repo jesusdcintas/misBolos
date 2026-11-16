@@ -9,6 +9,7 @@ import '../../core/config/fiscal.dart';
 import '../../core/services/estado_tutorial.dart';
 import '../../widgets/fiscal/retencion_irpf_info.dart';
 import '../../providers/tutorial_provider.dart';
+import '../../widgets/tutorial/boton_ayuda_tour.dart';
 import '../../widgets/tutorial/lanzador_tour.dart';
 import '../../widgets/tutorial/tour.dart';
 import '../../models/app_settings.dart';
@@ -77,7 +78,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final settingsAsync = ref.watch(settingsProvider);
 
     final pantalla = Scaffold(
-      appBar: AppBar(title: const Text('Ajustes')),
+      appBar: AppBar(
+        title: const Text('Ajustes'),
+        actions: [
+          BotonAyudaTour(
+            tour: Tour.ajustes,
+            pasos: () => pasosDeAjustes(retencion: _claveTourRetencion),
+          ),
+        ],
+      ),
       body: settingsAsync.when(
         data: (settings) {
           _loadSettings(settings);

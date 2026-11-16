@@ -57,6 +57,14 @@ final _claveTourLista = GlobalKey();
 final _claveTourFiltros = GlobalKey();
 final _claveTourFactura = GlobalKey();
 
+/// Los pasos del tour de Facturas, para el botón de ayuda de Finanzas, que
+/// es quien tiene la barra de esta pantalla.
+List<PasoTour> pasosTourFacturas() => pasosDeFacturas(
+  lista: _claveTourLista,
+  filtros: _claveTourFiltros,
+  factura: _claveTourFactura,
+);
+
 class InvoicesListScreen extends ConsumerStatefulWidget {
   const InvoicesListScreen({super.key});
 

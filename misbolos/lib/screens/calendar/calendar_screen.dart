@@ -22,6 +22,7 @@ import '../../core/services/hapticos.dart';
 import '../../core/utils/tirar_para_sincronizar.dart';
 import '../../widgets/common/acciones_bolo.dart';
 import '../../widgets/common/menu_acciones.dart';
+import '../../widgets/tutorial/boton_ayuda_tour.dart';
 import '../../widgets/tutorial/lanzador_tour.dart';
 import '../../widgets/tutorial/tour.dart';
 import '../../core/services/estado_tutorial.dart';
@@ -263,25 +264,40 @@ class CalendarScreen extends ConsumerWidget {
                       }
                     },
                   ),
-          if (!isCalendarView)
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert),
-              onSelected: (value) async {
-                if (value == 'repair') {
-                  await _repairGigStatuses(context, ref);
-                } else {
-                  // Sort option
-                  final option = GigSortOption.values.where(
-                    (o) => o.name == value,
-                  );
-                  if (option.isNotEmpty) {
-                    ref.read(_gigSortProvider.notifier).state = option.first;
-                  }
+          // La barra ya va llena de iconos, así que el tutorial vive en
+          // este menú, que ahora también está en la vista de calendario.
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (value) async {
+              if (value == 'tutorial') {
+                await verTutorialDePantalla(
+                  context,
+                  ref,
+                  tour: Tour.agenda,
+                  pasos: pasosDeAgenda(
+                    calendario: _claveTourCalendario,
+                    bolo: _claveTourBolo,
+                    fechasLibres: _claveTourFechasLibres,
+                    sincronizar: _claveTourSincronizar,
+                  ),
+                );
+              } else if (value == 'repair') {
+                await _repairGigStatuses(context, ref);
+              } else {
+                // Sort option
+                final option = GigSortOption.values.where(
+                  (o) => o.name == value,
+                );
+                if (option.isNotEmpty) {
+                  ref.read(_gigSortProvider.notifier).state = option.first;
                 }
-              },
-              itemBuilder: (context) {
-                final sortOption = ref.read(_gigSortProvider);
-                return [
+              }
+            },
+            itemBuilder: (context) {
+              final sortOption = ref.read(_gigSortProvider);
+              return [
+                // Ordenar y reparar son cosa de la lista.
+                if (!isCalendarView) ...[
                   ..._sortMenuItems(context, sortOption),
                   const PopupMenuDivider(),
                   const PopupMenuItem(
@@ -294,9 +310,21 @@ class CalendarScreen extends ConsumerWidget {
                       ],
                     ),
                   ),
-                ];
-              },
-            ),
+                  const PopupMenuDivider(),
+                ],
+                const PopupMenuItem(
+                  value: 'tutorial',
+                  child: Row(
+                    children: [
+                      Icon(Icons.help_outline, size: 20),
+                      SizedBox(width: 12),
+                      Text(etiquetaMenuAyudaTour),
+                    ],
+                  ),
+                ),
+              ];
+            },
+          ),
         ],
       ),
       body: RefreshIndicator(
