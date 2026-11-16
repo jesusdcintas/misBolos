@@ -22,6 +22,8 @@ import '../../widgets/dashboard/taxes_period_card.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/utils/tirar_para_sincronizar.dart';
 import '../../widgets/common/deslizar_horizontal.dart';
+import '../../widgets/common/acciones_bolo.dart';
+import '../../widgets/common/menu_acciones.dart';
 
 /// Ancho a partir del cual las secciones se reparten en dos columnas. Es el
 /// mismo corte que usa la pantalla de Ajustes.
@@ -351,48 +353,56 @@ class _UpcomingGigTile extends ConsumerWidget {
       badgeTextColor = primary;
     }
 
-    return Card(
-      // Sin margen horizontal: el del tema (16 px) metía la lista por dentro
-      // del título, al contrario que la de pendiente de cobro.
-      margin: const EdgeInsets.only(bottom: 10),
-      child: ListTile(
-        onTap: () => context.push('/gig/${gig.id}'),
-        leading: Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            color: gig.facturable ? colors.infoBg : context.colors.purpleBg,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Icon(
-            Icons.music_note_outlined,
-            color: gig.facturable ? primary : context.colors.purple,
-            size: 22,
-          ),
-        ),
-        title: GigCardContent(
-          nombre: clientAsync.when(
-            data: (client) => client?.displayName ?? 'Cliente desconocido',
-            loading: () => '...',
-            error: (_, __) => 'Error',
-          ),
-          detalle: DateFormatter.display(gig.fecha),
-          importe: gig.cachet != null
-              ? CurrencyFormatter.format(gig.cachet!)
-              : null,
-          gig: gig,
-          extra: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    return GestoMenuAcciones(
+      acciones: () => accionesRapidasDeBolo(
+        context,
+        ref,
+        gig,
+        alCancelar: (g) => cancelarBoloConDeshacer(context, ref, g),
+      ),
+      child: Card(
+        // Sin margen horizontal: el del tema (16 px) metía la lista por dentro
+        // del título, al contrario que la de pendiente de cobro.
+        margin: const EdgeInsets.only(bottom: 10),
+        child: ListTile(
+          onTap: () => context.push('/gig/${gig.id}'),
+          leading: Container(
+            width: 44,
+            height: 44,
             decoration: BoxDecoration(
-              color: badgeBg,
-              borderRadius: BorderRadius.circular(20),
+              color: gig.facturable ? colors.infoBg : context.colors.purpleBg,
+              borderRadius: BorderRadius.circular(12),
             ),
-            child: Text(
-              badgeText,
-              style: TextStyle(
-                fontSize: 11,
-                color: badgeTextColor,
-                fontWeight: FontWeight.w500,
+            child: Icon(
+              Icons.music_note_outlined,
+              color: gig.facturable ? primary : context.colors.purple,
+              size: 22,
+            ),
+          ),
+          title: GigCardContent(
+            nombre: clientAsync.when(
+              data: (client) => client?.displayName ?? 'Cliente desconocido',
+              loading: () => '...',
+              error: (_, __) => 'Error',
+            ),
+            detalle: DateFormatter.display(gig.fecha),
+            importe: gig.cachet != null
+                ? CurrencyFormatter.format(gig.cachet!)
+                : null,
+            gig: gig,
+            extra: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: badgeBg,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                badgeText,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: badgeTextColor,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
           ),
