@@ -18,6 +18,8 @@ import '../../providers/client_provider.dart';
 import '../../providers/gig_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../core/theme/app_theme_colors.dart';
+import '../../core/services/hapticos.dart';
+import '../../core/utils/confirmar_descartar.dart';
 
 class InvoiceFormScreen extends ConsumerStatefulWidget {
   final String? invoiceId;
@@ -33,6 +35,32 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = true;
   bool _isSaving = false;
+
+  /// Valores al abrir el formulario, para saber si se ha tocado algo.
+  List<Object?>? _instantanea;
+
+  /// Tras guardar bien, salir no debe preguntar.
+  bool _guardado = false;
+
+  List<Object?> _valoresActuales() => [
+    _fecha,
+    _ivaRate,
+    _irpfRate,
+    _applyIrpf,
+    // Las líneas se comparan por su contenido.
+    _items
+        .map((i) => '${i.cantidad}|${i.descripcion}|${i.precioUnitario}')
+        .join('//'),
+  ];
+
+  bool get _hayCambios {
+    if (_guardado || _instantanea == null) return false;
+    final actuales = _valoresActuales();
+    for (var i = 0; i < actuales.length; i++) {
+      if (actuales[i] != _instantanea![i]) return true;
+    }
+    return false;
+  }
 
   Invoice? _existingInvoice;
   Gig? _gig;
@@ -162,6 +190,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
+        _instantanea = _valoresActuales();
       }
     }
   }
@@ -175,7 +204,9 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
   Widget build(BuildContext context) {
     final isEditing = _existingInvoice != null;
     final isLocked = _existingInvoice?.isFiscallyLocked == true;
-    return Scaffold(
+    return FormularioConCambios(
+      hayCambios: _hayCambios,
+      child: Scaffold(
       appBar: AppBar(
         title: Text(isEditing ? 'Editar Factura' : 'Nueva Factura'),
         actions: [
@@ -288,6 +319,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                 ],
               ),
             ),
+    ),
     );
   }
 
@@ -741,7 +773,10 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
   }
 
   Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      Hapticos.error();
+      return;
+    }
     if (_gig == null || _client == null) return;
     if (_existingInvoice?.isFiscallyLocked == true) {
       if (mounted) {
@@ -810,6 +845,9 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
       }
 
       if (mounted) {
+        Hapticos.exito();
+        // Guardado: salir no debe preguntar por cambios sin guardar.
+        _guardado = true;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Factura guardada. Pendiente de subir a Drive.'),

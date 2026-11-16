@@ -5,6 +5,8 @@ import '../../core/constants/app_strings.dart';
 import '../../models/client.dart';
 import '../../providers/client_provider.dart';
 import '../../core/theme/app_theme_colors.dart';
+import '../../core/services/hapticos.dart';
+import '../../core/utils/confirmar_descartar.dart';
 
 class ClientFormScreen extends ConsumerStatefulWidget {
   final String? clientId;
@@ -29,6 +31,35 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
   final _telefonoController = TextEditingController();
   final _whatsappController = TextEditingController();
   bool _isLoading = false;
+
+  /// Valores al abrir el formulario, para saber si se ha tocado algo.
+  List<Object?>? _instantanea;
+
+  /// Tras guardar bien, salir no debe preguntar.
+  bool _guardado = false;
+
+  List<Object?> _valoresActuales() => [
+    _nombreController.text,
+    _aliasController.text,
+    _cifNifController.text,
+    _direccionController.text,
+    _ciudadController.text,
+    _provinciaController.text,
+    _codigoPostalController.text,
+    _emailController.text,
+    _telefonoController.text,
+    _whatsappController.text,
+    _aliases.join('|'),
+  ];
+
+  bool get _hayCambios {
+    if (_guardado || _instantanea == null) return false;
+    final actuales = _valoresActuales();
+    for (var i = 0; i < actuales.length; i++) {
+      if (actuales[i] != _instantanea![i]) return true;
+    }
+    return false;
+  }
   Client? _existingClient;
 
   @override
@@ -36,6 +67,8 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
     super.initState();
     if (widget.clientId != null) {
       _loadClient();
+    } else {
+      _instantanea = _valoresActuales();
     }
   }
 
@@ -56,6 +89,7 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
         _telefonoController.text = client.telefono ?? '';
         _whatsappController.text = client.whatsappPhone ?? '';
       });
+      _instantanea = _valoresActuales();
     }
   }
 
@@ -79,7 +113,9 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
   Widget build(BuildContext context) {
     final isEditing = widget.clientId != null;
 
-    return Scaffold(
+    return FormularioConCambios(
+      hayCambios: _hayCambios,
+      child: Scaffold(
       appBar: AppBar(
         title: Text(
           isEditing ? AppStrings.editarCliente : AppStrings.nuevoCliente,
@@ -275,6 +311,7 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
           ],
         ),
       ),
+    ),
     );
   }
 
@@ -289,7 +326,10 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
   }
 
   Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      Hapticos.error();
+      return;
+    }
 
     setState(() => _isLoading = true);
 
@@ -338,6 +378,9 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
       ref.invalidate(clientsProvider);
 
       if (mounted) {
+        Hapticos.exito();
+        // Guardado: salir no debe preguntar por cambios sin guardar.
+        _guardado = true;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(

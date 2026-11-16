@@ -1,7 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -53,6 +53,7 @@ import 'screens/assets/asset_form_screen.dart';
 import 'screens/assets/asset_detail_screen.dart';
 import 'screens/finanzas/finanzas_screen.dart';
 import 'screens/ai/ai_assistant_screen.dart';
+import 'core/services/hapticos.dart';
 
 Page<void> _slideUpPage(Widget child, GoRouterState state) {
   return CustomTransitionPage(
@@ -70,6 +71,25 @@ Page<void> _slideUpPage(Widget child, GoRouterState state) {
       );
     },
   );
+}
+
+/// Página con la transición propia de cada plataforma.
+///
+/// En iOS es CupertinoPage, que trae el gesto de volver atrás desde el borde;
+/// en el resto, la de Material. Con el ajuste de reducir movimiento del
+/// sistema, sin animación.
+Page<void> _paginaPlataforma(
+  BuildContext context,
+  Widget child,
+  GoRouterState state,
+) {
+  if (MediaQuery.of(context).disableAnimations) {
+    return NoTransitionPage(key: state.pageKey, child: child);
+  }
+  if (Theme.of(context).platform == TargetPlatform.iOS) {
+    return CupertinoPage(key: state.pageKey, child: child);
+  }
+  return MaterialPage(key: state.pageKey, child: child);
 }
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -223,12 +243,13 @@ final routerProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: _rootNavigatorKey,
         path: '/attachments/broken',
         pageBuilder: (context, state) =>
-            _slideUpPage(const BrokenAttachmentsScreen(), state),
+            _paginaPlataforma(context, const BrokenAttachmentsScreen(), state),
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/fechas-libres',
-        pageBuilder: (context, state) => _slideUpPage(
+        pageBuilder: (context, state) => _paginaPlataforma(
+          context,
           FechasLibresScreen(
             mes: DateFormatter.parseIsoDay(state.uri.queryParameters['fecha']),
           ),
@@ -239,18 +260,19 @@ final routerProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: _rootNavigatorKey,
         path: '/stats',
         pageBuilder: (context, state) =>
-            _slideUpPage(const StatsScreen(), state),
+            _paginaPlataforma(context, const StatsScreen(), state),
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/financial',
         pageBuilder: (context, state) =>
-            _slideUpPage(const FinancialSummaryScreen(), state),
+            _paginaPlataforma(context, const FinancialSummaryScreen(), state),
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/gig/new',
-        pageBuilder: (context, state) => _slideUpPage(
+        pageBuilder: (context, state) => _paginaPlataforma(
+          context,
           GigFormScreen(
             fechaInicial: DateFormatter.parseIsoDay(
               state.uri.queryParameters['fecha'],
@@ -262,7 +284,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/gig/edit/:id',
-        pageBuilder: (context, state) => _slideUpPage(
+        pageBuilder: (context, state) => _paginaPlataforma(
+          context,
           GigFormScreen(gigId: state.pathParameters['id']),
           state,
         ),
@@ -270,7 +293,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/gig/:id',
-        pageBuilder: (context, state) => _slideUpPage(
+        pageBuilder: (context, state) => _paginaPlataforma(
+          context,
           GigDetailScreen(gigId: state.pathParameters['id']!),
           state,
         ),
@@ -279,12 +303,13 @@ final routerProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: _rootNavigatorKey,
         path: '/client/new',
         pageBuilder: (context, state) =>
-            _slideUpPage(const ClientFormScreen(), state),
+            _paginaPlataforma(context, const ClientFormScreen(), state),
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/client/edit/:id',
-        pageBuilder: (context, state) => _slideUpPage(
+        pageBuilder: (context, state) => _paginaPlataforma(
+          context,
           ClientFormScreen(clientId: state.pathParameters['id']),
           state,
         ),
@@ -292,7 +317,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/client/:id',
-        pageBuilder: (context, state) => _slideUpPage(
+        pageBuilder: (context, state) => _paginaPlataforma(
+          context,
           ClientDetailScreen(clientId: state.pathParameters['id']!),
           state,
         ),
@@ -300,7 +326,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/invoice/:id',
-        pageBuilder: (context, state) => _slideUpPage(
+        pageBuilder: (context, state) => _paginaPlataforma(
+          context,
           InvoiceDetailScreen(invoiceId: state.pathParameters['id']!),
           state,
         ),
@@ -308,7 +335,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/invoice/preview/:id',
-        pageBuilder: (context, state) => _slideUpPage(
+        pageBuilder: (context, state) => _paginaPlataforma(
+          context,
           InvoicePreviewScreen(invoiceId: state.pathParameters['id']!),
           state,
         ),
@@ -316,7 +344,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/invoice/edit/:id',
-        pageBuilder: (context, state) => _slideUpPage(
+        pageBuilder: (context, state) => _paginaPlataforma(
+          context,
           InvoiceFormScreen(invoiceId: state.pathParameters['id']!),
           state,
         ),
@@ -324,7 +353,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/invoice/new/:gigId',
-        pageBuilder: (context, state) => _slideUpPage(
+        pageBuilder: (context, state) => _paginaPlataforma(
+          context,
           InvoiceFormScreen(gigId: state.pathParameters['gigId']!),
           state,
         ),
@@ -333,12 +363,13 @@ final routerProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: _rootNavigatorKey,
         path: '/expense/new',
         pageBuilder: (context, state) =>
-            _slideUpPage(const ExpenseFormScreen(), state),
+            _paginaPlataforma(context, const ExpenseFormScreen(), state),
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/expense/edit/:id',
-        pageBuilder: (context, state) => _slideUpPage(
+        pageBuilder: (context, state) => _paginaPlataforma(
+          context,
           ExpenseFormScreen(expenseId: int.parse(state.pathParameters['id']!)),
           state,
         ),
@@ -346,7 +377,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/expense/:id',
-        pageBuilder: (context, state) => _slideUpPage(
+        pageBuilder: (context, state) => _paginaPlataforma(
+          context,
           ExpenseDetailScreen(
             expenseId: int.parse(state.pathParameters['id']!),
           ),
@@ -357,12 +389,13 @@ final routerProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: _rootNavigatorKey,
         path: '/asset/new',
         pageBuilder: (context, state) =>
-            _slideUpPage(const AssetFormScreen(), state),
+            _paginaPlataforma(context, const AssetFormScreen(), state),
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/asset/edit/:id',
-        pageBuilder: (context, state) => _slideUpPage(
+        pageBuilder: (context, state) => _paginaPlataforma(
+          context,
           AssetFormScreen(assetId: int.parse(state.pathParameters['id']!)),
           state,
         ),
@@ -370,7 +403,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/asset/:id',
-        pageBuilder: (context, state) => _slideUpPage(
+        pageBuilder: (context, state) => _paginaPlataforma(
+          context,
           AssetDetailScreen(assetId: int.parse(state.pathParameters['id']!)),
           state,
         ),
@@ -755,7 +789,7 @@ class _ScaffoldWithNavBarState extends State<_ScaffoldWithNavBar> {
   }
 
   void _onNavTapped(int index) {
-    HapticFeedback.selectionClick();
+    Hapticos.seleccion();
     final selectedIndex = _indexFromLocation(
       GoRouterState.of(context).uri.path,
     );
@@ -795,7 +829,7 @@ class _ScaffoldWithNavBarState extends State<_ScaffoldWithNavBar> {
                   child: _BolinBubble(
                     size: _bolinSize,
                     onTap: () {
-                      HapticFeedback.selectionClick();
+                      Hapticos.seleccion();
                       context.push('/assistant');
                     },
                     onDrag: (delta) {
