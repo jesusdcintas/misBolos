@@ -18,6 +18,7 @@ import '../../services/pdf_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/google_auth_service.dart';
 import '../../services/google_calendar_service.dart';
+import '../../widgets/common/acciones_factura.dart';
 import '../../widgets/common/serpentina_celebration.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../core/theme/app_theme_colors.dart';
@@ -757,7 +758,9 @@ class _InvoiceDetailContent extends ConsumerWidget {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.mark_email_read_outlined),
-            style: ElevatedButton.styleFrom(backgroundColor: context.colors.accentSoft),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: context.colors.accentSoft,
+            ),
             label: const Text('Enviar por email'),
           ),
         ),
@@ -878,78 +881,8 @@ class _InvoiceDetailContent extends ConsumerWidget {
   }
 
   Future<void> _sendByEmail(BuildContext context, WidgetRef ref) async {
-    final client = await ref.read(clientByIdProvider(invoice.clientId).future);
-    if (client == null) return;
-    if (!context.mounted) return;
-    if (client.email == null || client.email!.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('El cliente no tiene email configurado')),
-      );
-      return;
-    }
-
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Enviar factura por email'),
-        content: Text(
-          'Se enviará la factura ${invoice.visualNumber} a ${client.email}.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Enviar'),
-          ),
-        ],
-      ),
-    );
-    if (confirm != true || !context.mounted) return;
-
-    try {
-      await ref.read(invoiceEmailSendProvider.notifier).send(invoice);
-
-      final gig = await ref.read(gigByIdProvider(invoice.gigId).future);
-      if (!context.mounted) return;
-      if (gig != null) {
-        final newGig = gig.copyWith(status: GigStatus.facturado);
-        await _syncGigToCalendar(context, ref, newGig);
-      }
-
-      final settings = await ref.read(settingsProvider.future);
-      if (settings.notificacionesActivas) {
-        await NotificationService.instance.schedulePaymentReminder(
-          id: invoice.numero,
-          clientName: client.displayName,
-          total: invoice.total,
-          invoiceNumber: invoice.numero,
-          scheduledDate: DateTime.now().add(
-            Duration(days: settings.diasRecordatorio),
-          ),
-        );
-      }
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Factura enviada a ${client.email}')),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        String message;
-        try {
-          message = e.toString();
-        } catch (_) {
-          message = 'Error desconocido';
-        }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error enviando email: $message')),
-        );
-      }
-    }
+    // El flujo vive en las acciones de factura, compartido con la lista.
+    await enviarFacturaPorEmail(context, ref, invoice);
   }
 
   Future<void> _markAs(

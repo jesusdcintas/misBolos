@@ -22,7 +22,25 @@ class GigFormScreen extends ConsumerStatefulWidget {
 
   /// Fecha con la que abrir el formulario al crear un bolo. Si no llega, hoy.
   final DateTime? fechaInicial;
-  const GigFormScreen({super.key, this.gigId, this.fechaInicial});
+
+  /// Datos con los que precargar un bolo nuevo, al duplicar otro.
+  ///
+  /// No se copia nada ligado a la factura ni al estado: el bolo nuevo empieza
+  /// como uno nuevo.
+  final String? clienteInicial;
+  final double? cachetInicial;
+  final FranjaBolo? franjaInicial;
+  final bool? facturableInicial;
+
+  const GigFormScreen({
+    super.key,
+    this.gigId,
+    this.fechaInicial,
+    this.clienteInicial,
+    this.cachetInicial,
+    this.franjaInicial,
+    this.facturableInicial,
+  });
 
   @override
   ConsumerState<GigFormScreen> createState() => _GigFormScreenState();
@@ -53,6 +71,12 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
     if (widget.gigId != null) {
       _loadGig();
     } else {
+      _clientId = widget.clienteInicial;
+      if (widget.cachetInicial != null) {
+        _cachetController.text = widget.cachetInicial!.toStringAsFixed(2);
+      }
+      _franja = widget.franjaInicial ?? FranjaBolo.diaCompleto;
+      _facturable = widget.facturableInicial ?? true;
       _instantanea = _valoresActuales();
     }
   }

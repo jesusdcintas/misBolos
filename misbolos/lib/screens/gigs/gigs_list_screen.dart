@@ -15,6 +15,9 @@ import '../../widgets/common/gig_card_content.dart';
 import '../../widgets/common/skeleton_loading.dart';
 import '../../core/services/hapticos.dart';
 import '../../core/utils/tirar_para_sincronizar.dart';
+import '../../widgets/common/acciones_bolo.dart';
+import '../../widgets/common/fondo_deslizar.dart';
+import '../../widgets/common/menu_acciones.dart';
 
 // ─── Filter providers ───
 final gigStatusFilterProvider = StateProvider<GigStatus?>((ref) => null);
@@ -655,7 +658,8 @@ class _GigsListScreenState extends ConsumerState<GigsListScreen> {
                             style: TextStyle(
                               fontSize: 10,
                               color: isSelected
-                                  ? Theme.of(context).colorScheme.onPrimary.withValues(alpha: 0.75)
+                                  ? Theme.of(context).colorScheme.onPrimary
+                                        .withValues(alpha: 0.75)
                                   : context.colors.textSecondary,
                             ),
                           ),
@@ -1080,89 +1084,66 @@ class _GigListTile extends ConsumerWidget {
           return false;
         }
       },
-      background: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.primary,
-          borderRadius: BorderRadius.circular(14),
-        ),
-        alignment: Alignment.centerLeft,
-        padding: const EdgeInsets.only(left: 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.more_horiz, color: Theme.of(context).colorScheme.onPrimary, size: 24),
-            const SizedBox(height: 4),
-            Text(
-              'Opciones',
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onPrimary,
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
+      background: FondoDeslizar(
+        color: Theme.of(context).colorScheme.primary,
+        icono: Icons.more_horiz,
+        etiqueta: 'Opciones',
+        aLaIzquierda: true,
+        margen: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       ),
-      secondaryBackground: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        decoration: BoxDecoration(
-          color: context.colors.success,
-          borderRadius: BorderRadius.circular(14),
-        ),
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.visibility, color: Theme.of(context).colorScheme.onPrimary, size: 24),
-            const SizedBox(height: 4),
-            Text(
-              'Ver',
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onPrimary,
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
+      secondaryBackground: FondoDeslizar(
+        color: context.colors.success,
+        icono: Icons.visibility,
+        etiqueta: 'Ver',
+        aLaIzquierda: false,
+        margen: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       ),
-      child: Hero(
-        tag: 'gig-${gig.id}',
-        child: Card(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          child: ListTile(
-            onTap: () {
-              AppHaptics.light();
-              context.push('/gig/${gig.id}');
-            },
-            leading: Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: gig.facturable
-                    ? context.colors.accentSoftBg
-                    : context.colors.purpleBg,
-                borderRadius: BorderRadius.circular(12),
+      child: GestoMenuAcciones(
+        acciones: () => accionesRapidasDeBolo(
+          context,
+          ref,
+          gig,
+          alCancelar: (g) => cancelarBoloConDeshacer(context, ref, g),
+        ),
+        child: Hero(
+          tag: 'gig-${gig.id}',
+          child: Card(
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: ListTile(
+              onTap: () {
+                AppHaptics.light();
+                context.push('/gig/${gig.id}');
+              },
+              leading: Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: gig.facturable
+                      ? context.colors.accentSoftBg
+                      : context.colors.purpleBg,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.music_note_outlined,
+                  color: gig.facturable
+                      ? context.colors.accentSoft
+                      : context.colors.purple,
+                  size: 22,
+                ),
               ),
-              child: Icon(
-                Icons.music_note_outlined,
-                color: gig.facturable ? context.colors.accentSoft : context.colors.purple,
-                size: 22,
+              title: GigCardContent(
+                nombre: clientAsync.when(
+                  data: (client) =>
+                      client?.displayName ?? 'Cliente desconocido',
+                  loading: () => '...',
+                  error: (_, __) => 'Error',
+                ),
+                detalle: DateFormatter.display(gig.fecha),
+                importe: gig.cachet != null
+                    ? CurrencyFormatter.format(gig.cachet!)
+                    : null,
+                gig: gig,
               ),
-            ),
-            title: GigCardContent(
-              nombre: clientAsync.when(
-                data: (client) => client?.displayName ?? 'Cliente desconocido',
-                loading: () => '...',
-                error: (_, __) => 'Error',
-              ),
-              detalle: DateFormatter.display(gig.fecha),
-              importe: gig.cachet != null
-                  ? CurrencyFormatter.format(gig.cachet!)
-                  : null,
-              gig: gig,
             ),
           ),
         ),
@@ -1171,70 +1152,13 @@ class _GigListTile extends ConsumerWidget {
   }
 
   void _showSwipeOptions(BuildContext context, WidgetRef ref, Gig gig) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: context.colors.textSecondary.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 16),
-              ListTile(
-                leading: Icon(Icons.edit, color: context.colors.accentSoft),
-                title: const Text('Editar bolo'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  context.push('/gig/edit/${gig.id}');
-                },
-              ),
-              if (gig.facturable &&
-                  (gig.invoiceId == null || gig.invoiceId!.isEmpty))
-                ListTile(
-                  leading: Icon(
-                    Icons.receipt_long,
-                    color: context.colors.success,
-                  ),
-                  title: const Text('Generar factura'),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    context.push('/invoice/new/${gig.id}');
-                  },
-                ),
-              if (gig.invoiceId != null && gig.invoiceId!.isNotEmpty)
-                ListTile(
-                  leading: Icon(Icons.receipt, color: context.colors.success),
-                  title: const Text('Ver factura'),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    context.push('/invoice/${gig.invoiceId}');
-                  },
-                ),
-              ListTile(
-                leading: Icon(Icons.cancel, color: context.colors.warning),
-                title: const Text('Marcar como cancelado'),
-                onTap: () {
-                  AppHaptics.medium();
-                  Navigator.pop(ctx);
-                  ref
-                      .read(gigsProvider.notifier)
-                      .updateGig(gig.copyWith(status: GigStatus.cancelado));
-                },
-              ),
-            ],
-          ),
-        ),
+    mostrarMenuAcciones(
+      context,
+      acciones: accionesRapidasDeBolo(
+        context,
+        ref,
+        gig,
+        alCancelar: (g) => cancelarBoloConDeshacer(context, ref, g),
       ),
     );
   }

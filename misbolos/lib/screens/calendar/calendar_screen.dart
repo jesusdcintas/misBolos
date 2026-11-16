@@ -20,6 +20,8 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../core/services/hapticos.dart';
 import '../../core/utils/tirar_para_sincronizar.dart';
+import '../../widgets/common/acciones_bolo.dart';
+import '../../widgets/common/menu_acciones.dart';
 
 final _selectedDayProvider = StateProvider<DateTime?>((ref) => null);
 final _focusedDayProvider = StateProvider<DateTime>((ref) => DateTime.now());
@@ -398,6 +400,12 @@ class CalendarScreen extends ConsumerWidget {
                 formatButtonVisible: false,
                 titleCentered: true,
               ),
+              onDayLongPressed: (selected, focused) {
+                Hapticos.toque();
+                context.push(
+                  '/gig/new?fecha=${DateFormatter.isoDay(selected)}',
+                );
+              },
               onDaySelected: (selected, focused) {
                 Hapticos.seleccion();
                 ref.read(_selectedDayProvider.notifier).state = selected;
@@ -416,7 +424,10 @@ class CalendarScreen extends ConsumerWidget {
                 spacing: 12,
                 runSpacing: 4,
                 children: [
-                  _LegendItem(color: context.colors.accentSoft, label: 'Confirmado'),
+                  _LegendItem(
+                    color: context.colors.accentSoft,
+                    label: 'Confirmado',
+                  ),
                   _LegendItem(
                     color: context.colors.purple,
                     label: 'Privado confirmado/realizado',
@@ -599,7 +610,10 @@ class CalendarScreen extends ConsumerWidget {
                   const SizedBox(width: 8),
                   Text(
                     '·',
-                    style: TextStyle(fontSize: 16, color: context.colors.accentSoft),
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: context.colors.accentSoft,
+                    ),
                   ),
                   const SizedBox(width: 8),
                   Text(
@@ -653,7 +667,8 @@ class CalendarScreen extends ConsumerWidget {
                               option.first;
                         }
                       },
-                      itemBuilder: (context) => _sortMenuItems(context, sortOption),
+                      itemBuilder: (context) =>
+                          _sortMenuItems(context, sortOption),
                       child: const _InlineActionButtonContent(
                         icon: Icons.sort,
                         label: 'Ordenar',
@@ -841,7 +856,9 @@ class CalendarScreen extends ConsumerWidget {
                       Icon(
                         Icons.music_off,
                         size: 64,
-                        color: context.colors.textSecondary.withValues(alpha: 0.5),
+                        color: context.colors.textSecondary.withValues(
+                          alpha: 0.5,
+                        ),
                       ),
                       const SizedBox(height: 16),
                       Text(
@@ -877,7 +894,6 @@ class CalendarScreen extends ConsumerWidget {
                         ref.read(_selectedGigIdsProvider.notifier).state =
                             updated;
                       },
-                      onLongSelect: () {},
                     );
                   },
                 ),
@@ -1089,7 +1105,9 @@ class CalendarScreen extends ConsumerWidget {
                       decoration: BoxDecoration(
                         // Keep light mode untouched; only dark uses theme surfaces.
                         color: isSelected
-                            ? (isDark ? colors.infoBg : context.colors.accentSoft)
+                            ? (isDark
+                                  ? colors.infoBg
+                                  : context.colors.accentSoft)
                             : hasData
                             ? (Theme.of(context).brightness == Brightness.dark
                                   ? context.colors.surfaceContainer
@@ -1255,7 +1273,11 @@ class CalendarScreen extends ConsumerWidget {
         onTap: () => {},
         child: Row(
           children: [
-            Icon(icon, size: 20, color: isSelected ? context.colors.accentSoft : null),
+            Icon(
+              icon,
+              size: 20,
+              color: isSelected ? context.colors.accentSoft : null,
+            ),
             const SizedBox(width: 12),
             Text(
               label,
@@ -1320,7 +1342,9 @@ class _StatusChip extends StatelessWidget {
     final selectedText = isDark
         ? Theme.of(context).colorScheme.primary
         : Colors.white;
-    final unselectedText = isDark ? colors.textPrimary : context.colors.textPrimary;
+    final unselectedText = isDark
+        ? colors.textPrimary
+        : context.colors.textPrimary;
     return Padding(
       padding: const EdgeInsets.only(right: 6),
       child: ChoiceChip(
@@ -1335,7 +1359,9 @@ class _StatusChip extends StatelessWidget {
         selectedColor: isDark
             ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.22)
             : context.colors.accentSoft,
-        backgroundColor: isDark ? colors.surfaceContainer : context.colors.surface,
+        backgroundColor: isDark
+            ? colors.surfaceContainer
+            : context.colors.surface,
         side: BorderSide(
           color: selected
               ? (isDark
@@ -1371,7 +1397,9 @@ class _FilterButton extends StatelessWidget {
         ? (isDark ? colors.surfaceContainer : context.colors.warningBg)
         : (isDark ? colors.cardBackground : context.colors.surface);
     final fgColor = active
-        ? (isDark ? Theme.of(context).colorScheme.primary : context.colors.warning)
+        ? (isDark
+              ? Theme.of(context).colorScheme.primary
+              : context.colors.warning)
         : disabled
         ? (isDark
               ? colors.textSecondary.withValues(alpha: 0.6)
@@ -1427,7 +1455,9 @@ class _ClearFiltersButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = context.colors;
-    final fg = isDark ? colors.error.withValues(alpha: 0.95) : context.colors.error;
+    final fg = isDark
+        ? colors.error.withValues(alpha: 0.95)
+        : context.colors.error;
     final bg = isDark
         ? colors.errorBg.withValues(alpha: 0.62)
         : context.colors.errorBg;
@@ -1586,14 +1616,12 @@ class _GigListTile extends ConsumerWidget {
   final bool selectionMode;
   final bool isSelected;
   final VoidCallback onToggle;
-  final VoidCallback onLongSelect;
 
   const _GigListTile({
     required this.gig,
     required this.selectionMode,
     required this.isSelected,
     required this.onToggle,
-    required this.onLongSelect,
   });
 
   @override
@@ -1602,98 +1630,109 @@ class _GigListTile extends ConsumerWidget {
     final colors = context.colors;
     final clientAsync = ref.watch(clientByIdProvider(gig.clientId));
 
-    return Card(
-      color: isDark
-          ? (isSelected ? colors.surfaceElevated : colors.cardBackground)
-          : (isSelected ? context.colors.accentSoftBg : null),
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: isDark
-              ? (isSelected
-                    ? colors.info.withValues(alpha: 0.55)
-                    : colors.border.withValues(alpha: 0.75))
-              : (isSelected ? context.colors.accentSoft : context.colors.border),
-          width: isSelected ? 1.1 : 0.8,
-        ),
+    return GestoMenuAcciones(
+      acciones: () => accionesRapidasDeBolo(
+        context,
+        ref,
+        gig,
+        alCancelar: (g) => cancelarBoloConDeshacer(context, ref, g),
       ),
-      child: InkWell(
-        onTap: selectionMode ? onToggle : () => context.push('/gig/${gig.id}'),
-        onLongPress: selectionMode ? null : onLongSelect,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              if (selectionMode) ...[
-                Checkbox(
-                  value: isSelected,
-                  onChanged: (_) => onToggle(),
-                  activeColor: context.colors.accentSoft,
-                ),
-                const SizedBox(width: 8),
-              ],
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? colors.surfaceContainer
-                      : gig.facturable
-                      ? context.colors.accentSoftBg
-                      : context.colors.purpleBg,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  Icons.music_note_outlined,
-                  color: isDark
-                      ? colors.textSecondary
-                      : gig.facturable
+      child: Card(
+        color: isDark
+            ? (isSelected ? colors.surfaceElevated : colors.cardBackground)
+            : (isSelected ? context.colors.accentSoftBg : null),
+        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(
+            color: isDark
+                ? (isSelected
+                      ? colors.info.withValues(alpha: 0.55)
+                      : colors.border.withValues(alpha: 0.75))
+                : (isSelected
                       ? context.colors.accentSoft
-                      : context.colors.purple,
-                  size: 22,
+                      : context.colors.border),
+            width: isSelected ? 1.1 : 0.8,
+          ),
+        ),
+        child: InkWell(
+          onTap: selectionMode
+              ? onToggle
+              : () => context.push('/gig/${gig.id}'),
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                if (selectionMode) ...[
+                  Checkbox(
+                    value: isSelected,
+                    onChanged: (_) => onToggle(),
+                    activeColor: context.colors.accentSoft,
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? colors.surfaceContainer
+                        : gig.facturable
+                        ? context.colors.accentSoftBg
+                        : context.colors.purpleBg,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    Icons.music_note_outlined,
+                    color: isDark
+                        ? colors.textSecondary
+                        : gig.facturable
+                        ? context.colors.accentSoft
+                        : context.colors.purple,
+                    size: 22,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    clientAsync.when(
-                      data: (client) => Text(
-                        client?.displayName ?? 'Cliente desconocido',
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      clientAsync.when(
+                        data: (client) => Text(
+                          client?.displayName ?? 'Cliente desconocido',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: isDark
+                                ? colors.textPrimary
+                                : const Color(0xFF0D1B2A),
+                          ),
+                        ),
+                        loading: () => const Text('...'),
+                        error: (_, __) => const Text('Error'),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${DateFormatter.dayOfWeekFull(gig.fecha)}${gig.cachet != null ? ' · ${CurrencyFormatter.format(gig.cachet!)}' : ''}',
+                        softWrap: true,
                         style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
                           color: isDark
-                              ? colors.textPrimary
-                              : const Color(0xFF0D1B2A),
+                              ? colors.textSecondary
+                              : const Color(0xFF8C95A6),
                         ),
                       ),
-                      loading: () => const Text('...'),
-                      error: (_, __) => const Text('Error'),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${DateFormatter.dayOfWeekFull(gig.fecha)}${gig.cachet != null ? ' · ${CurrencyFormatter.format(gig.cachet!)}' : ''}',
-                      softWrap: true,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark
-                            ? colors.textSecondary
-                            : const Color(0xFF8C95A6),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    GigBadges(gig: gig),
-                  ],
+                      const SizedBox(height: 6),
+                      GigBadges(gig: gig),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -1966,23 +2005,31 @@ class _CalendarGigTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final clientAsync = ref.watch(clientByIdProvider(gig.clientId));
 
-    return Card(
-      child: InkWell(
-        onTap: () => context.push('/gig/${gig.id}'),
-        borderRadius: BorderRadius.circular(14),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: GigCardContent(
-            nombre: clientAsync.when(
-              data: (c) =>
-                  c?.alias.isNotEmpty == true ? c!.alias : c?.nombre ?? '',
-              loading: () => '...',
-              error: (_, __) => 'Error',
+    return GestoMenuAcciones(
+      acciones: () => accionesRapidasDeBolo(
+        context,
+        ref,
+        gig,
+        alCancelar: (g) => cancelarBoloConDeshacer(context, ref, g),
+      ),
+      child: Card(
+        child: InkWell(
+          onTap: () => context.push('/gig/${gig.id}'),
+          borderRadius: BorderRadius.circular(14),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: GigCardContent(
+              nombre: clientAsync.when(
+                data: (c) =>
+                    c?.alias.isNotEmpty == true ? c!.alias : c?.nombre ?? '',
+                loading: () => '...',
+                error: (_, __) => 'Error',
+              ),
+              importe: gig.cachet != null
+                  ? CurrencyFormatter.format(gig.cachet!)
+                  : null,
+              gig: gig,
             ),
-            importe: gig.cachet != null
-                ? CurrencyFormatter.format(gig.cachet!)
-                : null,
-            gig: gig,
           ),
         ),
       ),
@@ -1999,12 +2046,19 @@ class _GoogleSignInBanner extends ConsumerWidget {
       color: context.colors.accentSoft.withValues(alpha: 0.08),
       child: Row(
         children: [
-          Icon(Icons.calendar_month, size: 20, color: context.colors.accentSoft),
+          Icon(
+            Icons.calendar_month,
+            size: 20,
+            color: context.colors.accentSoft,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               'Conecta Google Calendar para sincronizar tus bolos',
-              style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+              style: TextStyle(
+                fontSize: 12,
+                color: context.colors.textSecondary,
+              ),
             ),
           ),
           TextButton.icon(
@@ -2032,11 +2086,7 @@ class _GoogleAccountBanner extends StatelessWidget {
       color: context.colors.success.withValues(alpha: 0.08),
       child: Row(
         children: [
-          Icon(
-            Icons.check_circle,
-            size: 16,
-            color: context.colors.success,
-          ),
+          Icon(Icons.check_circle, size: 16, color: context.colors.success),
           const SizedBox(width: 8),
           Expanded(
             child: Text(

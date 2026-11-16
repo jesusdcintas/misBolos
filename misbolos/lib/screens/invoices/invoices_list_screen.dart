@@ -20,6 +20,9 @@ import '../../services/pdf_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/google_auth_service.dart';
 import '../../services/google_calendar_service.dart';
+import '../../widgets/common/acciones_factura.dart';
+import '../../widgets/common/deslizar_para_cobrar.dart';
+import '../../widgets/common/menu_acciones.dart';
 import '../../widgets/common/serpentina_celebration.dart';
 import '../../widgets/common/empty_state.dart';
 import '../../widgets/common/skeleton_loading.dart';
@@ -663,12 +666,6 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
           .toSet();
     }
 
-    void handleLongPress(Invoice invoice) {
-      if (selectionMode) return;
-      ref.read(_selectionModeProvider.notifier).state = true;
-      ref.read(_selectedInvoicesProvider.notifier).state = {invoice.id};
-    }
-
     if (viewMode == InvoiceViewMode.list) {
       return ListView.builder(
         padding: const EdgeInsets.symmetric(
@@ -682,7 +679,6 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
             selectionMode: selectionMode,
             isSelected: selectedInvoices.contains(inv.id),
             onSelect: (selected) => toggleSelection(inv, selected),
-            onLongPress: () => handleLongPress(inv),
           );
         },
       );
@@ -712,7 +708,6 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
           selectionMode: selectionMode,
           isSelected: selectedInvoices.contains(inv.id),
           onSelect: (selected) => toggleSelection(inv, selected),
-          onLongPress: () => handleLongPress(inv),
         );
       },
     );
@@ -1671,14 +1666,12 @@ class _InvoiceTile extends ConsumerWidget {
   final bool selectionMode;
   final bool isSelected;
   final ValueChanged<bool>? onSelect;
-  final VoidCallback? onLongPress;
 
   const _InvoiceTile({
     required this.invoice,
     this.selectionMode = false,
     this.isSelected = false,
     this.onSelect,
-    this.onLongPress,
   });
 
   Color _statusBgColor(BuildContext context) {
@@ -1768,6 +1761,39 @@ class _InvoiceTile extends ConsumerWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final clientAsync = ref.watch(clientByIdProvider(invoice.clientId));
 
+    List<AccionRapida> acciones() => accionesRapidasDeFactura(
+      context,
+      ref,
+      invoice,
+      puedeEnviarEmail:
+          clientAsync.valueOrNull?.email?.trim().isNotEmpty ?? false,
+    );
+
+    final tarjeta = GestoMenuAcciones(
+      acciones: acciones,
+      child: _tarjeta(context, ref, clientAsync, colors, scheme, isDark),
+    );
+
+    if (selectionMode) return tarjeta;
+
+    return DeslizarParaCobrar(
+      invoice: invoice,
+      // Sin esperar: el aviso de «Deshacer» dura varios segundos y la tarjeta
+      // tiene que volver a su sitio ya.
+      alCobrar: () =>
+          unawaited(marcarCobradaConDeshacer(context, ref, invoice)),
+      child: tarjeta,
+    );
+  }
+
+  Widget _tarjeta(
+    BuildContext context,
+    WidgetRef ref,
+    AsyncValue<Client?> clientAsync,
+    AppThemeColors colors,
+    ColorScheme scheme,
+    bool isDark,
+  ) {
     return Card(
       color: isDark
           ? (isSelected ? colors.surfaceElevated : colors.cardBackground)
@@ -1779,7 +1805,6 @@ class _InvoiceTile extends ConsumerWidget {
                 AppHaptics.light();
                 context.push('/invoice/${invoice.id}');
               },
-        onLongPress: onLongPress,
         leading: selectionMode
             ? Checkbox(
                 value: isSelected,
@@ -1850,14 +1875,12 @@ class _InvoiceGridCard extends ConsumerWidget {
   final bool selectionMode;
   final bool isSelected;
   final ValueChanged<bool>? onSelect;
-  final VoidCallback? onLongPress;
 
   const _InvoiceGridCard({
     required this.invoice,
     this.selectionMode = false,
     this.isSelected = false,
     this.onSelect,
-    this.onLongPress,
   });
 
   Color _statusBgColor(BuildContext context) {
@@ -1922,136 +1945,144 @@ class _InvoiceGridCard extends ConsumerWidget {
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final clientAsync = ref.watch(clientByIdProvider(invoice.clientId));
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onLongPress: onLongPress,
-        onTap: selectionMode
-            ? () => onSelect?.call(!isSelected)
-            : () {
-                AppHaptics.light();
-                context.push('/invoice/${invoice.id}');
-              },
-        child: Card(
-          margin: EdgeInsets.zero,
-          color: isSelected ? colors.infoBg : colors.cardBackground,
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    if (selectionMode)
-                      Checkbox(
-                        value: isSelected,
-                        onChanged: (v) => onSelect?.call(v ?? false),
-                        activeColor: scheme.primary,
-                      )
-                    else
-                      _InvoiceNumberBadge(invoice: invoice),
-                    const Spacer(),
-                    if (invoice.isRectifying) ...[
+    return GestoMenuAcciones(
+      acciones: () => accionesRapidasDeFactura(
+        context,
+        ref,
+        invoice,
+        puedeEnviarEmail:
+            clientAsync.valueOrNull?.email?.trim().isNotEmpty ?? false,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: selectionMode
+              ? () => onSelect?.call(!isSelected)
+              : () {
+                  AppHaptics.light();
+                  context.push('/invoice/${invoice.id}');
+                },
+          child: Card(
+            margin: EdgeInsets.zero,
+            color: isSelected ? colors.infoBg : colors.cardBackground,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      if (selectionMode)
+                        Checkbox(
+                          value: isSelected,
+                          onChanged: (v) => onSelect?.call(v ?? false),
+                          activeColor: scheme.primary,
+                        )
+                      else
+                        _InvoiceNumberBadge(invoice: invoice),
+                      const Spacer(),
+                      if (invoice.isRectifying) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: context.colors.accentSoftBg,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            'Rectificativa',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: context.colors.accentSoft,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                      ],
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 8,
                           vertical: 3,
                         ),
                         decoration: BoxDecoration(
-                          color: context.colors.accentSoftBg,
+                          color: _statusBgColor(context),
                           borderRadius: BorderRadius.circular(999),
+                          border: isDark
+                              ? Border.all(
+                                  color: colors.border.withValues(alpha: 0.6),
+                                )
+                              : null,
                         ),
                         child: Text(
-                          'Rectificativa',
+                          invoice.status.label,
                           style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
-                            color: context.colors.accentSoft,
+                            color: _statusTextColor(context),
                           ),
                         ),
                       ),
-                      const SizedBox(width: 6),
                     ],
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: _statusBgColor(context),
-                        borderRadius: BorderRadius.circular(999),
-                        border: isDark
-                            ? Border.all(
-                                color: colors.border.withValues(alpha: 0.6),
-                              )
-                            : null,
-                      ),
-                      child: Text(
-                        invoice.status.label,
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: _statusTextColor(context),
-                        ),
+                  ),
+                  const SizedBox(height: 10),
+                  clientAsync.when(
+                    data: (c) => Text(
+                      c?.alias.isNotEmpty == true ? c!.alias : c?.nombre ?? '',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: isDark
+                            ? colors.textPrimary
+                            : context.colors.textPrimary,
                       ),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                clientAsync.when(
-                  data: (c) => Text(
-                    c?.alias.isNotEmpty == true ? c!.alias : c?.nombre ?? '',
+                    loading: () => const Text('...'),
+                    error: (_, __) => const Text('Error'),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    DateFormatter.dayOfWeekFull(invoice.fecha),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                      color: isDark
+                          ? colors.textSecondary
+                          : context.colors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _conceptSummary,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: isDark
+                          ? colors.textSecondary
+                          : context.colors.textPrimary,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    CurrencyFormatter.format(invoice.total),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 18,
                       color: isDark
                           ? colors.textPrimary
                           : context.colors.textPrimary,
                     ),
                   ),
-                  loading: () => const Text('...'),
-                  error: (_, __) => const Text('Error'),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  DateFormatter.dayOfWeekFull(invoice.fecha),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: isDark
-                        ? colors.textSecondary
-                        : context.colors.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _conceptSummary,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: isDark
-                        ? colors.textSecondary
-                        : context.colors.textPrimary,
-                  ),
-                ),
-                const Spacer(),
-                Text(
-                  CurrencyFormatter.format(invoice.total),
-                  style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 18,
-                    color: isDark
-                        ? colors.textPrimary
-                        : context.colors.textPrimary,
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

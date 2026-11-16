@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -8,7 +10,9 @@ import '../../models/expense.dart';
 import '../../providers/assets_provider.dart';
 import '../../providers/expenses_provider.dart';
 import '../../providers/sync_provider.dart';
+import '../../widgets/common/borrado_con_deshacer.dart';
 import '../../widgets/common/empty_state.dart';
+import '../../widgets/common/fondo_deslizar.dart';
 import '../../core/services/hapticos.dart';
 import '../../core/utils/tirar_para_sincronizar.dart';
 
@@ -35,10 +39,41 @@ class GastosInversionesScreen extends ConsumerStatefulWidget {
 }
 
 class _GastosInversionesScreenState
-    extends ConsumerState<GastosInversionesScreen> {
+    extends ConsumerState<GastosInversionesScreen>
+    with WidgetsBindingObserver {
   bool _entered = false;
   ExpensesNotifier? _expensesNotifier;
   AssetsNotifier? _assetsNotifier;
+
+  /// El gasto desaparece de la lista al deslizar, pero no se borra de verdad
+  /// hasta que se cierra el aviso sin pulsar «Deshacer».
+  late final BorradoConDeshacer<Expense> _borrado = BorradoConDeshacer(
+    alConfirmar: (gasto) async {
+      // En Drive no se toca nada: eso se pregunta en el detalle del gasto.
+      await ref
+          .read(expensesProvider.notifier)
+          .remove(gasto.id!, deleteFromDrive: false);
+    },
+    alCambiar: () {
+      if (mounted) setState(() {});
+    },
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    // Si la app se va a segundo plano, el borrado en espera se ejecuta ya:
+    // así no queda a medias si el sistema la mata.
+    if (state != AppLifecycleState.resumed) {
+      unawaited(_borrado.confirmarPendientes());
+    }
+  }
 
   @override
   void didChangeDependencies() {
@@ -55,6 +90,9 @@ class _GastosInversionesScreenState
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    // Salir de la pantalla cierra el plazo de «Deshacer».
+    unawaited(_borrado.confirmarPendientes());
     _expensesNotifier?.leaveScreen();
     _assetsNotifier?.leaveScreen();
     super.dispose();
@@ -89,7 +127,13 @@ class _GastosInversionesScreenState
           }
 
           final items = _buildItems(expenses, assets);
-          final filtered = _applyFilters(items, monthFilter, yearFilter);
+          final visibles = items
+              .where(
+                (i) =>
+                    i.gasto?.id == null || !_borrado.estaOculto(i.gasto!.id!),
+              )
+              .toList();
+          final filtered = _applyFilters(visibles, monthFilter, yearFilter);
           _sortItems(filtered, sortOption);
 
           final total = filtered.fold<double>(0.0, (s, i) => s + i.importe);
@@ -124,12 +168,7 @@ class _GastosInversionesScreenState
                     ),
                   )
                 else
-                  ...filtered.map(
-                    (item) => Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                      child: _MovimientoCard(item: item),
-                    ),
-                  ),
+                  ...filtered.map(_tarjeta),
                 const SizedBox(height: 84),
               ],
             ),
@@ -143,6 +182,46 @@ class _GastosInversionesScreenState
         },
         child: const Icon(Icons.add),
       ),
+    );
+  }
+
+  Widget _tarjeta(_MovimientoItem item) {
+    final tarjeta = Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: _MovimientoCard(item: item),
+    );
+
+    final gasto = item.gasto;
+    if (gasto?.id == null) return tarjeta;
+
+    return Dismissible(
+      key: Key('gasto-${gasto!.id}'),
+      direction: DismissDirection.endToStart,
+      confirmDismiss: (_) async {
+        Hapticos.umbral();
+        // Sin esperar: el aviso dura unos segundos y la tarjeta ya se ha
+        // quitado de la lista.
+        unawaited(
+          _borrado.borrar(
+            context: context,
+            clave: gasto.id!,
+            elemento: gasto,
+            mensaje: gasto.driveFileId?.trim().isNotEmpty == true
+                ? 'Gasto borrado. El PDF sigue en Drive'
+                : 'Gasto borrado',
+          ),
+        );
+        return false;
+      },
+      secondaryBackground: FondoDeslizar(
+        color: context.colors.error,
+        icono: Icons.delete_outline,
+        etiqueta: 'Borrar',
+        aLaIzquierda: false,
+        margen: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+        radio: 12,
+      ),
+      child: tarjeta,
     );
   }
 
@@ -161,6 +240,7 @@ class _GastosInversionesScreenState
           icono: _expenseIcon(e.categoria),
           isInversion: false,
           route: e.id != null ? '/expense/${e.id}' : null,
+          gasto: e,
         ),
       );
     }
@@ -238,6 +318,9 @@ class _MovimientoItem {
   final bool isInversion;
   final String? route;
 
+  /// Solo los gastos: las inversiones son registros legacy de solo lectura.
+  final Expense? gasto;
+
   const _MovimientoItem({
     required this.fecha,
     required this.titulo,
@@ -246,6 +329,7 @@ class _MovimientoItem {
     required this.icono,
     required this.isInversion,
     required this.route,
+    this.gasto,
   });
 }
 

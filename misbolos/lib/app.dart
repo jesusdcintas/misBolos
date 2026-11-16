@@ -14,6 +14,7 @@ import 'core/theme/app_theme.dart';
 import 'core/utils/date_formatter.dart';
 import 'database/database_helper.dart';
 import 'models/app_settings.dart';
+import 'models/franja_bolo.dart';
 import 'providers/assets_provider.dart';
 import 'providers/client_provider.dart';
 import 'providers/expenses_provider.dart';
@@ -277,6 +278,18 @@ final routerProvider = Provider<GoRouter>((ref) {
             fechaInicial: DateFormatter.parseIsoDay(
               state.uri.queryParameters['fecha'],
             ),
+            // Los demás llegan al duplicar un bolo.
+            clienteInicial: state.uri.queryParameters['cliente'],
+            cachetInicial: double.tryParse(
+              state.uri.queryParameters['cachet'] ?? '',
+            ),
+            franjaInicial: franjaFromDb(state.uri.queryParameters['franja']),
+            facturableInicial:
+                switch (state.uri.queryParameters['facturable']) {
+                  '1' => true,
+                  '0' => false,
+                  _ => null,
+                },
           ),
           state,
         ),

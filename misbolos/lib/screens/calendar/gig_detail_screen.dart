@@ -13,6 +13,7 @@ import '../../providers/client_provider.dart';
 import '../../providers/invoice_provider.dart';
 import '../../services/google_auth_service.dart';
 import '../../services/google_calendar_service.dart';
+import '../../widgets/common/acciones_bolo.dart';
 import '../../widgets/common/status_badge.dart';
 import '../../widgets/common/facturable_badge.dart';
 import '../../widgets/common/franja_badge.dart';
@@ -328,58 +329,10 @@ class _GigDetailContent extends ConsumerWidget {
     }
   }
 
-  Future<void> _syncGigToCalendar(WidgetRef ref, Gig gig) async {
-    final authState = ref.read(googleAuthProvider);
-    if (!authState.isSignedIn) return;
-    try {
-      final client = await ref.read(clientByIdProvider(gig.clientId).future);
-      await GoogleCalendarService().syncGig(
-        gig: gig,
-        clientName: client?.displayName ?? 'Cliente',
-        cachet: gig.cachet,
-      );
-    } catch (_) {}
-  }
-
   Future<void> _cancelGig(BuildContext context, WidgetRef ref, Gig gig) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('¿Cancelar bolo?'),
-        content: const Text('Esta acción no se puede deshacer.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text(AppStrings.cancelar),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(
-              AppStrings.cancelarBolo,
-              style: const TextStyle(color: AppColors.accentRed),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm == true) {
-      Hapticos.umbral();
-      await ref
-          .read(gigsProvider.notifier)
-          .updateStatus(gig.id, GigStatus.cancelado);
-
-      // Sync cancellation to Google Calendar
-      final updatedGig = gig.copyWith(status: GigStatus.cancelado);
-      await _syncGigToCalendar(ref, updatedGig);
-
-      ref.invalidate(gigByIdProvider(gig.id));
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Bolo cancelado')));
-      }
-    }
+    // Sin preguntar antes: el aviso con «Deshacer» devuelve el bolo a su
+    // estado anterior y vuelve a sincronizar el calendario.
+    await cancelarBoloConDeshacer(context, ref, gig);
   }
 
   Future<void> _deleteGig(BuildContext context, WidgetRef ref, Gig gig) async {
