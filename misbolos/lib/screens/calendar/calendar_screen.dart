@@ -18,6 +18,7 @@ import '../../services/google_calendar_service.dart';
 import '../../widgets/common/gig_card_content.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import '../../core/services/hapticos.dart';
 
 final _selectedDayProvider = StateProvider<DateTime?>((ref) => null);
 final _focusedDayProvider = StateProvider<DateTime>((ref) => DateTime.now());
@@ -302,6 +303,7 @@ class CalendarScreen extends ConsumerWidget {
           ? null
           : FloatingActionButton(
               onPressed: () {
+                Hapticos.toque();
                 // En la vista de calendario, el nuevo bolo hereda el día
                 // seleccionado; en la vista de lista se mantiene hoy.
                 final fecha = isCalendarView ? selectedDay : null;
@@ -394,6 +396,7 @@ class CalendarScreen extends ConsumerWidget {
                 titleCentered: true,
               ),
               onDaySelected: (selected, focused) {
+                Hapticos.seleccion();
                 ref.read(_selectedDayProvider.notifier).state = selected;
                 ref.read(_focusedDayProvider.notifier).state = focused;
               },

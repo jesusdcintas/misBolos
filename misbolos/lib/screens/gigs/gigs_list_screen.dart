@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -15,6 +14,7 @@ import '../../providers/client_provider.dart';
 import '../../providers/sync_provider.dart';
 import '../../widgets/common/gig_card_content.dart';
 import '../../widgets/common/skeleton_loading.dart';
+import '../../core/services/hapticos.dart';
 
 // ─── Filter providers ───
 final gigStatusFilterProvider = StateProvider<GigStatus?>((ref) => null);
@@ -1073,11 +1073,11 @@ class _GigListTile extends ConsumerWidget {
       direction: DismissDirection.horizontal,
       confirmDismiss: (direction) async {
         if (direction == DismissDirection.startToEnd) {
-          HapticFeedback.mediumImpact();
+          Hapticos.umbral();
           _showSwipeOptions(context, ref, gig);
           return false;
         } else {
-          HapticFeedback.selectionClick();
+          Hapticos.seleccion();
           context.push('/gig/${gig.id}');
           return false;
         }

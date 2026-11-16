@@ -26,6 +26,7 @@ import '../../widgets/common/skeleton_loading.dart';
 import '../../core/utils/app_haptics.dart';
 import '../../models/client.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../core/services/hapticos.dart';
 
 void _clearAllInvoiceFilters(WidgetRef ref) {
   ref.read(invoiceStatusFilterProvider.notifier).state = null;
@@ -1229,7 +1230,11 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
       value: option,
       child: Row(
         children: [
-          Icon(icon, size: 20, color: isSelected ? context.colors.accentSoft : null),
+          Icon(
+            icon,
+            size: 20,
+            color: isSelected ? context.colors.accentSoft : null,
+          ),
           const SizedBox(width: 12),
           Text(
             label,
@@ -1414,7 +1419,8 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
                             style: TextStyle(
                               fontSize: 10,
                               color: isSelected
-                                  ? Theme.of(context).colorScheme.onPrimary.withValues(alpha: 0.75)
+                                  ? Theme.of(context).colorScheme.onPrimary
+                                        .withValues(alpha: 0.75)
                                   : context.colors.textSecondary,
                             ),
                           ),
@@ -1486,14 +1492,21 @@ class _FilterChip extends StatelessWidget {
     final colors = context.colors;
     final scheme = Theme.of(context).colorScheme;
     final selectedText = isDark ? scheme.primary : Colors.white;
-    final unselectedText = isDark ? colors.textPrimary : context.colors.textPrimary;
+    final unselectedText = isDark
+        ? colors.textPrimary
+        : context.colors.textPrimary;
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: ChoiceChip(
         label: Text(label),
         selected: selected,
-        onSelected: (_) => onTap(),
-        backgroundColor: isDark ? colors.surfaceContainer : context.colors.surface,
+        onSelected: (_) {
+          Hapticos.seleccion();
+          onTap();
+        },
+        backgroundColor: isDark
+            ? colors.surfaceContainer
+            : context.colors.surface,
         selectedColor: isDark
             ? scheme.primary.withValues(alpha: 0.22)
             : context.colors.accentSoft,
@@ -2034,7 +2047,9 @@ class _InvoiceGridCard extends ConsumerWidget {
                   style: TextStyle(
                     fontWeight: FontWeight.w800,
                     fontSize: 18,
-                    color: isDark ? colors.textPrimary : context.colors.textPrimary,
+                    color: isDark
+                        ? colors.textPrimary
+                        : context.colors.textPrimary,
                   ),
                 ),
               ],
@@ -2065,21 +2080,26 @@ class _InvoiceNumberBadge extends StatelessWidget {
       isRectifying,
       invoice.status,
     )) {
-      (true, InvoiceStatus.pagada) => isDark
-          ? (colors.infoBg, colors.info)
-          : (context.colors.fiscalBg, context.colors.fiscal),
-      (true, InvoiceStatus.enviada) => isDark
-          ? (colors.infoBg, colors.info)
-          : (context.colors.purpleBg, context.colors.purple),
-      (_, InvoiceStatus.borrador) => isDark
-          ? (colors.surfaceContainer, colors.textSecondary)
-          : (context.colors.draftBg, context.colors.draft),
-      (_, InvoiceStatus.enviada) => isDark
-          ? (colors.warningBg, colors.warning)
-          : (context.colors.warningBg, context.colors.warning),
-      (_, InvoiceStatus.pagada) => isDark
-          ? (colors.successBg, colors.success)
-          : (context.colors.successBg, context.colors.success),
+      (true, InvoiceStatus.pagada) =>
+        isDark
+            ? (colors.infoBg, colors.info)
+            : (context.colors.fiscalBg, context.colors.fiscal),
+      (true, InvoiceStatus.enviada) =>
+        isDark
+            ? (colors.infoBg, colors.info)
+            : (context.colors.purpleBg, context.colors.purple),
+      (_, InvoiceStatus.borrador) =>
+        isDark
+            ? (colors.surfaceContainer, colors.textSecondary)
+            : (context.colors.draftBg, context.colors.draft),
+      (_, InvoiceStatus.enviada) =>
+        isDark
+            ? (colors.warningBg, colors.warning)
+            : (context.colors.warningBg, context.colors.warning),
+      (_, InvoiceStatus.pagada) =>
+        isDark
+            ? (colors.successBg, colors.success)
+            : (context.colors.successBg, context.colors.success),
     };
     final width = compact ? 78.0 : 84.0;
     final height = compact ? 62.0 : 64.0;
@@ -2725,7 +2745,9 @@ class _InvClearFiltersButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = context.colors;
-    final fg = isDark ? colors.error.withValues(alpha: 0.95) : context.colors.error;
+    final fg = isDark
+        ? colors.error.withValues(alpha: 0.95)
+        : context.colors.error;
     final bg = isDark
         ? colors.errorBg.withValues(alpha: 0.62)
         : context.colors.errorBg;

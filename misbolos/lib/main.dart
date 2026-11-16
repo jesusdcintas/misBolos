@@ -9,6 +9,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'app.dart';
 import 'core/constants/supabase_config.dart';
+import 'core/services/hapticos.dart';
 import 'database/database_helper.dart';
 import 'services/notification_service.dart';
 import 'services/supabase_service.dart';
@@ -27,6 +28,9 @@ Future<void> main() async {
         sqfliteFfiInit();
         databaseFactory = databaseFactoryFfi;
       }
+
+      // Preferencia local de vibración.
+      await Hapticos.cargar();
 
       // Inicializar DB invitado; al autenticar se conmuta a DB por usuario.
       await DatabaseHelper.instance.switchToUserDatabase(null);

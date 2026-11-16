@@ -13,6 +13,7 @@ import '../../models/gig.dart';
 import '../../providers/client_provider.dart';
 import '../../providers/gig_provider.dart';
 import '../../widgets/calendar/mini_calendario_mes.dart';
+import '../../core/services/hapticos.dart';
 
 /// Clave del último patrón de días de la semana. Solo local, no se sincroniza.
 const String fechasLibresDiasSemanaKey = 'fechas_libres_dias_semana';
@@ -111,6 +112,7 @@ class _FechasLibresScreenState extends ConsumerState<FechasLibresScreen> {
   }
 
   Future<void> _cambiarFranja(FranjaPedida pedida) async {
+    Hapticos.seleccion();
     setState(() => _pedida = pedida);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(fechasLibresFranjaKey, pedida.name);
@@ -126,6 +128,7 @@ class _FechasLibresScreenState extends ConsumerState<FechasLibresScreen> {
 
   /// Cambiar el patrón o los días de la semana borra los retoques del mes.
   void _cambiarDiasSemana(Set<int> dias) {
+    Hapticos.seleccion();
     setState(() {
       _diasSemana = dias;
       _anadidos.clear();
@@ -142,6 +145,7 @@ class _FechasLibresScreenState extends ConsumerState<FechasLibresScreen> {
   }
 
   void _tocarDia(DateTime fecha) {
+    Hapticos.seleccion();
     setState(() {
       final delPatron = _diasSemana.contains(fecha.weekday);
       final marcado =
@@ -183,6 +187,7 @@ class _FechasLibresScreenState extends ConsumerState<FechasLibresScreen> {
   }
 
   Future<void> _copiar(String texto) async {
+    Hapticos.toque();
     await Clipboard.setData(ClipboardData(text: texto));
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -280,7 +285,10 @@ class _FechasLibresScreenState extends ConsumerState<FechasLibresScreen> {
             mes: _mes,
             cuantas: libres.length,
             cabecera: _cabecera,
-            onCabecera: (v) => setState(() => _cabecera = v),
+            onCabecera: (v) {
+              Hapticos.toque();
+              setState(() => _cabecera = v);
+            },
             texto: texto,
             // En móvil las acciones van fijas abajo.
             mostrarAcciones: anchura,

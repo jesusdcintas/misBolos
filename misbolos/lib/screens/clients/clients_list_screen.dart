@@ -10,6 +10,7 @@ import '../../providers/invoice_provider.dart';
 import '../../widgets/common/empty_state.dart';
 import '../../widgets/common/skeleton_loading.dart';
 import '../../core/utils/app_haptics.dart';
+import '../../core/services/hapticos.dart';
 
 class ClientsListScreen extends ConsumerStatefulWidget {
   final bool embedded;
@@ -130,7 +131,10 @@ class _ClientsListScreenState extends ConsumerState<ClientsListScreen> {
             right: 16,
             bottom: 16,
             child: FloatingActionButton(
-              onPressed: () => context.push('/client/new'),
+              onPressed: () {
+                Hapticos.toque();
+                context.push('/client/new');
+              },
               child: const Icon(Icons.add),
             ),
           ),
@@ -148,7 +152,10 @@ class _ClientsListScreenState extends ConsumerState<ClientsListScreen> {
       ),
       body: content,
       floatingActionButton: FloatingActionButton(
-        onPressed: () => context.push('/client/new'),
+        onPressed: () {
+          Hapticos.toque();
+          context.push('/client/new');
+        },
         child: const Icon(Icons.add),
       ),
     );

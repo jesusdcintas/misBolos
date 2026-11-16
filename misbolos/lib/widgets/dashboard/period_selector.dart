@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_theme_colors.dart';
 import '../../providers/stats_provider.dart';
+import '../../core/services/hapticos.dart';
 
 /// Selector de periodo (Mes / Trimestre / Año) y navegación entre periodos.
 ///
@@ -37,6 +38,7 @@ class PeriodSelector extends ConsumerWidget {
               return Expanded(
                 child: GestureDetector(
                   onTap: () {
+                    Hapticos.seleccion();
                     ref.read(dashboardPeriodProvider.notifier).state = period
                         .copyWith(
                           mode: mode,

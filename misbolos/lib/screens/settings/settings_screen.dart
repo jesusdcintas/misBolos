@@ -16,6 +16,7 @@ import '../../providers/settings_provider.dart';
 import '../../services/supabase_service.dart';
 import '../settings/duplicate_clients_screen.dart';
 import '../settings/import_screen.dart';
+import '../../core/services/hapticos.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -36,6 +37,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _autoCloudSyncEnabled = true;
   int _autoCloudSyncIntervalSeconds = 45;
   String _appThemeMode = 'light';
+  bool _hapticos = Hapticos.activados;
   bool _securityPinEnabled = false;
   String _securityPinCode = '';
   bool _securityBiometricEnabled = false;
@@ -199,6 +201,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               style: TextStyle(color: Theme.of(context).colorScheme.outline),
             ),
           ),
+          // Solo hay vibración en móvil: en escritorio no se ofrece.
+          if (Hapticos.disponibles)
+            SwitchListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Vibración'),
+              subtitle: const Text(
+                'Pequeños toques al elegir opciones y al guardar.',
+              ),
+              value: _hapticos,
+              onChanged: (v) async {
+                setState(() => _hapticos = v);
+                await Hapticos.cambiar(v);
+                // Al encenderla, se nota en el momento.
+                if (v) Hapticos.toque();
+              },
+            ),
         ],
       ),
     );

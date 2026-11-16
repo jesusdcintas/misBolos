@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
@@ -19,6 +18,7 @@ import '../../widgets/common/facturable_badge.dart';
 import '../../widgets/common/franja_badge.dart';
 import '../../widgets/common/cobrado_confetti_button.dart';
 import '../../core/theme/app_theme_colors.dart';
+import '../../core/services/hapticos.dart';
 
 class GigDetailScreen extends ConsumerWidget {
   final String gigId;
@@ -299,7 +299,7 @@ class _GigDetailContent extends ConsumerWidget {
     WidgetRef ref,
     Gig gig,
   ) async {
-    HapticFeedback.heavyImpact();
+    Hapticos.umbral();
     await ref
         .read(gigsProvider.notifier)
         .updateStatus(gig.id, GigStatus.cobradoB);
@@ -316,7 +316,7 @@ class _GigDetailContent extends ConsumerWidget {
     WidgetRef ref,
     Gig gig,
   ) async {
-    HapticFeedback.mediumImpact();
+    Hapticos.umbral();
     await ref
         .read(gigsProvider.notifier)
         .updateStatus(gig.id, GigStatus.realizadoB);
@@ -364,7 +364,7 @@ class _GigDetailContent extends ConsumerWidget {
     );
 
     if (confirm == true) {
-      HapticFeedback.heavyImpact();
+      Hapticos.umbral();
       await ref
           .read(gigsProvider.notifier)
           .updateStatus(gig.id, GigStatus.cancelado);

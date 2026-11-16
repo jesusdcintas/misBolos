@@ -9,6 +9,7 @@ import '../../providers/assets_provider.dart';
 import '../../providers/expenses_provider.dart';
 import '../../providers/sync_provider.dart';
 import '../../widgets/common/empty_state.dart';
+import '../../core/services/hapticos.dart';
 
 enum _MovimientoSortOption { fechaDesc, fechaAsc, importeDesc, importeAsc }
 
@@ -135,7 +136,10 @@ class _GastosInversionesScreenState
         },
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => context.push('/expense/new'),
+        onPressed: () {
+          Hapticos.toque();
+          context.push('/expense/new');
+        },
         child: const Icon(Icons.add),
       ),
     );
