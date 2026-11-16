@@ -10,6 +10,8 @@ import '../../providers/invoice_provider.dart';
 import '../../widgets/common/empty_state.dart';
 import '../../widgets/common/skeleton_loading.dart';
 import '../../core/utils/app_haptics.dart';
+import '../../core/services/hapticos.dart';
+import '../../core/utils/tirar_para_sincronizar.dart';
 
 class ClientsListScreen extends ConsumerStatefulWidget {
   final bool embedded;
@@ -29,97 +31,103 @@ class _ClientsListScreenState extends ConsumerState<ClientsListScreen> {
         ? null
         : _filterClients(clientsAsync.valueOrNull!).length;
 
-    final content = Column(
-      children: [
-        if (widget.embedded)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                headerCount == null
-                    ? AppStrings.clientes
-                    : '${AppStrings.clientes} ($headerCount)',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+    final content = RefreshIndicator(
+      onRefresh: () async {
+        await sincronizarTirando(context, ref);
+        ref.invalidate(clientsProvider);
+      },
+      child: Column(
+        children: [
+          if (widget.embedded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  headerCount == null
+                      ? AppStrings.clientes
+                      : '${AppStrings.clientes} ($headerCount)',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
             ),
-          ),
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: TextField(
-            decoration: const InputDecoration(
-              hintText: 'Buscar cliente...',
-              prefixIcon: Icon(Icons.search),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: TextField(
+              decoration: const InputDecoration(
+                hintText: 'Buscar cliente...',
+                prefixIcon: Icon(Icons.search),
+              ),
+              onChanged: (v) => setState(() => _searchQuery = v),
             ),
-            onChanged: (v) => setState(() => _searchQuery = v),
           ),
-        ),
-        Expanded(
-          child: clientsAsync.when(
-            data: (allClients) {
-              final clients = _filterClients(allClients);
-              if (clients.isEmpty) {
-                return const EmptyState(
-                  icon: Icons.people_outline,
-                  message: AppStrings.sinClientes,
-                );
-              }
-              return ListView.builder(
-                padding: const EdgeInsets.only(bottom: 96),
-                itemCount: clients.length,
-                itemBuilder: (context, index) {
-                  final client = clients[index];
-                  final displayName = client.alias.isNotEmpty
-                      ? client.alias
-                      : client.nombre;
-                  final subtitle = client.alias.isNotEmpty
-                      ? '${client.nombre}${client.cifNif.isNotEmpty ? ' · ${client.cifNif}' : ''}'
-                      : (client.cifNif.isNotEmpty ? client.cifNif : null);
-                  return Card(
-                    child: ListTile(
-                      leading: CircleAvatar(
-                        child: Text(displayName[0].toUpperCase()),
-                      ),
-                      title: Text(displayName),
-                      subtitle: subtitle != null ? Text(subtitle) : null,
-                      trailing: PopupMenuButton<String>(
-                        tooltip: 'Opciones',
-                        onSelected: (value) {
-                          if (value == 'delete') {
-                            _confirmDeleteClient(context, client);
-                          }
-                        },
-                        itemBuilder: (context) => const [
-                          PopupMenuItem(
-                            value: 'delete',
-                            child: Row(
-                              children: [
-                                Icon(Icons.delete_outline),
-                                SizedBox(width: 8),
-                                Text('Eliminar'),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      onTap: () {
-                        AppHaptics.light();
-                        context.push('/client/${client.id}');
-                      },
-                    ),
+          Expanded(
+            child: clientsAsync.when(
+              data: (allClients) {
+                final clients = _filterClients(allClients);
+                if (clients.isEmpty) {
+                  return const EmptyState(
+                    icon: Icons.people_outline,
+                    message: AppStrings.sinClientes,
                   );
-                },
-              );
-            },
-            loading: () => Column(
-              children: List.generate(6, (_) => const ClientCardSkeleton()),
+                }
+                return ListView.builder(
+                  padding: const EdgeInsets.only(bottom: 96),
+                  itemCount: clients.length,
+                  itemBuilder: (context, index) {
+                    final client = clients[index];
+                    final displayName = client.alias.isNotEmpty
+                        ? client.alias
+                        : client.nombre;
+                    final subtitle = client.alias.isNotEmpty
+                        ? '${client.nombre}${client.cifNif.isNotEmpty ? ' · ${client.cifNif}' : ''}'
+                        : (client.cifNif.isNotEmpty ? client.cifNif : null);
+                    return Card(
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          child: Text(displayName[0].toUpperCase()),
+                        ),
+                        title: Text(displayName),
+                        subtitle: subtitle != null ? Text(subtitle) : null,
+                        trailing: PopupMenuButton<String>(
+                          tooltip: 'Opciones',
+                          onSelected: (value) {
+                            if (value == 'delete') {
+                              _confirmDeleteClient(context, client);
+                            }
+                          },
+                          itemBuilder: (context) => const [
+                            PopupMenuItem(
+                              value: 'delete',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.delete_outline),
+                                  SizedBox(width: 8),
+                                  Text('Eliminar'),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        onTap: () {
+                          AppHaptics.light();
+                          context.push('/client/${client.id}');
+                        },
+                      ),
+                    );
+                  },
+                );
+              },
+              loading: () => Column(
+                children: List.generate(6, (_) => const ClientCardSkeleton()),
+              ),
+              error: (e, _) => Center(child: Text('Error: $e')),
             ),
-            error: (e, _) => Center(child: Text('Error: $e')),
           ),
-        ),
-      ],
+        ],
+      ),
     );
 
     if (widget.embedded) {
@@ -130,7 +138,10 @@ class _ClientsListScreenState extends ConsumerState<ClientsListScreen> {
             right: 16,
             bottom: 16,
             child: FloatingActionButton(
-              onPressed: () => context.push('/client/new'),
+              onPressed: () {
+                Hapticos.toque();
+                context.push('/client/new');
+              },
               child: const Icon(Icons.add),
             ),
           ),
@@ -148,7 +159,10 @@ class _ClientsListScreenState extends ConsumerState<ClientsListScreen> {
       ),
       body: content,
       floatingActionButton: FloatingActionButton(
-        onPressed: () => context.push('/client/new'),
+        onPressed: () {
+          Hapticos.toque();
+          context.push('/client/new');
+        },
         child: const Icon(Icons.add),
       ),
     );

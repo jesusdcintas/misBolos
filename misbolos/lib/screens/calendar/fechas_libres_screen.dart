@@ -13,6 +13,8 @@ import '../../models/gig.dart';
 import '../../providers/client_provider.dart';
 import '../../providers/gig_provider.dart';
 import '../../widgets/calendar/mini_calendario_mes.dart';
+import '../../core/services/hapticos.dart';
+import '../../widgets/common/deslizar_horizontal.dart';
 
 /// Clave del último patrón de días de la semana. Solo local, no se sincroniza.
 const String fechasLibresDiasSemanaKey = 'fechas_libres_dias_semana';
@@ -111,6 +113,7 @@ class _FechasLibresScreenState extends ConsumerState<FechasLibresScreen> {
   }
 
   Future<void> _cambiarFranja(FranjaPedida pedida) async {
+    Hapticos.seleccion();
     setState(() => _pedida = pedida);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(fechasLibresFranjaKey, pedida.name);
@@ -126,6 +129,7 @@ class _FechasLibresScreenState extends ConsumerState<FechasLibresScreen> {
 
   /// Cambiar el patrón o los días de la semana borra los retoques del mes.
   void _cambiarDiasSemana(Set<int> dias) {
+    Hapticos.seleccion();
     setState(() {
       _diasSemana = dias;
       _anadidos.clear();
@@ -142,6 +146,7 @@ class _FechasLibresScreenState extends ConsumerState<FechasLibresScreen> {
   }
 
   void _tocarDia(DateTime fecha) {
+    Hapticos.seleccion();
     setState(() {
       final delPatron = _diasSemana.contains(fecha.weekday);
       final marcado =
@@ -183,6 +188,7 @@ class _FechasLibresScreenState extends ConsumerState<FechasLibresScreen> {
   }
 
   Future<void> _copiar(String texto) async {
+    Hapticos.toque();
     await Clipboard.setData(ClipboardData(text: texto));
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -222,8 +228,7 @@ class _FechasLibresScreenState extends ConsumerState<FechasLibresScreen> {
   @override
   Widget build(BuildContext context) {
     final gigs = ref.watch(gigsProvider).valueOrNull ?? const <Gig>[];
-    final clientes =
-        ref.watch(clientsProvider).valueOrNull ?? const <Client>[];
+    final clientes = ref.watch(clientsProvider).valueOrNull ?? const <Client>[];
     final nombres = {for (final c in clientes) c.id: c.displayName};
 
     final ocupacion = ocupacionPorDia(gigs);
@@ -280,7 +285,10 @@ class _FechasLibresScreenState extends ConsumerState<FechasLibresScreen> {
             mes: _mes,
             cuantas: libres.length,
             cabecera: _cabecera,
-            onCabecera: (v) => setState(() => _cabecera = v),
+            onCabecera: (v) {
+              Hapticos.toque();
+              setState(() => _cabecera = v);
+            },
             texto: texto,
             // En móvil las acciones van fijas abajo.
             mostrarAcciones: anchura,
@@ -313,8 +321,8 @@ class _FechasLibresScreenState extends ConsumerState<FechasLibresScreen> {
           );
         },
       ),
-      bottomNavigationBar: MediaQuery.of(context).size.width >=
-              _anchoDosColumnas
+      bottomNavigationBar:
+          MediaQuery.of(context).size.width >= _anchoDosColumnas
           ? null
           : _AccionesFijas(
               onCopiar: hayLibres ? () => _copiar(texto) : null,
@@ -423,9 +431,9 @@ class _TarjetaDias extends StatelessWidget {
                 child: Text(
                   '${nombre[0].toUpperCase()}${nombre.substring(1)} '
                   '${mes.year}',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
                 ),
               ),
               _FlechaMes(
@@ -491,14 +499,18 @@ class _TarjetaDias extends StatelessWidget {
           ),
           const SizedBox(height: 20),
 
-          MiniCalendarioMes(
-            year: mes.year,
-            month: mes.month,
-            marcados: marcados,
-            parciales: parciales,
-            bolosPorDia: bolosPorDia,
-            altoCelda: compacto ? 46 : 52,
-            onTocarDia: onTocarDia,
+          DeslizarHorizontal(
+            onAnterior: puedeRetroceder ? onAnterior : null,
+            onSiguiente: onSiguiente,
+            child: MiniCalendarioMes(
+              year: mes.year,
+              month: mes.month,
+              marcados: marcados,
+              parciales: parciales,
+              bolosPorDia: bolosPorDia,
+              altoCelda: compacto ? 46 : 52,
+              onTocarDia: onTocarDia,
+            ),
           ),
           const SizedBox(height: 14),
 
@@ -706,11 +718,7 @@ class _FlechaMes extends StatelessWidget {
   final String tooltip;
   final VoidCallback? onTocar;
 
-  const _FlechaMes({
-    required this.icono,
-    required this.tooltip,
-    this.onTocar,
-  });
+  const _FlechaMes({required this.icono, required this.tooltip, this.onTocar});
 
   @override
   Widget build(BuildContext context) {

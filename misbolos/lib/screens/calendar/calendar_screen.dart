@@ -18,6 +18,8 @@ import '../../services/google_calendar_service.dart';
 import '../../widgets/common/gig_card_content.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import '../../core/services/hapticos.dart';
+import '../../core/utils/tirar_para_sincronizar.dart';
 
 final _selectedDayProvider = StateProvider<DateTime?>((ref) => null);
 final _focusedDayProvider = StateProvider<DateTime>((ref) => DateTime.now());
@@ -170,10 +172,8 @@ class CalendarScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _refreshBolos(WidgetRef ref) async {
-    await ref
-        .read(syncProvider.notifier)
-        .downloadFromCloud(reason: 'manual_button');
+  Future<void> _refreshBolos(BuildContext context, WidgetRef ref) async {
+    await sincronizarTirando(context, ref);
     ref.invalidate(gigsProvider);
     ref.invalidate(invoicesProvider);
     ref.invalidate(clientsProvider);
@@ -286,7 +286,7 @@ class CalendarScreen extends ConsumerWidget {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: () => _refreshBolos(ref),
+        onRefresh: () => _refreshBolos(context, ref),
         child: isCalendarView
             ? _buildCalendarView(
                 context,
@@ -302,6 +302,7 @@ class CalendarScreen extends ConsumerWidget {
           ? null
           : FloatingActionButton(
               onPressed: () {
+                Hapticos.toque();
                 // En la vista de calendario, el nuevo bolo hereda el día
                 // seleccionado; en la vista de lista se mantiene hoy.
                 final fecha = isCalendarView ? selectedDay : null;
@@ -359,6 +360,10 @@ class CalendarScreen extends ConsumerWidget {
               eventLoader: getEventsForDay,
               locale: 'es_ES',
               startingDayOfWeek: StartingDayOfWeek.monday,
+              // Solo el deslizamiento horizontal, que cambia de mes. El
+              // vertical cambiaba el formato del calendario y, con el botón de
+              // formato oculto, dejaba al usuario sin forma de volver.
+              availableGestures: AvailableGestures.horizontalSwipe,
               calendarStyle: CalendarStyle(
                 todayDecoration: BoxDecoration(
                   color: context.colors.accentSoft.withValues(alpha: 0.3),
@@ -394,10 +399,12 @@ class CalendarScreen extends ConsumerWidget {
                 titleCentered: true,
               ),
               onDaySelected: (selected, focused) {
+                Hapticos.seleccion();
                 ref.read(_selectedDayProvider.notifier).state = selected;
                 ref.read(_focusedDayProvider.notifier).state = focused;
               },
               onPageChanged: (focused) {
+                Hapticos.seleccion();
                 ref.read(_focusedDayProvider.notifier).state = focused;
               },
             ),

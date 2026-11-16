@@ -2,9 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../core/security/app_lock_manager.dart';
+import '../../core/services/hapticos.dart';
 
 class LockScreen extends StatefulWidget {
   const LockScreen({super.key, required this.manager});
@@ -74,7 +74,7 @@ class _LockScreenState extends State<LockScreen> with TickerProviderStateMixin {
     if (!mounted) return;
 
     if (result == BiometricUnlockResult.success) {
-      await HapticFeedback.lightImpact();
+      Hapticos.toque();
       return;
     }
 
@@ -94,13 +94,13 @@ class _LockScreenState extends State<LockScreen> with TickerProviderStateMixin {
   Future<void> _submitPin() async {
     final ok = widget.manager.validatePin(_pinController.text);
     if (ok) {
-      await HapticFeedback.lightImpact();
+      Hapticos.toque();
       return;
     }
 
     setState(() => _message = 'PIN incorrecto. Inténtalo de nuevo.');
     unawaited(_shakeController.forward(from: 0));
-    await HapticFeedback.vibrate();
+    Hapticos.error();
   }
 
   @override

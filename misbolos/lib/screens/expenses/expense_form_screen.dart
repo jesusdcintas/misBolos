@@ -9,6 +9,8 @@ import '../../services/ai_attachment_service.dart';
 import '../../services/document_text_extractor.dart';
 import '../../services/expense_pdf_parser.dart';
 import '../../core/theme/app_theme_colors.dart';
+import '../../core/services/hapticos.dart';
+import '../../core/utils/confirmar_descartar.dart';
 
 class ExpenseFormScreen extends ConsumerStatefulWidget {
   final int? expenseId;
@@ -32,6 +34,31 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
   String? _documentoNombreOriginal;
   bool _loading = false;
   bool _loaded = false;
+
+  /// Valores al abrir el formulario, para saber si se ha tocado algo.
+  List<Object?>? _instantanea;
+
+  /// Tras guardar bien, salir no debe preguntar.
+  bool _guardado = false;
+
+  List<Object?> _valoresActuales() => [
+    _conceptoController.text,
+    _proveedorController.text,
+    _totalController.text,
+    _notasController.text,
+    _fecha,
+    _categoria,
+    _documentoPath,
+  ];
+
+  bool get _hayCambios {
+    if (_guardado || _instantanea == null) return false;
+    final actuales = _valoresActuales();
+    for (var i = 0; i < actuales.length; i++) {
+      if (actuales[i] != _instantanea![i]) return true;
+    }
+    return false;
+  }
   bool _fechaSugerida = false;
   bool _totalSugerido = false;
   bool _proveedorSugerido = false;
@@ -55,6 +82,8 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
     super.didChangeDependencies();
     if (!_loaded && widget.expenseId != null) {
       _loadExpense();
+    } else {
+      _instantanea ??= _valoresActuales();
     }
   }
 
@@ -74,6 +103,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
       _documentoNombreOriginal = expense.attachmentDisplayName;
       _loaded = true;
     });
+    _instantanea = _valoresActuales();
   }
 
   Future<void> _pickDate() async {
@@ -171,7 +201,10 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
   }
 
   Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      Hapticos.error();
+      return;
+    }
 
     final proceed = await _confirmPotentialDuplicate();
     if (!proceed) return;
@@ -213,6 +246,9 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
           ),
         );
       }
+      Hapticos.exito();
+      // Guardado: salir no debe preguntar por cambios sin guardar.
+      _guardado = true;
       context.pop();
     }
   }
@@ -278,7 +314,9 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
     final dateFmt = DateFormat('d MMMM yyyy', 'es_ES');
     final isEditing = widget.expenseId != null;
 
-    return Scaffold(
+    return FormularioConCambios(
+      hayCambios: _hayCambios,
+      child: Scaffold(
       appBar: AppBar(
         title: Text(isEditing ? 'Editar gasto' : 'Nuevo gasto'),
         actions: [
@@ -462,6 +500,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
           ],
         ),
       ),
+    ),
     );
   }
 }

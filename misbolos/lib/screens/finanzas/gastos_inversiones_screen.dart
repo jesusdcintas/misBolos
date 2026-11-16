@@ -9,6 +9,8 @@ import '../../providers/assets_provider.dart';
 import '../../providers/expenses_provider.dart';
 import '../../providers/sync_provider.dart';
 import '../../widgets/common/empty_state.dart';
+import '../../core/services/hapticos.dart';
+import '../../core/utils/tirar_para_sincronizar.dart';
 
 enum _MovimientoSortOption { fechaDesc, fechaAsc, importeDesc, importeAsc }
 
@@ -59,9 +61,9 @@ class _GastosInversionesScreenState
   }
 
   Future<void> _onRefresh() async {
-    try {
-      await ref.read(syncProvider.notifier).syncAll(reason: 'pull_to_refresh');
-    } catch (_) {
+    await sincronizarTirando(context, ref);
+    // Si la nube falló, al menos refrescamos lo que hay en el dispositivo.
+    if (ref.read(syncProvider).status == SyncStatus.error) {
       await ref.read(expensesProvider.notifier).reloadLocal();
       await ref.read(assetsProvider.notifier).reloadLocal();
     }
@@ -135,7 +137,10 @@ class _GastosInversionesScreenState
         },
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => context.push('/expense/new'),
+        onPressed: () {
+          Hapticos.toque();
+          context.push('/expense/new');
+        },
         child: const Icon(Icons.add),
       ),
     );

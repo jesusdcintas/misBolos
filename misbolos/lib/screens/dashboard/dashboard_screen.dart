@@ -20,6 +20,8 @@ import '../../widgets/dashboard/pending_invoices_card.dart';
 import '../../widgets/dashboard/period_selector.dart';
 import '../../widgets/dashboard/taxes_period_card.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/utils/tirar_para_sincronizar.dart';
+import '../../widgets/common/deslizar_horizontal.dart';
 
 /// Ancho a partir del cual las secciones se reparten en dos columnas. Es el
 /// mismo corte que usa la pantalla de Ajustes.
@@ -55,6 +57,7 @@ class DashboardScreen extends ConsumerWidget {
       ),
       body: DJRefreshIndicator(
         onRefresh: () async {
+          await sincronizarTirando(context, ref);
           ref.invalidate(periodDashboardStatsProvider(period));
           ref.invalidate(financialSummaryProvider(period));
           ref.invalidate(upcomingGigsProvider);
@@ -66,7 +69,16 @@ class DashboardScreen extends ConsumerWidget {
             final dosColumnas = constraints.maxWidth >= _anchoDosColumnas;
 
             final ingresos = statsAsync.when(
-              data: (stats) => IncomePeriodCard(stats: stats, period: period),
+              data: (stats) => DeslizarHorizontal(
+                onAnterior: () =>
+                    ref.read(dashboardPeriodProvider.notifier).state =
+                        period.previous,
+                onSiguiente: period.next.isFuture
+                    ? null
+                    : () => ref.read(dashboardPeriodProvider.notifier).state =
+                          period.next,
+                child: IncomePeriodCard(stats: stats, period: period),
+              ),
               loading: () => const DashboardSkeleton(),
               error: (e, _) => Text('Error: $e'),
             );
@@ -90,10 +102,20 @@ class DashboardScreen extends ConsumerWidget {
               error: (_, __) => const SizedBox.shrink(),
             );
 
+            void irA(DashboardPeriod destino) =>
+                ref.read(dashboardPeriodProvider.notifier).state = destino;
+
             return ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                const PeriodSelector(),
+                DeslizarHorizontal(
+                  onAnterior: () => irA(period.previous),
+                  // El mismo límite que la flecha derecha del selector.
+                  onSiguiente: period.next.isFuture
+                      ? null
+                      : () => irA(period.next),
+                  child: const PeriodSelector(),
+                ),
                 const SizedBox(height: 16),
 
                 // Aviso de impagos: es global, no sigue el periodo.

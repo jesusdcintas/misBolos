@@ -14,6 +14,8 @@ import '../../providers/stats_provider.dart';
 import '../../services/google_auth_service.dart';
 import '../../services/google_calendar_service.dart';
 import 'client_picker_screen.dart';
+import '../../core/services/hapticos.dart';
+import '../../core/utils/confirmar_descartar.dart';
 
 class GigFormScreen extends ConsumerStatefulWidget {
   final String? gigId;
@@ -38,13 +40,40 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
   bool _isLoading = false;
   Gig? _existingGig;
 
+  /// Valores al abrir el formulario, para saber si se ha tocado algo.
+  List<Object?>? _instantanea;
+
+  /// Tras guardar bien, salir no debe preguntar.
+  bool _guardado = false;
+
   @override
   void initState() {
     super.initState();
     _fecha = widget.fechaInicial ?? DateTime.now();
     if (widget.gigId != null) {
       _loadGig();
+    } else {
+      _instantanea = _valoresActuales();
     }
+  }
+
+  /// Los campos que el usuario puede tocar.
+  List<Object?> _valoresActuales() => [
+    _fecha,
+    _clientId,
+    _cachetController.text,
+    _notasController.text,
+    _facturable,
+    _franja,
+  ];
+
+  bool get _hayCambios {
+    if (_guardado || _instantanea == null) return false;
+    final actuales = _valoresActuales();
+    for (var i = 0; i < actuales.length; i++) {
+      if (actuales[i] != _instantanea![i]) return true;
+    }
+    return false;
   }
 
   Future<void> _loadGig() async {
@@ -59,6 +88,7 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
         _facturable = gig.facturable;
         _franja = franjaEfectiva(gig.franja);
       });
+      _instantanea = _valoresActuales();
     }
   }
 
@@ -74,289 +104,296 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
     final clientsAsync = ref.watch(clientsProvider);
     final isEditing = widget.gigId != null;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(isEditing ? AppStrings.editarBolo : AppStrings.nuevoBolo),
-      ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            // Fecha
-            Card(
-              // Sin el margen horizontal del tema, que metía esta tarjeta
-              // 16 px por dentro de los campos de alrededor.
-              margin: EdgeInsets.zero,
-              child: ListTile(
-                leading: Icon(
-                  Icons.calendar_today,
-                  color: Theme.of(context).colorScheme.primary,
+    return FormularioConCambios(
+      hayCambios: _hayCambios,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(isEditing ? AppStrings.editarBolo : AppStrings.nuevoBolo),
+        ),
+        body: Form(
+          key: _formKey,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              // Fecha
+              Card(
+                // Sin el margen horizontal del tema, que metía esta tarjeta
+                // 16 px por dentro de los campos de alrededor.
+                margin: EdgeInsets.zero,
+                child: ListTile(
+                  leading: Icon(
+                    Icons.calendar_today,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  title: const Text(AppStrings.fecha),
+                  subtitle: Text(DateFormatter.display(_fecha)),
+                  onTap: _pickDate,
                 ),
-                title: const Text(AppStrings.fecha),
-                subtitle: Text(DateFormatter.display(_fecha)),
-                onTap: _pickDate,
               ),
-            ),
-            const SizedBox(height: 12),
+              const SizedBox(height: 12),
 
-            // Cliente
-            clientsAsync.when(
-              data: (clients) {
-                Client? selectedClient;
-                if (_clientId != null) {
-                  for (final client in clients) {
-                    if (client.id == _clientId) {
-                      selectedClient = client;
-                      break;
+              // Cliente
+              clientsAsync.when(
+                data: (clients) {
+                  Client? selectedClient;
+                  if (_clientId != null) {
+                    for (final client in clients) {
+                      if (client.id == _clientId) {
+                        selectedClient = client;
+                        break;
+                      }
                     }
                   }
-                }
-                final selectedName = selectedClient == null
-                    ? null
-                    : (selectedClient.alias.isNotEmpty
-                          ? selectedClient.alias
-                          : selectedClient.nombre);
-                final selectedDetails = selectedClient == null
-                    ? null
-                    : [
-                        if ((selectedClient.telefono ?? '').trim().isNotEmpty)
-                          selectedClient.telefono!.trim(),
-                        if ((selectedClient.email ?? '').trim().isNotEmpty)
-                          selectedClient.email!.trim(),
-                      ].join(' · ');
-
-                return InkWell(
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: _isLoading
+                  final selectedName = selectedClient == null
                       ? null
-                      : () async {
-                          final picked = await showClientPicker(
-                            context,
-                            ref,
-                            selectedClientId: _clientId,
-                          );
-                          if (picked == null || !mounted) return;
-                          setState(() => _clientId = picked.id);
-                        },
-                  child: InputDecorator(
-                    decoration: InputDecoration(
-                      labelText: AppStrings.cliente,
-                      prefixIcon: const Icon(Icons.person),
-                      suffixIcon: const Icon(Icons.chevron_right),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          selectedName ?? 'Seleccionar cliente',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: selectedName == null
-                                ? context.colors.textSecondary
-                                : context.colors.textPrimary,
-                          ),
-                        ),
-                        if (selectedDetails != null &&
-                            selectedDetails.isNotEmpty) ...[
-                          const SizedBox(height: 3),
+                      : (selectedClient.alias.isNotEmpty
+                            ? selectedClient.alias
+                            : selectedClient.nombre);
+                  final selectedDetails = selectedClient == null
+                      ? null
+                      : [
+                          if ((selectedClient.telefono ?? '').trim().isNotEmpty)
+                            selectedClient.telefono!.trim(),
+                          if ((selectedClient.email ?? '').trim().isNotEmpty)
+                            selectedClient.email!.trim(),
+                        ].join(' · ');
+
+                  return InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: _isLoading
+                        ? null
+                        : () async {
+                            final picked = await showClientPicker(
+                              context,
+                              ref,
+                              selectedClientId: _clientId,
+                            );
+                            if (picked == null || !mounted) return;
+                            setState(() => _clientId = picked.id);
+                          },
+                    child: InputDecorator(
+                      decoration: InputDecoration(
+                        labelText: AppStrings.cliente,
+                        prefixIcon: const Icon(Icons.person),
+                        suffixIcon: const Icon(Icons.chevron_right),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
                           Text(
-                            selectedDetails,
+                            selectedName ?? 'Seleccionar cliente',
                             style: TextStyle(
-                              fontSize: 12.5,
-                              color: context.colors.textSecondary,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: selectedName == null
+                                  ? context.colors.textSecondary
+                                  : context.colors.textPrimary,
                             ),
                           ),
+                          if (selectedDetails != null &&
+                              selectedDetails.isNotEmpty) ...[
+                            const SizedBox(height: 3),
+                            Text(
+                              selectedDetails,
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                color: context.colors.textSecondary,
+                              ),
+                            ),
+                          ],
                         ],
-                      ],
-                    ),
-                  ),
-                );
-              },
-              loading: () => const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: Center(child: CircularProgressIndicator()),
-              ),
-              error: (_, __) => const Text('Error cargando clientes'),
-            ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: () async {
-                  await context.push('/client/new');
-                  if (!mounted) return;
-                  ref.invalidate(clientsProvider);
-                },
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text(AppStrings.nuevoCliente),
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // Caché
-            TextFormField(
-              controller: _cachetController,
-              decoration: const InputDecoration(
-                labelText: AppStrings.cachet,
-                prefixIcon: Icon(Icons.euro),
-                suffixText: '€',
-              ),
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              validator: (v) {
-                if (v == null || v.isEmpty) return AppStrings.campoObligatorio;
-                if (double.tryParse(v.replaceAll(',', '.')) == null) {
-                  return 'Introduce un número válido';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 16),
-
-            // Notas
-            TextFormField(
-              controller: _notasController,
-              decoration: const InputDecoration(
-                labelText: AppStrings.notas,
-                prefixIcon: Icon(Icons.notes),
-              ),
-              maxLines: 3,
-            ),
-            const SizedBox(height: 24),
-
-            // Franja del día
-            Card(
-              margin: EdgeInsets.zero,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Franja',
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      width: double.infinity,
-                      child: SegmentedButton<FranjaBolo>(
-                        segments: [
-                          for (final franja in FranjaBolo.values)
-                            ButtonSegment(
-                              value: franja,
-                              label: Text(franja.label),
-                            ),
-                        ],
-                        selected: {_franja},
-                        // La opción elegida se marca con el color de acento y
-                        // un check; sin esto apenas se distinguía en oscuro.
-                        style: SegmentedButton.styleFrom(
-                          selectedBackgroundColor: Theme.of(
-                            context,
-                          ).colorScheme.primary,
-                          selectedForegroundColor: Theme.of(
-                            context,
-                          ).colorScheme.onPrimary,
-                          foregroundColor: context.colors.textPrimary,
+                  );
+                },
+                loading: () => const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+                error: (_, __) => const Text('Error cargando clientes'),
+              ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: () async {
+                    await context.push('/client/new');
+                    if (!mounted) return;
+                    ref.invalidate(clientsProvider);
+                  },
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text(AppStrings.nuevoCliente),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Caché
+              TextFormField(
+                controller: _cachetController,
+                decoration: const InputDecoration(
+                  labelText: AppStrings.cachet,
+                  prefixIcon: Icon(Icons.euro),
+                  suffixText: '€',
+                ),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                validator: (v) {
+                  if (v == null || v.isEmpty) {
+                    return AppStrings.campoObligatorio;
+                  }
+                  if (double.tryParse(v.replaceAll(',', '.')) == null) {
+                    return 'Introduce un número válido';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+
+              // Notas
+              TextFormField(
+                controller: _notasController,
+                decoration: const InputDecoration(
+                  labelText: AppStrings.notas,
+                  prefixIcon: Icon(Icons.notes),
+                ),
+                maxLines: 3,
+              ),
+              const SizedBox(height: 24),
+
+              // Franja del día
+              Card(
+                margin: EdgeInsets.zero,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Franja',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
                         ),
-                        onSelectionChanged: (seleccion) {
-                          if (seleccion.isEmpty) return;
-                          setState(() => _franja = seleccion.first);
-                        },
+                      ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: SegmentedButton<FranjaBolo>(
+                          segments: [
+                            for (final franja in FranjaBolo.values)
+                              ButtonSegment(
+                                value: franja,
+                                label: Text(franja.label),
+                              ),
+                          ],
+                          selected: {_franja},
+                          // La opción elegida se marca con el color de acento y
+                          // un check; sin esto apenas se distinguía en oscuro.
+                          style: SegmentedButton.styleFrom(
+                            selectedBackgroundColor: Theme.of(
+                              context,
+                            ).colorScheme.primary,
+                            selectedForegroundColor: Theme.of(
+                              context,
+                            ).colorScheme.onPrimary,
+                            foregroundColor: context.colors.textPrimary,
+                          ),
+                          onSelectionChanged: (seleccion) {
+                            if (seleccion.isEmpty) return;
+                            Hapticos.seleccion();
+                            setState(() => _franja = seleccion.first);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Toggle facturable - MUY PROMINENTE
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 400),
+                curve: Curves.easeOutCubic,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: _facturable
+                      ? context.colors.success.withValues(alpha: 0.1)
+                      : context.colors.purple.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: _facturable
+                        ? context.colors.success
+                        : context.colors.purple,
+                    width: 2,
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        AnimatedDefaultTextStyle(
+                          duration: const Duration(milliseconds: 400),
+                          style: Theme.of(context).textTheme.titleLarge!
+                              .copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: _facturable
+                                    ? context.colors.success
+                                    : context.colors.purple,
+                              ),
+                          child: Text(AppStrings.facturable),
+                        ),
+                        const SizedBox(width: 16),
+                        AnimatedFacturableToggle(
+                          value: _facturable,
+                          onChanged: (v) => setState(() => _facturable = v),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 300),
+                      child: Text(
+                        _facturable
+                            ? 'Se generará factura con IVA'
+                            : 'Se cobrará sin factura (solo en local)',
+                        key: ValueKey(_facturable),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: _facturable
+                              ? context.colors.success
+                              : context.colors.purple,
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
-            ),
-            const SizedBox(height: 24),
+              const SizedBox(height: 32),
 
-            // Toggle facturable - MUY PROMINENTE
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 400),
-              curve: Curves.easeOutCubic,
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: _facturable
-                    ? context.colors.success.withValues(alpha: 0.1)
-                    : context.colors.purple.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: _facturable
-                      ? context.colors.success
-                      : context.colors.purple,
-                  width: 2,
+              // Botón guardar
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _isLoading ? null : _save,
+                  icon: _isLoading
+                      ? SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Theme.of(context).colorScheme.onPrimary,
+                          ),
+                        )
+                      : const Icon(Icons.save),
+                  label: Text(AppStrings.guardar),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
                 ),
               ),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      AnimatedDefaultTextStyle(
-                        duration: const Duration(milliseconds: 400),
-                        style: Theme.of(context).textTheme.titleLarge!.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: _facturable
-                              ? context.colors.success
-                              : context.colors.purple,
-                        ),
-                        child: Text(AppStrings.facturable),
-                      ),
-                      const SizedBox(width: 16),
-                      AnimatedFacturableToggle(
-                        value: _facturable,
-                        onChanged: (v) => setState(() => _facturable = v),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 300),
-                    child: Text(
-                      _facturable
-                          ? 'Se generará factura con IVA'
-                          : 'Se cobrará sin factura (solo en local)',
-                      key: ValueKey(_facturable),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: _facturable
-                            ? context.colors.success
-                            : context.colors.purple,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 32),
-
-            // Botón guardar
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _isLoading ? null : _save,
-                icon: _isLoading
-                    ? SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Theme.of(context).colorScheme.onPrimary,
-                        ),
-                      )
-                    : const Icon(Icons.save),
-                label: Text(AppStrings.guardar),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                ),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -376,7 +413,10 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
   }
 
   Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      Hapticos.error();
+      return;
+    }
     if (_clientId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Selecciona un cliente para continuar')),
@@ -403,7 +443,8 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
               status = GigStatus.cobrado;
             }
           } else {
-            if (status == GigStatus.confirmado || status == GigStatus.facturado) {
+            if (status == GigStatus.confirmado ||
+                status == GigStatus.facturado) {
               status = GigStatus.confirmadoB;
             } else if (status == GigStatus.cobrado) {
               status = GigStatus.cobradoB;
@@ -454,6 +495,9 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
       ref.invalidate(dashboardStatsProvider);
 
       if (mounted) {
+        Hapticos.exito();
+        // Guardado: salir no debe preguntar por cambios sin guardar.
+        _guardado = true;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
