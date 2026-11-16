@@ -22,12 +22,20 @@ import '../../widgets/dashboard/taxes_period_card.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/utils/tirar_para_sincronizar.dart';
 import '../../widgets/common/deslizar_horizontal.dart';
+import '../../core/services/estado_tutorial.dart';
 import '../../widgets/common/acciones_bolo.dart';
 import '../../widgets/common/menu_acciones.dart';
+import '../../widgets/tutorial/lanzador_tour.dart';
+import '../../widgets/tutorial/tour.dart';
 
 /// Ancho a partir del cual las secciones se reparten en dos columnas. Es el
 /// mismo corte que usa la pantalla de Ajustes.
 const double _anchoDosColumnas = 700;
+
+final _claveTourPeriodo = GlobalKey();
+final _claveTourIngresos = GlobalKey();
+final _claveTourImpuestos = GlobalKey();
+final _claveTourAnadir = GlobalKey();
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -41,7 +49,7 @@ class DashboardScreen extends ConsumerWidget {
     final pendingAsync = ref.watch(pendingInvoicesProvider);
     final overdueAsync = ref.watch(overdueInvoicesProvider);
 
-    return Scaffold(
+    final pantalla = Scaffold(
       appBar: AppBar(
         title: const Text(AppStrings.dashboard),
         actions: [
@@ -79,15 +87,20 @@ class DashboardScreen extends ConsumerWidget {
                     ? null
                     : () => ref.read(dashboardPeriodProvider.notifier).state =
                           period.next,
-                child: IncomePeriodCard(stats: stats, period: period),
+                child: KeyedSubtree(
+                  key: _claveTourIngresos,
+                  child: IncomePeriodCard(stats: stats, period: period),
+                ),
               ),
               loading: () => const DashboardSkeleton(),
               error: (e, _) => Text('Error: $e'),
             );
 
             final impuestos = fiscalAsync.when(
-              data: (summary) =>
-                  TaxesPeriodCard(summary: summary, period: period),
+              data: (summary) => KeyedSubtree(
+                key: _claveTourImpuestos,
+                child: TaxesPeriodCard(summary: summary, period: period),
+              ),
               loading: () => const DashboardSkeleton(),
               error: (e, _) => Text('Error: $e'),
             );
@@ -116,7 +129,10 @@ class DashboardScreen extends ConsumerWidget {
                   onSiguiente: period.next.isFuture
                       ? null
                       : () => irA(period.next),
-                  child: const PeriodSelector(),
+                  child: KeyedSubtree(
+                    key: _claveTourPeriodo,
+                    child: PeriodSelector(),
+                  ),
                 ),
                 const SizedBox(height: 16),
 
@@ -165,28 +181,44 @@ class DashboardScreen extends ConsumerWidget {
           },
         ),
       ),
-      floatingActionButton: ExpandableFAB(
-        actions: [
-          FABAction(
-            icon: Icons.music_note,
-            label: 'Nuevo bolo',
-            color: context.colors.accentSoft,
-            onTap: (ctx) => ctx.push('/gig/new'),
-          ),
-          FABAction(
-            icon: Icons.person_add,
-            label: 'Nuevo cliente',
-            color: context.colors.purple,
-            onTap: (ctx) => ctx.push('/client/new'),
-          ),
-          FABAction(
-            icon: Icons.euro_outlined,
-            label: 'Nuevo gasto o inversión',
-            color: context.colors.warning,
-            onTap: (ctx) => ctx.push('/expense/new'),
-          ),
-        ],
+      floatingActionButton: KeyedSubtree(
+        key: _claveTourAnadir,
+        child: ExpandableFAB(
+          actions: [
+            FABAction(
+              icon: Icons.music_note,
+              label: 'Nuevo bolo',
+              color: context.colors.accentSoft,
+              onTap: (ctx) => ctx.push('/gig/new'),
+            ),
+            FABAction(
+              icon: Icons.person_add,
+              label: 'Nuevo cliente',
+              color: context.colors.purple,
+              onTap: (ctx) => ctx.push('/client/new'),
+            ),
+            FABAction(
+              icon: Icons.euro_outlined,
+              label: 'Nuevo gasto o inversión',
+              color: context.colors.warning,
+              onTap: (ctx) => ctx.push('/expense/new'),
+            ),
+          ],
+        ),
       ),
+    );
+
+    // El tour de Inicio salta la primera vez, con los datos ya cargados.
+    return TourAlEntrar(
+      tour: Tour.inicio,
+      listo: statsAsync.hasValue,
+      pasos: () => pasosDeInicio(
+        periodo: _claveTourPeriodo,
+        ingresos: _claveTourIngresos,
+        impuestos: _claveTourImpuestos,
+        anadir: _claveTourAnadir,
+      ),
+      child: pantalla,
     );
   }
 }

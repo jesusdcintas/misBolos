@@ -19,7 +19,13 @@ import '../../providers/sync_provider.dart';
 import '../../services/google_auth_service.dart';
 import '../../services/platform_auth_service.dart';
 import '../../services/supabase_service.dart';
+import '../../core/services/estado_tutorial.dart';
 import '../../core/theme/app_theme_colors.dart';
+import '../../widgets/tutorial/lanzador_tour.dart';
+import '../../widgets/tutorial/tour.dart';
+
+final _claveTourDatosFiscales = GlobalKey();
+final _claveTourGoogle = GlobalKey();
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -79,7 +85,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         kBottomNavigationBarHeight +
         24;
 
-    return Scaffold(
+    final pantalla = Scaffold(
       resizeToAvoidBottomInset: true,
       appBar: AppBar(title: const Text('Perfil')),
       body: settingsAsync.when(
@@ -117,9 +123,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             const SizedBox(height: 12),
                             _buildAccountSecurityCard(),
                             const SizedBox(height: 12),
-                            _BillingFormCard(
-                              settings: settings,
-                              onSaved: _saveBilling,
+                            KeyedSubtree(
+                              key: _claveTourDatosFiscales,
+                              child: _BillingFormCard(
+                                settings: settings,
+                                onSaved: _saveBilling,
+                              ),
                             ),
                             const SizedBox(height: 32),
                           ],
@@ -135,6 +144,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Error: $e')),
       ),
+    );
+
+    return TourAlEntrar(
+      tour: Tour.perfil,
+      listo: settingsAsync.hasValue,
+      pasos: () => pasosDePerfil(
+        datosFiscales: _claveTourDatosFiscales,
+        google: _claveTourGoogle,
+      ),
+      child: pantalla,
     );
   }
 
@@ -252,6 +271,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
     final cards = [
       _serviceStatusCard(
+        clave: _claveTourGoogle,
         title: 'Cuenta Google',
         icon: Icons.account_circle_outlined,
         status: googleAuth.isSignedIn ? 'Conectada' : 'No conectada',
@@ -340,6 +360,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   Widget _serviceStatusCard({
+    Key? clave,
     required String title,
     required IconData icon,
     required String status,
@@ -367,6 +388,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         ),
       ),
       child: Card(
+        key: clave,
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onTap,
@@ -795,9 +817,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               const SizedBox(height: 2),
               Text(
                 subtitle,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: context.colors.textSecondary),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: context.colors.textSecondary,
+                ),
               ),
             ],
           ),
@@ -945,10 +967,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         padding: const EdgeInsets.only(bottom: 8),
         child: RichText(
           text: TextSpan(
-            style: TextStyle(
-              fontSize: 13,
-              color: context.colors.textSecondary,
-            ),
+            style: TextStyle(fontSize: 13, color: context.colors.textSecondary),
             children: [
               TextSpan(
                 text: '$title: ',
@@ -1095,7 +1114,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               children: [
                 Icon(
                   connected ? Icons.add_to_drive : Icons.add_to_drive_outlined,
-                  color: connected ? context.colors.success : context.colors.accentSoft,
+                  color: connected
+                      ? context.colors.success
+                      : context.colors.accentSoft,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -1541,7 +1562,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             const SizedBox(height: 8),
             Text(
               'La app solo creará o reutilizará carpetas dentro de la carpeta seleccionada. No borra, mueve ni renombra archivos.',
-              style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+              style: TextStyle(
+                fontSize: 12,
+                color: context.colors.textSecondary,
+              ),
             ),
           ],
         ),
@@ -1906,7 +1930,10 @@ class _GoogleSection extends ConsumerWidget {
               const SizedBox(height: 4),
               Text(
                 'Conecta Calendar para sincronizar bolos y agenda',
-                style: TextStyle(fontSize: 13, color: context.colors.textSecondary),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: context.colors.textSecondary,
+                ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
@@ -1974,7 +2001,10 @@ class _GoogleSection extends ConsumerWidget {
           // ── Google Calendar ──
           if (auth.calendarConnected)
             ListTile(
-              leading: Icon(Icons.calendar_month, color: context.colors.accentSoft),
+              leading: Icon(
+                Icons.calendar_month,
+                color: context.colors.accentSoft,
+              ),
               title: Text('Google Calendar'),
               subtitle: Text('Bolos sincronizados'),
               trailing: Icon(
@@ -1998,7 +2028,10 @@ class _GoogleSection extends ConsumerWidget {
             ),
           const Divider(height: 1),
           ListTile(
-            leading: Icon(Icons.info_outline, color: context.colors.textSecondary),
+            leading: Icon(
+              Icons.info_outline,
+              color: context.colors.textSecondary,
+            ),
             title: Text('Sesión principal'),
             subtitle: Text(
               'Para salir de MisBolos usa "Cerrar sesión" en Sincronización en la nube.',
@@ -2496,7 +2529,11 @@ class _LogoSelector extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.image, color: context.colors.textSecondary, size: 24),
+                Icon(
+                  Icons.image,
+                  color: context.colors.textSecondary,
+                  size: 24,
+                ),
                 Text(
                   'Sin logo',
                   style: TextStyle(

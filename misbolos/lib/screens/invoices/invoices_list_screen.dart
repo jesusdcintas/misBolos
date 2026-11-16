@@ -20,10 +20,14 @@ import '../../services/pdf_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/google_auth_service.dart';
 import '../../services/google_calendar_service.dart';
+import '../../core/services/estado_tutorial.dart';
+import '../../screens/finanzas/finanzas_screen.dart';
 import '../../widgets/common/acciones_factura.dart';
 import '../../widgets/common/deslizar_para_cobrar.dart';
 import '../../widgets/common/menu_acciones.dart';
 import '../../widgets/common/serpentina_celebration.dart';
+import '../../widgets/tutorial/lanzador_tour.dart';
+import '../../widgets/tutorial/tour.dart';
 import '../../widgets/common/empty_state.dart';
 import '../../widgets/common/skeleton_loading.dart';
 import '../../core/utils/app_haptics.dart';
@@ -48,6 +52,10 @@ final _viewModeProvider = StateProvider<InvoiceViewMode>(
 // Modo selección masiva
 final _selectionModeProvider = StateProvider<bool>((ref) => false);
 final _selectedInvoicesProvider = StateProvider<Set<String>>((ref) => {});
+
+final _claveTourLista = GlobalKey();
+final _claveTourFiltros = GlobalKey();
+final _claveTourFactura = GlobalKey();
 
 class InvoicesListScreen extends ConsumerStatefulWidget {
   const InvoicesListScreen({super.key});
@@ -98,7 +106,7 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
         selectedMonth != null ||
         clientFilter != null;
 
-    return Scaffold(
+    final pantalla = Scaffold(
       body: Column(
         children: [
           selectionMode
@@ -228,6 +236,7 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
 
                       // ── Fila 1: Chips de estado ──
                       Padding(
+                        key: _claveTourFiltros,
                         padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
                         child: SizedBox(
                           height: 36,
@@ -345,14 +354,16 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
 
                       // ── Lista o empty state ──
                       if (filtered.isEmpty)
-                        const Expanded(
-                          child: EmptyState(
+                        Expanded(
+                          key: _claveTourLista,
+                          child: const EmptyState(
                             icon: Icons.receipt_long_outlined,
                             message: AppStrings.sinFacturas,
                           ),
                         )
                       else
                         Expanded(
+                          key: _claveTourLista,
                           child: _buildInvoicesContent(
                             context,
                             ref,
@@ -386,6 +397,19 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
           ),
         ],
       ),
+    );
+
+    // El tour espera a que la pestaña de Facturas esté a la vista.
+    return TourAlEntrar(
+      tour: Tour.facturas,
+      listo: invoicesAsync.hasValue,
+      activo: ref.watch(finanzasTabProvider) == 0,
+      pasos: () => pasosDeFacturas(
+        lista: _claveTourLista,
+        filtros: _claveTourFiltros,
+        factura: _claveTourFactura,
+      ),
+      child: pantalla,
     );
   }
 
@@ -652,6 +676,10 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
     Set<String> selectedInvoices,
     InvoiceViewMode viewMode,
   ) {
+    // La primera pendiente de cobro que se ve: es la que señala el tour.
+    final pendientes = filtered.where((i) => i.status == InvoiceStatus.enviada);
+    final idPrimeraPendiente = pendientes.isEmpty ? null : pendientes.first.id;
+
     void toggleSelection(Invoice invoice, bool selected) {
       final current = ref.read(_selectedInvoicesProvider);
       if (selected) {
@@ -675,6 +703,7 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
         itemBuilder: (context, index) {
           final inv = filtered[index];
           return _InvoiceTile(
+            key: inv.id == idPrimeraPendiente ? _claveTourFactura : null,
             invoice: inv,
             selectionMode: selectionMode,
             isSelected: selectedInvoices.contains(inv.id),
@@ -1668,6 +1697,7 @@ class _InvoiceTile extends ConsumerWidget {
   final ValueChanged<bool>? onSelect;
 
   const _InvoiceTile({
+    super.key,
     required this.invoice,
     this.selectionMode = false,
     this.isSelected = false,

@@ -15,6 +15,7 @@ import 'core/utils/date_formatter.dart';
 import 'database/database_helper.dart';
 import 'models/app_settings.dart';
 import 'models/franja_bolo.dart';
+import 'widgets/tutorial/vigilante_tutorial.dart';
 import 'providers/assets_provider.dart';
 import 'providers/client_provider.dart';
 import 'providers/expenses_provider.dart';
@@ -180,7 +181,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       ShellRoute(
         navigatorKey: _shellNavigatorKey,
-        builder: (context, state, child) => _ScaffoldWithNavBar(child: child),
+        builder: (context, state, child) =>
+            VigilanteTutorial(child: _ScaffoldWithNavBar(child: child)),
         routes: [
           GoRoute(
             path: '/',

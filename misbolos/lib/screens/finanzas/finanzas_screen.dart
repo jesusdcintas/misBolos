@@ -7,6 +7,10 @@ import '../invoices/invoices_list_screen.dart';
 import 'gastos_inversiones_screen.dart';
 import '../clients/clients_list_screen.dart';
 
+/// Qué pestaña de Finanzas se está viendo. La usan los tours de Facturas y de
+/// Gastos, que no deben saltar hasta que su pestaña esté a la vista.
+final finanzasTabProvider = StateProvider<int>((ref) => 0);
+
 class FinanzasScreen extends ConsumerStatefulWidget {
   const FinanzasScreen({super.key});
 
@@ -32,6 +36,7 @@ class _FinanzasScreenState extends ConsumerState<FinanzasScreen> {
     final controller = _tabController;
     if (controller == null) return;
     if (controller.indexIsChanging) return;
+    ref.read(finanzasTabProvider.notifier).state = controller.index;
     if (controller.index != 0) return;
     unawaited(
       ref

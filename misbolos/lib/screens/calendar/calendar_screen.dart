@@ -22,6 +22,9 @@ import '../../core/services/hapticos.dart';
 import '../../core/utils/tirar_para_sincronizar.dart';
 import '../../widgets/common/acciones_bolo.dart';
 import '../../widgets/common/menu_acciones.dart';
+import '../../widgets/tutorial/lanzador_tour.dart';
+import '../../widgets/tutorial/tour.dart';
+import '../../core/services/estado_tutorial.dart';
 
 final _selectedDayProvider = StateProvider<DateTime?>((ref) => null);
 final _focusedDayProvider = StateProvider<DateTime>((ref) => DateTime.now());
@@ -60,6 +63,11 @@ void _clearAllListFilters(WidgetRef ref) {
   ref.read(_clientFilterProvider.notifier).state = null;
   ref.read(_facturableFilterProvider.notifier).state = null;
 }
+
+final _claveTourCalendario = GlobalKey();
+final _claveTourBolo = GlobalKey();
+final _claveTourFechasLibres = GlobalKey();
+final _claveTourSincronizar = GlobalKey();
 
 class CalendarScreen extends ConsumerWidget {
   const CalendarScreen({super.key});
@@ -193,7 +201,7 @@ class CalendarScreen extends ConsumerWidget {
     final pendingCount =
         ref.watch(syncQueuePendingCountProvider).valueOrNull ?? 0;
 
-    return Scaffold(
+    final pantalla = Scaffold(
       appBar: AppBar(
         title: Text(isCalendarView ? AppStrings.calendario : 'Bolos'),
         actions: [
@@ -222,7 +230,10 @@ class CalendarScreen extends ConsumerWidget {
                 ),
               ),
             ),
-          _BotonFechasLibres(focusedDay: focusedDay),
+          _BotonFechasLibres(
+            key: _claveTourFechasLibres,
+            focusedDay: focusedDay,
+          ),
           // Toggle vista
           IconButton(
             icon: Icon(isCalendarView ? Icons.list : Icons.calendar_month),
@@ -242,6 +253,7 @@ class CalendarScreen extends ConsumerWidget {
                     ),
                   )
                 : IconButton(
+                    key: _claveTourSincronizar,
                     icon: const Icon(Icons.sync),
                     tooltip: 'Sincronizar con Google Calendar',
                     onPressed: () {
@@ -317,6 +329,19 @@ class CalendarScreen extends ConsumerWidget {
               child: const Icon(Icons.add),
             ),
     );
+
+    // El tour de Agenda va sobre el calendario, así que espera a esa vista.
+    return TourAlEntrar(
+      tour: Tour.agenda,
+      listo: gigsAsync.hasValue && isCalendarView,
+      pasos: () => pasosDeAgenda(
+        calendario: _claveTourCalendario,
+        bolo: _claveTourBolo,
+        fechasLibres: _claveTourFechasLibres,
+        sincronizar: _claveTourSincronizar,
+      ),
+      child: pantalla,
+    );
   }
 
   Widget _buildCalendarView(
@@ -355,6 +380,7 @@ class CalendarScreen extends ConsumerWidget {
               ),
 
             TableCalendar<Gig>(
+              key: _claveTourCalendario,
               firstDay: DateTime(2020),
               lastDay: DateTime(2030),
               focusedDay: focusedDay,
@@ -458,7 +484,11 @@ class CalendarScreen extends ConsumerWidget {
                       itemCount: selectedGigs.length,
                       itemBuilder: (context, index) {
                         final gig = selectedGigs[index];
-                        return _CalendarGigTile(gig: gig);
+                        return _CalendarGigTile(
+                          gig: gig,
+                          // El tour señala el primero de la lista.
+                          key: index == 0 ? _claveTourBolo : null,
+                        );
                       },
                     ),
             ),
@@ -1999,7 +2029,7 @@ class _LegendItem extends StatelessWidget {
 
 class _CalendarGigTile extends ConsumerWidget {
   final Gig gig;
-  const _CalendarGigTile({required this.gig});
+  const _CalendarGigTile({super.key, required this.gig});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -2114,7 +2144,7 @@ class _GoogleAccountBanner extends StatelessWidget {
 class _BotonFechasLibres extends StatelessWidget {
   final DateTime focusedDay;
 
-  const _BotonFechasLibres({required this.focusedDay});
+  const _BotonFechasLibres({super.key, required this.focusedDay});
 
   @override
   Widget build(BuildContext context) {

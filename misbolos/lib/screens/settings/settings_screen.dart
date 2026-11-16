@@ -6,7 +6,10 @@ import 'package:share_plus/share_plus.dart';
 import 'dart:io';
 
 import '../../core/config/fiscal.dart';
+import '../../core/services/estado_tutorial.dart';
 import '../../widgets/fiscal/retencion_irpf_info.dart';
+import '../../widgets/tutorial/lanzador_tour.dart';
+import '../../widgets/tutorial/tour.dart';
 import '../../models/app_settings.dart';
 import '../../models/gig.dart';
 import '../../models/pdf_theme.dart';
@@ -17,6 +20,8 @@ import '../../services/supabase_service.dart';
 import '../settings/duplicate_clients_screen.dart';
 import '../settings/import_screen.dart';
 import '../../core/services/hapticos.dart';
+
+final _claveTourRetencion = GlobalKey();
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -70,7 +75,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Widget build(BuildContext context) {
     final settingsAsync = ref.watch(settingsProvider);
 
-    return Scaffold(
+    final pantalla = Scaffold(
       appBar: AppBar(title: const Text('Ajustes')),
       body: settingsAsync.when(
         data: (settings) {
@@ -140,6 +145,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Error: $e')),
       ),
+    );
+
+    return TourAlEntrar(
+      tour: Tour.ajustes,
+      listo: settingsAsync.hasValue,
+      pasos: () => pasosDeAjustes(retencion: _claveTourRetencion),
+      child: pantalla,
     );
   }
 
@@ -441,6 +453,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               );
               final irpfValido = RetencionIrpf.esValida(_irpfDefault);
               final irpf = Column(
+                key: _claveTourRetencion,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
