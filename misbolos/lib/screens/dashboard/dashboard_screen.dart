@@ -27,6 +27,12 @@ import '../../widgets/common/acciones_bolo.dart';
 import '../../widgets/common/menu_acciones.dart';
 import '../../widgets/tutorial/lanzador_tour.dart';
 import '../../widgets/tutorial/tour.dart';
+import '../../core/utils/primeros_pasos.dart';
+import '../../providers/invoice_provider.dart';
+import '../../providers/settings_provider.dart';
+import '../../providers/tutorial_provider.dart';
+import '../../services/google_auth_service.dart';
+import '../../widgets/dashboard/tarjeta_primeros_pasos.dart';
 
 /// Ancho a partir del cual las secciones se reparten en dos columnas. Es el
 /// mismo corte que usa la pantalla de Ajustes.
@@ -123,6 +129,7 @@ class DashboardScreen extends ConsumerWidget {
             return ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                const _PrimerosPasos(),
                 DeslizarHorizontal(
                   onAnterior: () => irA(period.previous),
                   // El mismo límite que la flecha derecha del selector.
@@ -219,6 +226,42 @@ class DashboardScreen extends ConsumerWidget {
         anadir: _claveTourAnadir,
       ),
       child: pantalla,
+    );
+  }
+}
+
+/// La tarjeta de primeros pasos con los datos que ya hay en la app.
+///
+/// Solo sale mientras quede algo por hacer, y nunca a quien ya usaba la app:
+/// de eso se encarga el estado del tutorial.
+class _PrimerosPasos extends ConsumerWidget {
+  const _PrimerosPasos();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final datos = ref.watch(tutorialProvider).valueOrNull;
+    if (datos == null || !datos.tarjetaVisible) return const SizedBox.shrink();
+
+    final pasos = primerosPasos(
+      settings: ref.watch(settingsProvider).valueOrNull,
+      googleConectado: ref.watch(googleAuthProvider).isSignedIn,
+      hayClientes: ref.watch(clientsProvider).valueOrNull?.isNotEmpty ?? false,
+      hayBolos: ref.watch(gigsProvider).valueOrNull?.isNotEmpty ?? false,
+      hayFacturas: ref.watch(invoicesProvider).valueOrNull?.isNotEmpty ?? false,
+    );
+
+    return TarjetaPrimerosPasos(
+      pasos: pasos,
+      alTocarPaso: (paso) {
+        final ruta = paso.ruta;
+        // Las pantallas de crear se abren encima; las pestañas se cambian.
+        if (ruta.endsWith('/new')) {
+          context.push(ruta);
+        } else {
+          context.go(ruta);
+        }
+      },
+      alOcultar: () => ref.read(tutorialProvider.notifier).ocultarTarjeta(),
     );
   }
 }
