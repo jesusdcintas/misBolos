@@ -19,6 +19,7 @@ import '../../widgets/common/gig_card_content.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../core/services/hapticos.dart';
+import '../../core/utils/tirar_para_sincronizar.dart';
 
 final _selectedDayProvider = StateProvider<DateTime?>((ref) => null);
 final _focusedDayProvider = StateProvider<DateTime>((ref) => DateTime.now());
@@ -171,10 +172,8 @@ class CalendarScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _refreshBolos(WidgetRef ref) async {
-    await ref
-        .read(syncProvider.notifier)
-        .downloadFromCloud(reason: 'manual_button');
+  Future<void> _refreshBolos(BuildContext context, WidgetRef ref) async {
+    await sincronizarTirando(context, ref);
     ref.invalidate(gigsProvider);
     ref.invalidate(invoicesProvider);
     ref.invalidate(clientsProvider);
@@ -287,7 +286,7 @@ class CalendarScreen extends ConsumerWidget {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: () => _refreshBolos(ref),
+        onRefresh: () => _refreshBolos(context, ref),
         child: isCalendarView
             ? _buildCalendarView(
                 context,

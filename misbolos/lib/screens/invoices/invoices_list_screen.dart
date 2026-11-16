@@ -27,6 +27,7 @@ import '../../core/utils/app_haptics.dart';
 import '../../models/client.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../core/services/hapticos.dart';
+import '../../core/utils/tirar_para_sincronizar.dart';
 
 void _clearAllInvoiceFilters(WidgetRef ref) {
   ref.read(invoiceStatusFilterProvider.notifier).state = null;
@@ -66,9 +67,7 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
   }
 
   Future<void> _refreshInvoices() async {
-    await ref
-        .read(invoicesProvider.notifier)
-        .refreshFromCloud(reason: 'pull_to_refresh', force: true);
+    await sincronizarTirando(context, ref);
     ref.invalidate(invoicesProvider);
     ref.invalidate(gigsProvider);
   }

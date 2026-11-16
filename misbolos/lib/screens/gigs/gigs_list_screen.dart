@@ -11,10 +11,10 @@ import '../../models/client.dart';
 import '../../models/gig.dart';
 import '../../providers/gig_provider.dart';
 import '../../providers/client_provider.dart';
-import '../../providers/sync_provider.dart';
 import '../../widgets/common/gig_card_content.dart';
 import '../../widgets/common/skeleton_loading.dart';
 import '../../core/services/hapticos.dart';
+import '../../core/utils/tirar_para_sincronizar.dart';
 
 // ─── Filter providers ───
 final gigStatusFilterProvider = StateProvider<GigStatus?>((ref) => null);
@@ -46,9 +46,7 @@ class GigsListScreen extends ConsumerStatefulWidget {
 
 class _GigsListScreenState extends ConsumerState<GigsListScreen> {
   Future<void> _refreshGigs() async {
-    await ref
-        .read(syncProvider.notifier)
-        .downloadFromCloud(reason: 'manual_button');
+    await sincronizarTirando(context, ref);
     ref.invalidate(gigsProvider);
     ref.invalidate(clientsProvider);
   }

@@ -20,6 +20,7 @@ import '../../widgets/dashboard/pending_invoices_card.dart';
 import '../../widgets/dashboard/period_selector.dart';
 import '../../widgets/dashboard/taxes_period_card.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/utils/tirar_para_sincronizar.dart';
 
 /// Ancho a partir del cual las secciones se reparten en dos columnas. Es el
 /// mismo corte que usa la pantalla de Ajustes.
@@ -55,6 +56,7 @@ class DashboardScreen extends ConsumerWidget {
       ),
       body: DJRefreshIndicator(
         onRefresh: () async {
+          await sincronizarTirando(context, ref);
           ref.invalidate(periodDashboardStatsProvider(period));
           ref.invalidate(financialSummaryProvider(period));
           ref.invalidate(upcomingGigsProvider);
