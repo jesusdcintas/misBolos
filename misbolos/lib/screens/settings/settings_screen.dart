@@ -8,6 +8,7 @@ import 'dart:io';
 import '../../core/config/fiscal.dart';
 import '../../core/services/estado_tutorial.dart';
 import '../../widgets/fiscal/retencion_irpf_info.dart';
+import '../../providers/tutorial_provider.dart';
 import '../../widgets/tutorial/lanzador_tour.dart';
 import '../../widgets/tutorial/tour.dart';
 import '../../models/app_settings.dart';
@@ -124,6 +125,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         ],
                         const SizedBox(height: 12),
                         _buildAdvancedCard(),
+                        const SizedBox(height: 12),
+                        _buildTutorialCard(),
                         const SizedBox(height: 18),
                         Card(
                           child: Padding(
@@ -185,6 +188,37 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   int _normalizeLockDelay(int seconds) {
     return const [0, 5, 15, 30].contains(seconds) ? seconds : 5;
+  }
+
+  Widget _buildTutorialCard() {
+    return _sectionCard(
+      'Tutorial',
+      Icons.school_outlined,
+      Column(
+        children: [
+          ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.replay),
+            title: const Text('Repetir el tutorial'),
+            subtitle: const Text(
+              'Vuelven a salir los tours de cada pantalla y los primeros '
+              'pasos de Inicio.',
+            ),
+            onTap: _repetirTutorial,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _repetirTutorial() async {
+    Hapticos.toque();
+    await ref.read(tutorialProvider.notifier).repetirTutorial();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('El tutorial vuelve a empezar')),
+    );
   }
 
   Widget _buildAppearanceCard() {
