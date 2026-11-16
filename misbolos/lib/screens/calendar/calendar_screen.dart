@@ -360,6 +360,10 @@ class CalendarScreen extends ConsumerWidget {
               eventLoader: getEventsForDay,
               locale: 'es_ES',
               startingDayOfWeek: StartingDayOfWeek.monday,
+              // Solo el deslizamiento horizontal, que cambia de mes. El
+              // vertical cambiaba el formato del calendario y, con el botón de
+              // formato oculto, dejaba al usuario sin forma de volver.
+              availableGestures: AvailableGestures.horizontalSwipe,
               calendarStyle: CalendarStyle(
                 todayDecoration: BoxDecoration(
                   color: context.colors.accentSoft.withValues(alpha: 0.3),
@@ -400,6 +404,7 @@ class CalendarScreen extends ConsumerWidget {
                 ref.read(_focusedDayProvider.notifier).state = focused;
               },
               onPageChanged: (focused) {
+                Hapticos.seleccion();
                 ref.read(_focusedDayProvider.notifier).state = focused;
               },
             ),

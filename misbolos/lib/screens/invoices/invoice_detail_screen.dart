@@ -21,6 +21,7 @@ import '../../services/google_calendar_service.dart';
 import '../../widgets/common/serpentina_celebration.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../core/theme/app_theme_colors.dart';
+import '../../core/services/hapticos.dart';
 
 class InvoiceDetailScreen extends ConsumerStatefulWidget {
   final String invoiceId;
@@ -957,6 +958,7 @@ class _InvoiceDetailContent extends ConsumerWidget {
     InvoiceStatus status,
   ) async {
     final statusLabel = status == InvoiceStatus.enviada ? 'enviada' : 'pagada';
+    Hapticos.exito();
 
     // Actualizar factura
     await ref.read(invoicesProvider.notifier).updateStatus(invoice.id, status);
