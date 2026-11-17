@@ -20,6 +20,7 @@ import '../../repositories/settings_repository.dart';
 import '../../services/pdf_service.dart';
 import '../../services/ai_attachment_service.dart';
 import '../../services/supabase_service.dart';
+import 'estado_drive.dart';
 import 'google_drive_service.dart';
 
 class DriveProgressSnapshot {
@@ -188,7 +189,7 @@ class DriveDocumentSyncService {
       getYearFolderName(fecha),
       getQuarterName(fecha),
       getMonthName(fecha),
-      gastosInversionesFolderName,
+      carpetaGastosEInversiones,
     ].join('/');
   }
 
@@ -210,6 +211,7 @@ class DriveDocumentSyncService {
       '[DRIVE][MOVE] expense/${expense.id} -> ${buildExpensePath(expense.fecha)}',
     );
   }
+
   static const String errorMissingFile = 'failed_file_missing';
   static const String errorDevicePath = 'device_path_unavailable';
   static const String errorBadFileDescriptor = 'bad_file_descriptor';
@@ -242,7 +244,11 @@ class DriveDocumentSyncService {
     );
   }
 
-  void _updateProgress({required String label, required int processed, required int total}) {
+  void _updateProgress({
+    required String label,
+    required int processed,
+    required int total,
+  }) {
     progress.value = DriveProgressSnapshot(
       active: true,
       label: label,
@@ -315,7 +321,8 @@ class DriveDocumentSyncService {
       'entity_id': entityId,
       'action': action,
       'local_file_path': _safeLocalPath(localFilePath),
-      'target_folder_type': targetFolderType ?? _defaultTargetFolder(normalizedType),
+      'target_folder_type':
+          targetFolderType ?? _defaultTargetFolder(normalizedType),
       'attempts': 0,
       'last_error': null,
       'last_error_code': null,
@@ -327,7 +334,8 @@ class DriveDocumentSyncService {
       'file_size_bytes': fileSizeBytes,
       'drive_file_id': driveFileId,
       'remote_folder_id': remoteFolderId,
-      'logical_path': logicalPath ?? '${_defaultTargetFolder(normalizedType)}/$entityId',
+      'logical_path':
+          logicalPath ?? '${_defaultTargetFolder(normalizedType)}/$entityId',
       'updated_at': now,
     };
     if (existing.isEmpty) {
@@ -773,7 +781,9 @@ class DriveDocumentSyncService {
     );
     final assets = await _assetRepository.getAll();
     final totalItems =
-        invoices.length + expenses.where((e) => e.id != null).length + assets.where((a) => a.id != null).length;
+        invoices.length +
+        expenses.where((e) => e.id != null).length +
+        assets.where((a) => a.id != null).length;
     var processedItems = 0;
     _startProgress(label: 'Subiendo documentos a Drive...', total: totalItems);
     final assetYears = assets.map((e) => e.fechaCompra.year).toSet().toList()
@@ -1001,7 +1011,7 @@ class DriveDocumentSyncService {
                   candidate,
                   File(path ?? 'adjunto.pdf'),
                 ),
-                parentFolderId: monthFolders.inversionesFolderId,
+                parentFolderId: monthFolders.gastosInversionesFolderId,
               );
               await _assetRepository.updateDriveMetadata(
                 id: candidate.id!,
@@ -1098,16 +1108,46 @@ class DriveDocumentSyncService {
 
     debugPrint('[DRIVE][STRUCTURE] years=$years');
     var foldersEnsured = 0;
-    for (final year in years) {
-      try {
-        await _drive.createFullYearStructure(year);
-        foldersEnsured++;
-      } catch (e, st) {
-        debugPrint('[DRIVE][STRUCTURE][ERROR] year=$year exception=$e');
-        debugPrint('[DRIVE][STRUCTURE][ERROR] year=$year stack=$st');
-        rethrow;
+
+    // El total se sabe de antemano: el árbol de un año son 41 carpetas.
+    final total = years.fold<int>(
+      0,
+      (suma, year) => suma + cuentaCarpetas(arbolDeAno(year)),
+    );
+    var hechas = 0;
+    String etiqueta(int hechas) =>
+        'Creando carpetas en tu Drive… $hechas de $total';
+    _startProgress(label: etiqueta(0), total: total);
+
+    try {
+      for (final year in years) {
+        final base = hechas;
+        try {
+          await _drive.createFullYearStructure(
+            year,
+            alAvanzar: (hechasDelAno, _) {
+              hechas = base + hechasDelAno;
+              _updateProgress(
+                label: etiqueta(hechas),
+                processed: hechas,
+                total: total,
+              );
+            },
+          );
+          foldersEnsured++;
+        } catch (e, st) {
+          debugPrint('[DRIVE][STRUCTURE][ERROR] year=$year exception=$e');
+          debugPrint('[DRIVE][STRUCTURE][ERROR] year=$year stack=$st');
+          rethrow;
+        }
+        hechas = base + cuentaCarpetas(arbolDeAno(year));
       }
+    } finally {
+      _finishProgress();
     }
+
+    final settings = await _settingsRepository.get();
+    await EstadoDriveStore.marcarCarpetasCreadas(settings.driveRootFolderId);
 
     watch.stop();
     debugPrint(
@@ -1307,7 +1347,9 @@ class DriveDocumentSyncService {
       final entityId = (item['entity_id'] as String?) ?? '';
       final lockKey = '$entityType::$entityId';
       if (!_entityLocks.add(lockKey)) {
-        debugPrint('[DriveUploadWorker] skipped lock entity=$entityType/$entityId');
+        debugPrint(
+          '[DriveUploadWorker] skipped lock entity=$entityType/$entityId',
+        );
         continue;
       }
       final attempts = (item['attempts'] as int?) ?? 0;
@@ -1357,7 +1399,9 @@ class DriveDocumentSyncService {
               where: 'id = ?',
               whereArgs: [id],
             );
-            debugPrint('[DriveUploadWorker] skipped: already uploaded entity=invoice/$entityId');
+            debugPrint(
+              '[DriveUploadWorker] skipped: already uploaded entity=invoice/$entityId',
+            );
             succeeded++;
             continue;
           }
@@ -1965,12 +2009,12 @@ class DriveDocumentSyncService {
       final monthFolders = await _drive.ensureMonthStructure(asset.fechaCompra);
       listWatch.stop();
       _driveListMs += listWatch.elapsedMilliseconds;
-      folderId = monthFolders.inversionesFolderId;
+      folderId = monthFolders.gastosInversionesFolderId;
       final uploaded = await _uploadOrUpdate(
         existingFileId: asset.driveFileId,
         file: stableFile,
         fileName: _assetFileName(asset, stableFile),
-        parentFolderId: monthFolders.inversionesFolderId,
+        parentFolderId: monthFolders.gastosInversionesFolderId,
         mimeType: _mimeTypeFor(stableFile.path),
       );
       await _assetRepository.update(

@@ -14,6 +14,7 @@ import '../../providers/assets_provider.dart';
 import '../../providers/auth_controller.dart';
 import '../../providers/expenses_provider.dart';
 import '../../providers/invoice_provider.dart';
+import '../../providers/estado_drive_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/sync_provider.dart';
 import '../../services/google_auth_service.dart';
@@ -795,9 +796,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               const SizedBox(height: 2),
               Text(
                 subtitle,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: context.colors.textSecondary),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: context.colors.textSecondary,
+                ),
               ),
             ],
           ),
@@ -945,10 +946,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         padding: const EdgeInsets.only(bottom: 8),
         child: RichText(
           text: TextSpan(
-            style: TextStyle(
-              fontSize: 13,
-              color: context.colors.textSecondary,
-            ),
+            style: TextStyle(fontSize: 13, color: context.colors.textSecondary),
             children: [
               TextSpan(
                 text: '$title: ',
@@ -1095,7 +1093,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               children: [
                 Icon(
                   connected ? Icons.add_to_drive : Icons.add_to_drive_outlined,
-                  color: connected ? context.colors.success : context.colors.accentSoft,
+                  color: connected
+                      ? context.colors.success
+                      : context.colors.accentSoft,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -1541,7 +1541,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             const SizedBox(height: 8),
             Text(
               'La app solo creará o reutilizará carpetas dentro de la carpeta seleccionada. No borra, mueve ni renombra archivos.',
-              style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+              style: TextStyle(
+                fontSize: 12,
+                color: context.colors.textSecondary,
+              ),
             ),
           ],
         ),
@@ -1636,10 +1639,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         debugPrint(
           '[DRIVE][STRUCTURE] requested_from_profile years=${result.years.join(', ')}',
         );
+        ref.invalidate(estadoDriveProvider);
+        await _avisarCarpetasCreadas();
       },
-      progressLabel: 'Creando estructura anual en Drive...',
-      successMessage:
-          'Estructura creada correctamente. Si ya existía, se ha reutilizado.',
+      progressLabel: 'Creando carpetas en tu Drive…',
       errorPrefix: 'No se pudo crear la estructura de Drive',
     );
   }
@@ -1843,10 +1846,26 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
   }
 
-  void _showDriveMessage(String message) {
+  void _showDriveMessage(String message, {SnackBarAction? accion}) {
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    ).showSnackBar(SnackBar(content: Text(message), action: accion));
+  }
+
+  /// El aviso de que ya están las carpetas, con un atajo para ir a verlas.
+  Future<void> _avisarCarpetasCreadas() async {
+    final settings = await ref.read(settingsProvider.future);
+    final rootFolderId = settings.driveRootFolderId?.trim();
+    if (!mounted) return;
+    _showDriveMessage(
+      'Carpetas listas en tu Drive',
+      accion: rootFolderId == null || rootFolderId.isEmpty
+          ? null
+          : SnackBarAction(
+              label: 'Abrir Drive',
+              onPressed: () => _openDriveFolder(rootFolderId),
+            ),
+    );
   }
 
   String _formatDate(DateTime dt) {
@@ -1906,7 +1925,10 @@ class _GoogleSection extends ConsumerWidget {
               const SizedBox(height: 4),
               Text(
                 'Conecta Calendar para sincronizar bolos y agenda',
-                style: TextStyle(fontSize: 13, color: context.colors.textSecondary),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: context.colors.textSecondary,
+                ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
@@ -1974,7 +1996,10 @@ class _GoogleSection extends ConsumerWidget {
           // ── Google Calendar ──
           if (auth.calendarConnected)
             ListTile(
-              leading: Icon(Icons.calendar_month, color: context.colors.accentSoft),
+              leading: Icon(
+                Icons.calendar_month,
+                color: context.colors.accentSoft,
+              ),
               title: Text('Google Calendar'),
               subtitle: Text('Bolos sincronizados'),
               trailing: Icon(
@@ -1998,7 +2023,10 @@ class _GoogleSection extends ConsumerWidget {
             ),
           const Divider(height: 1),
           ListTile(
-            leading: Icon(Icons.info_outline, color: context.colors.textSecondary),
+            leading: Icon(
+              Icons.info_outline,
+              color: context.colors.textSecondary,
+            ),
             title: Text('Sesión principal'),
             subtitle: Text(
               'Para salir de MisBolos usa "Cerrar sesión" en Sincronización en la nube.',
@@ -2496,7 +2524,11 @@ class _LogoSelector extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.image, color: context.colors.textSecondary, size: 24),
+                Icon(
+                  Icons.image,
+                  color: context.colors.textSecondary,
+                  size: 24,
+                ),
                 Text(
                   'Sin logo',
                   style: TextStyle(
