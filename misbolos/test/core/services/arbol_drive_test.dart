@@ -122,6 +122,8 @@ void main() {
     });
   });
 
+  _testsParalelo();
+
   group('la ruta de un adjunto de gasto', () {
     test('usa los mismos nombres que el árbol', () {
       final fecha = DateTime(2026, 5, 14);
@@ -129,6 +131,55 @@ void main() {
       expect(getYearFolderName(fecha), 'Contabilidad 2026');
       expect(getQuarterName(fecha), '2 TRIMESTRE');
       expect(getMonthName(fecha), 'MAYO');
+    });
+  });
+}
+
+/// Los tests del paralelismo van aquí porque es lo que monta el árbol.
+void _testsParalelo() {
+  group('crear carpetas en paralelo', () {
+    test('ejecuta todas las tareas', () async {
+      final hechas = <int>[];
+      await ejecutarEnParalelo([
+        for (var i = 0; i < 10; i++) () async => hechas.add(i),
+      ], limite: 3);
+
+      expect(hechas.length, 10);
+      expect(hechas.toSet(), {for (var i = 0; i < 10; i++) i});
+    });
+
+    test('nunca pasa del límite de llamadas a la vez', () async {
+      var enCurso = 0;
+      var maximo = 0;
+
+      await ejecutarEnParalelo([
+        for (var i = 0; i < 12; i++)
+          () async {
+            enCurso++;
+            maximo = enCurso > maximo ? enCurso : maximo;
+            await Future<void>.delayed(const Duration(milliseconds: 5));
+            enCurso--;
+          },
+      ], limite: 4);
+
+      expect(maximo, lessThanOrEqualTo(4));
+      expect(maximo, greaterThan(1), reason: 'si no, no hay paralelismo');
+    });
+
+    test('una tarea que falla no impide las demás, pero se entera', () async {
+      final hechas = <int>[];
+
+      await expectLater(
+        ejecutarEnParalelo([
+          () async => hechas.add(1),
+          () async => throw StateError('carpeta en huelga'),
+          () async => hechas.add(3),
+        ], limite: 2),
+        throwsA(isA<StateError>()),
+      );
+
+      // Las otras dos se hicieron igualmente.
+      expect(hechas, containsAll([1, 3]));
     });
   });
 }

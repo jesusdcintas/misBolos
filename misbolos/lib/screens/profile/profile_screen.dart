@@ -716,33 +716,46 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   void _showDrivePanel() {
-    final settings = ref.read(settingsProvider).valueOrNull;
-    if (settings == null) return;
+    if (ref.read(settingsProvider).valueOrNull == null) return;
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: SizedBox(
-          height: MediaQuery.of(context).size.height * 0.88,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-            child: Column(
-              children: [
-                _buildSheetHeader(
-                  context,
-                  title: 'Google Drive',
-                  subtitle: 'Configuración y diagnóstico',
+      // Con Consumer, el panel se entera de que la conexión ha terminado.
+      // Sin él se quedaba con los ajustes de cuando se abrió y enseñaba
+      // «Drive no conectado» junto a «Cuenta conectada».
+      builder: (context) => Consumer(
+        builder: (context, ref, _) {
+          final settings = ref.watch(settingsProvider).valueOrNull;
+          if (settings == null) {
+            return const SizedBox(
+              height: 160,
+              child: Center(child: CircularProgressIndicator()),
+            );
+          }
+          return SafeArea(
+            child: SizedBox(
+              height: MediaQuery.of(context).size.height * 0.88,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+                child: Column(
+                  children: [
+                    _buildSheetHeader(
+                      context,
+                      title: 'Google Drive',
+                      subtitle: 'Configuración y diagnóstico',
+                    ),
+                    const SizedBox(height: 10),
+                    _buildGoogleDriveSection(settings),
+                    const SizedBox(height: 10),
+                    _buildDriveHelpSection(),
+                  ],
                 ),
-                const SizedBox(height: 10),
-                _buildGoogleDriveSection(settings),
-                const SizedBox(height: 10),
-                _buildDriveHelpSection(),
-              ],
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
@@ -1568,15 +1581,23 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       () async {
         await GoogleDriveService.instance.signIn();
         final setup = await GoogleDriveService.instance.setupWorkspace();
-        if (!setup.ready && mounted) {
-          _showDriveMessage(
-            'Selecciona una carpeta manualmente para completar la configuración de Drive.',
-          );
-        }
         await DriveDocumentSyncService.instance.processPendingUploads(
           reason: 'drive_connected',
         );
+        // Los ajustes han cambiado y el diagnóstico anterior ya no vale.
         ref.invalidate(settingsProvider);
+        ref.invalidate(estadoDriveProvider);
+        _refreshDriveConnectionStatus();
+        if (!mounted) return;
+        if (!setup.ready) {
+          _showDriveMessage(
+            'Selecciona una carpeta manualmente para completar la '
+            'configuración de Drive.',
+          );
+        } else if (!setup.estructuraCompleta) {
+          // Drive está conectado: lo que falló fue alguna carpeta.
+          _showDriveMessage(setup.message ?? 'Drive conectado');
+        }
       },
       progressLabel: 'Conectando Google Drive y preparando espacio...',
       successMessage: 'Drive listo',

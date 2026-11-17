@@ -133,3 +133,38 @@ DecisionCarpetaGastos decidirCarpetaGastos(List<CarpetaDrive> hijas) {
   }
   return const DecisionCarpetaGastos(AccionCarpetaGastos.crear);
 }
+
+/// Ejecuta [tareas] a lo sumo [limite] a la vez.
+///
+/// Si una falla no se lleva por delante a las demás: se guarda el error y,
+/// al terminar todas, se lanza el primero. Así una carpeta que falle no deja
+/// el resto del año a medias ni suelta errores asíncronos sin recoger.
+Future<void> ejecutarEnParalelo(
+  List<Future<void> Function()> tareas, {
+  int limite = 5,
+}) async {
+  if (limite < 1) throw ArgumentError.value(limite, 'limite', 'mínimo 1');
+
+  final pendientes = List.of(tareas);
+  final enCurso = <Future<void>>{};
+  final errores = <Object>[];
+
+  void lanzar() {
+    while (pendientes.isNotEmpty && enCurso.length < limite) {
+      final tarea = pendientes.removeAt(0);
+      late Future<void> futuro;
+      futuro = tarea()
+          .catchError(errores.add)
+          .whenComplete(() => enCurso.remove(futuro));
+      enCurso.add(futuro);
+    }
+  }
+
+  lanzar();
+  while (enCurso.isNotEmpty) {
+    await Future.any(enCurso);
+    lanzar();
+  }
+
+  if (errores.isNotEmpty) throw errores.first;
+}

@@ -80,16 +80,25 @@ class DriveExistingFileResult {
 }
 
 class DriveWorkspaceSetupResult {
+  /// Si Drive queda usable: hay cuenta y carpeta de trabajo elegida.
   final bool ready;
+
   final bool autoConfigured;
   final String? message;
   final DriveFolderResult? folder;
+
+  /// Si además se pudo montar el árbol de carpetas del año.
+  ///
+  /// Va aparte de [ready] a propósito: que falle una carpeta no deja Drive
+  /// sin conectar, y se vuelve a intentar solo cuando haga falta.
+  final bool estructuraCompleta;
 
   const DriveWorkspaceSetupResult({
     required this.ready,
     required this.autoConfigured,
     this.message,
     this.folder,
+    this.estructuraCompleta = true,
   });
 }
 
@@ -290,11 +299,27 @@ class GoogleDriveService {
 
       selected ??= await _createRootFolder(defaultFolderName);
       await selectRootFolder(selected);
-      await createFullYearStructure(DateTime.now().year);
+
+      // A partir de aquí Drive ya está conectado y con carpeta: si alguna
+      // carpeta del año falla, se avisa, pero la conexión es buena.
+      var estructuraCompleta = true;
+      String? aviso;
+      try {
+        await createFullYearStructure(DateTime.now().year);
+      } catch (e) {
+        estructuraCompleta = false;
+        aviso =
+            'Drive quedó conectado, pero no se pudieron crear todas las '
+            'carpetas del año. Puedes reintentarlo desde «Crear estructura».';
+        debugPrint('[DRIVE][SETUP] estructura incompleta: $e');
+      }
+
       return DriveWorkspaceSetupResult(
         ready: true,
         autoConfigured: true,
         folder: selected,
+        estructuraCompleta: estructuraCompleta,
+        message: aviso,
       );
     } catch (e) {
       return DriveWorkspaceSetupResult(
@@ -612,7 +637,7 @@ class GoogleDriveService {
     avanzar();
     await _deleteLegacyBackupFolder(yearFolderId);
 
-    await _enParalelo(
+    await ejecutarEnParalelo(
       [
         for (var trimestre = 0; trimestre < 4; trimestre++)
           () async {
@@ -625,7 +650,7 @@ class GoogleDriveService {
             );
             avanzar();
 
-            await _enParalelo([
+            await ejecutarEnParalelo([
               for (var mes = primerMes; mes < primerMes + 3; mes++)
                 () async {
                   await ensureMonthStructure(DateTime(year, mes));
@@ -639,30 +664,6 @@ class GoogleDriveService {
       // sostienen seis llamadas simultáneas.
       limite: 2,
     );
-  }
-
-  /// Ejecuta [tareas] a lo sumo [limite] a la vez.
-  Future<void> _enParalelo(
-    List<Future<void> Function()> tareas, {
-    int limite = 5,
-  }) async {
-    final pendientes = List.of(tareas);
-    final enCurso = <Future<void>>[];
-
-    Future<void> lanzar() async {
-      while (pendientes.isNotEmpty && enCurso.length < limite) {
-        final tarea = pendientes.removeAt(0);
-        late Future<void> futuro;
-        futuro = tarea().whenComplete(() => enCurso.remove(futuro));
-        enCurso.add(futuro);
-      }
-    }
-
-    await lanzar();
-    while (enCurso.isNotEmpty) {
-      await Future.any(enCurso);
-      await lanzar();
-    }
   }
 
   Future<DriveFolderResult> _createRootFolder(String name) async {
