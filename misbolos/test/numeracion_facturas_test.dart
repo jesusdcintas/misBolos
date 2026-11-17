@@ -72,6 +72,39 @@ void main() {
     await deleteDatabase(dbPath);
   });
 
+  group('el mensaje de por qué no vale el número', () {
+    test('dice de quién es el número cuando está ocupado', () async {
+      await _crearFactura('inv-27', 27, DateTime(2026, 5, 1));
+
+      await expectLater(
+        () => _repo.fijarProximoNumero(year: 2026, numero: 27),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'mensaje',
+            'El número 27 ya es de la factura F-2026-0027.',
+          ),
+        ),
+      );
+    });
+
+    test('si está libre pero hay posteriores, lo explica', () async {
+      await _crearFactura('inv-30', 30, DateTime(2026, 5, 1));
+
+      await expectLater(
+        () => _repo.fijarProximoNumero(year: 2026, numero: 27),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'mensaje',
+            'No puedes usar el 27 porque ya existe la F-2026-0030: la '
+                'numeración no puede retroceder. Elige uno mayor que 30.',
+          ),
+        ),
+      );
+    });
+  });
+
   group('fijar el número de la siguiente factura', () {
     test('sin facturas, se puede fijar cualquiera', () async {
       await _repo.fijarProximoNumero(year: 2026, numero: 16);
@@ -146,18 +179,23 @@ void main() {
       expect(await _repo.getNextNumberForYear(2026), 1);
     });
 
-    test('solo se borra la última de la serie', () async {
+    test('también se puede borrar una del medio, y queda un hueco', () async {
       final primera = await _crearFactura('inv-1', 1, DateTime(2026, 2, 1));
       await _crearFactura('inv-2', 2, DateTime(2026, 3, 1));
 
-      await expectLater(
-        () => _repo.deleteAndUnlinkGig(primera.id),
-        throwsA(isA<InvoiceNotLastException>()),
-      );
+      await _repo.deleteAndUnlinkGig(primera.id);
 
-      // Sigue ahí y la numeración no se mueve.
-      expect((await _repo.getById(primera.id))?.deletedAt, isNull);
+      expect((await _repo.getById(primera.id))?.deletedAt, isNotNull);
+      // El hueco del 1 se queda: la numeración no retrocede sola.
       expect(await _repo.getNextNumberForYear(2026), 3);
+    });
+
+    test('saber cuál es la última de la serie', () async {
+      final primera = await _crearFactura('inv-1', 1, DateTime(2026, 2, 1));
+      final segunda = await _crearFactura('inv-2', 2, DateTime(2026, 3, 1));
+
+      expect(await _repo.esUltimaDeLaSerie(primera), isFalse);
+      expect(await _repo.esUltimaDeLaSerie(segunda), isTrue);
     });
 
     test(
@@ -174,6 +212,43 @@ void main() {
         expect(await _repo.getNextNumberForYear(2026), 3);
       },
     );
+  });
+
+  group('el bolo al borrar su factura', () {
+    test('suelta la factura y vuelve a confirmado', () async {
+      final factura = await _crearFactura('inv-1', 1, DateTime(2026, 2, 1));
+
+      await _repo.deleteAndUnlinkGig(factura.id);
+
+      final bolo = await GigRepository.instance.getById('gig-inv-1');
+      expect(bolo?.invoiceId, isNull);
+      expect(bolo?.status, GigStatus.confirmado);
+    });
+
+    test('un bolo privado vuelve a su confirmado privado', () async {
+      await GigRepository.instance.insert(
+        Gig(
+          id: 'gig-privado',
+          fecha: DateTime(2026, 2, 1),
+          clientId: 'client-1',
+          facturable: false,
+          status: GigStatus.confirmadoB,
+        ),
+      );
+      final factura = _factura(
+        'inv-privada',
+        1,
+        DateTime(2026, 2, 1),
+        'gig-privado',
+      );
+      await _repo.insert(factura);
+
+      await _repo.deleteAndUnlinkGig(factura.id);
+
+      final bolo = await GigRepository.instance.getById('gig-privado');
+      expect(bolo?.invoiceId, isNull);
+      expect(bolo?.status, GigStatus.confirmadoB);
+    });
   });
 
   group('cambio de año', () {
@@ -236,6 +311,69 @@ void main() {
         );
 
         expect(await _repo.getNextNumberForYear(2026), 30);
+      },
+    );
+
+    test('local ya subido y nube más reciente: gana la nube', () async {
+      // El Mac fija 30 y lo sube: su fecha pasa a ser la del servidor.
+      await _repo.fijarProximoNumero(year: 2026, numero: 30);
+      await _contadores.adoptarFechaDelServidor(
+        serie: 'F',
+        fiscalYear: 2026,
+        updatedAt: DateTime(2026, 11, 17, 19, 0),
+      );
+
+      // El simulador lo cambia después a 33: el servidor le pone su hora.
+      await _contadores.fusionarDesdeNube(
+        InvoiceCounter(
+          serie: 'F',
+          fiscalYear: 2026,
+          nextNumber: 33,
+          updatedAt: DateTime(2026, 11, 17, 19, 5),
+        ),
+      );
+
+      expect(await _repo.getNextNumberForYear(2026), 33);
+    });
+
+    test('local ya subido y más reciente que la nube: gana el local', () async {
+      await _repo.fijarProximoNumero(year: 2026, numero: 33);
+      await _contadores.adoptarFechaDelServidor(
+        serie: 'F',
+        fiscalYear: 2026,
+        updatedAt: DateTime(2026, 11, 17, 19, 5),
+      );
+
+      await _contadores.fusionarDesdeNube(
+        InvoiceCounter(
+          serie: 'F',
+          fiscalYear: 2026,
+          nextNumber: 30,
+          updatedAt: DateTime(2026, 11, 17, 19, 0),
+        ),
+      );
+
+      expect(await _repo.getNextNumberForYear(2026), 33);
+    });
+
+    test(
+      'con el reloj del dispositivo adelantado se perdía el cambio',
+      () async {
+        // Sin adoptar la fecha del servidor, la fecha local era la del
+        // dispositivo: un reloj adelantado ganaba siempre.
+        await _repo.fijarProximoNumero(year: 2026, numero: 30);
+        final local = await _contadores.get(serie: 'F', fiscalYear: 2026);
+        expect(local, isNotNull);
+
+        await _contadores.adoptarFechaDelServidor(
+          serie: 'F',
+          fiscalYear: 2026,
+          updatedAt: DateTime(2026, 11, 17, 19, 0),
+        );
+        final trasSubir = await _contadores.get(serie: 'F', fiscalYear: 2026);
+
+        expect(trasSubir?.nextNumber, 30, reason: 'el número no cambia');
+        expect(trasSubir?.updatedAt, DateTime(2026, 11, 17, 19, 0));
       },
     );
 

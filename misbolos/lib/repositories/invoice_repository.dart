@@ -8,24 +8,6 @@ import '../models/invoice_counter.dart';
 import 'invoice_counter_repository.dart';
 import 'invoice_fiscal_record_repository.dart';
 
-/// Se ha intentado borrar una factura que no es la última de su serie.
-///
-/// Borrarla dejaría un hueco en la numeración, que es justo lo que no puede
-/// pasar: para anular una factura del medio se emite una rectificativa.
-class InvoiceNotLastException implements Exception {
-  final Invoice invoice;
-
-  const InvoiceNotLastException(this.invoice);
-
-  String get mensaje =>
-      'Solo puedes borrar la última factura de la serie. Borrar la '
-      '${invoice.visualNumber} dejaría un hueco en la numeración; para '
-      'anularla, emite una factura rectificativa.';
-
-  @override
-  String toString() => mensaje;
-}
-
 class InvoiceNumberChangeSource {
   static const createInvoice = 'create_invoice';
   static const manualRenumber = 'manual_renumber';
@@ -178,6 +160,28 @@ class InvoiceRepository {
     return (result.first['max_num'] as int?) ?? 0;
   }
 
+  /// Si [numero] es de alguna factura viva de ese año y serie.
+  Future<bool> existeNumero(
+    int year,
+    int numero, {
+    InvoiceType invoiceType = InvoiceType.normal,
+  }) async {
+    final db = await DatabaseHelper.instance.database;
+    final filas = await db.rawQuery(
+      '''
+      SELECT 1
+      FROM invoices
+      WHERE CAST(strftime('%Y', fecha) AS INTEGER) = ?
+        AND numero = ?
+        AND deleted_at IS NULL
+        AND invoice_type = ?
+      LIMIT 1
+      ''',
+      [year, numero, invoiceType.dbValue],
+    );
+    return filas.isNotEmpty;
+  }
+
   /// El número que le toca a la siguiente factura.
   ///
   /// Sale de combinar lo ya usado con el contador que el usuario haya fijado
@@ -208,8 +212,13 @@ class InvoiceRepository {
     final mayorUsado = await mayorNumeroUsado(year, invoiceType: invoiceType);
     if (!sePuedeFijarNumero(numero, mayorUsado: mayorUsado)) {
       throw StateError(
-        'El número $numero ya es de una factura de $year. La numeración no '
-        'puede repetirse ni retroceder: elige uno mayor que $mayorUsado.',
+        mensajeNumeroNoValido(
+          serie: serieDeFactura(invoiceType),
+          year: year,
+          numero: numero,
+          mayorUsado: mayorUsado,
+          ocupado: await existeNumero(year, numero, invoiceType: invoiceType),
+        ),
       );
     }
 
@@ -430,19 +439,10 @@ class InvoiceRepository {
 
   /// Borra una factura a petición del usuario.
   ///
-  /// Solo deja borrar la última de su serie y año: borrar una del medio
-  /// dejaría un hueco en la numeración. Los borrados que llegan por
-  /// sincronización desde otro dispositivo usan [delete] y no pasan por
-  /// aquí, porque allí el borrado ya está hecho.
+  /// Se puede borrar cualquiera, también una del medio: el aviso de que
+  /// dejará un hueco lo da la pantalla antes de llegar aquí.
   Future<Invoice?> deleteAndUnlinkGig(String id) async {
     final db = await DatabaseHelper.instance.database;
-    final invoice = await getById(id);
-    if (invoice != null &&
-        invoice.deletedAt == null &&
-        !await esUltimaDeLaSerie(invoice)) {
-      throw InvoiceNotLastException(invoice);
-    }
-
     return db.transaction((txn) async {
       final actual = await _loadInvoiceForDelete(txn, id);
       if (actual == null) return null;
@@ -773,11 +773,23 @@ class InvoiceRepository {
     );
 
     if (remainingRows.isEmpty) {
+      // Sin factura, el bolo vuelve al estado de antes de facturar. Un bolo
+      // privado vuelve a su confirmado privado, no al oficial.
+      final gigRows = await db.query(
+        'gigs',
+        columns: ['facturable'],
+        where: 'id = ?',
+        whereArgs: [gigId],
+        limit: 1,
+      );
+      final facturable = gigRows.isEmpty || (gigRows.first['facturable'] != 0);
       await db.update(
         'gigs',
         {
           'invoice_id': null,
-          'status': GigStatus.confirmado.dbValue,
+          'status': facturable
+              ? GigStatus.confirmado.dbValue
+              : GigStatus.confirmadoB.dbValue,
           'updated_at': DateTime.now().toIso8601String(),
         },
         where: 'id = ?',

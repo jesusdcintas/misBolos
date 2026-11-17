@@ -793,21 +793,33 @@ class SupabaseService {
   ///
   /// Solo se llama cuando el usuario fija un número: nada de empujarlo al
   /// emitir. `updated_at` lo pone el servidor con su propio reloj.
-  Future<void> uploadInvoiceCounter(InvoiceCounter contador) async {
-    if (!isAuthenticated) return;
+  /// Devuelve el `updated_at` que ha puesto el servidor, o null si falló.
+  ///
+  /// Hace falta devolverlo: al fusionar gana el cambio más reciente, y eso
+  /// solo se puede comparar si las dos fechas salen del reloj del servidor.
+  Future<DateTime?> uploadInvoiceCounter(InvoiceCounter contador) async {
+    if (!isAuthenticated) return null;
     try {
-      await _client!.from('invoice_counters').upsert({
-        'user_id': userId,
-        'serie': contador.serie,
-        'fiscal_year': contador.fiscalYear,
-        'next_number': contador.nextNumber,
-      }, onConflict: 'user_id,serie,fiscal_year');
+      final fila = await _client!
+          .from('invoice_counters')
+          .upsert({
+            'user_id': userId,
+            'serie': contador.serie,
+            'fiscal_year': contador.fiscalYear,
+            'next_number': contador.nextNumber,
+          }, onConflict: 'user_id,serie,fiscal_year')
+          .select('updated_at')
+          .maybeSingle();
       debugPrint(
         '[Supabase] Uploaded invoice counter '
         '${contador.serie}-${contador.fiscalYear}=${contador.nextNumber}',
       );
+      final valor = fila?['updated_at'];
+      if (valor is String) return DateTime.parse(valor).toLocal();
+      return null;
     } catch (e) {
       debugPrint('[Supabase] Upload invoice counter error: $e');
+      return null;
     }
   }
 

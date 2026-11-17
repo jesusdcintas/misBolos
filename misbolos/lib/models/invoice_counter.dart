@@ -82,3 +82,37 @@ InvoiceCounter? fusionarContadores(
   if (nube == null) return local;
   return nube.updatedAt.isAfter(local.updatedAt) ? nube : local;
 }
+
+/// Por qué no se puede fijar [numero].
+///
+/// Son dos casos distintos y conviene no confundirlos: que el número esté
+/// cogido, o que esté libre pero por detrás de facturas que ya existen.
+String mensajeNumeroNoValido({
+  required String serie,
+  required int year,
+  required int numero,
+  required int mayorUsado,
+  required bool ocupado,
+}) {
+  if (ocupado) {
+    return 'El número $numero ya es de la factura '
+        '${numeroVisualFactura(serie: serie, year: year, numero: numero)}.';
+  }
+  return 'No puedes usar el $numero porque ya existe la '
+      '${numeroVisualFactura(serie: serie, year: year, numero: mayorUsado)}: '
+      'la numeración no puede retroceder. Elige uno mayor que $mayorUsado.';
+}
+
+/// Qué números propone la app para cerrar el hueco de [numeroBorrado].
+///
+/// Cada factura posterior al hueco baja un número. No cambia nada por su
+/// cuenta: es solo la propuesta que se le enseña al usuario.
+Map<String, int> renumeracionParaCerrarHueco({
+  required Map<String, int> numerosPorFactura,
+  required int numeroBorrado,
+}) {
+  return {
+    for (final entrada in numerosPorFactura.entries)
+      if (entrada.value > numeroBorrado) entrada.key: entrada.value - 1,
+  };
+}

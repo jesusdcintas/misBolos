@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/app_event.dart';
+import '../core/utils/sincronizar_bolo_calendario.dart';
 import '../models/invoice.dart';
 import '../models/invoice_counter.dart';
 import '../models/sync_queue_item.dart';
@@ -652,7 +653,18 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
       fiscalYear: year,
     );
     if (contador != null) {
-      await SupabaseService.instance.uploadInvoiceCounter(contador);
+      final fechaServidor = await SupabaseService.instance.uploadInvoiceCounter(
+        contador,
+      );
+      if (fechaServidor != null) {
+        // Sin esto, la fecha local sigue siendo la del reloj del
+        // dispositivo y al fusionar se compararía con la del servidor.
+        await InvoiceCounterRepository.instance.adoptarFechaDelServidor(
+          serie: contador.serie,
+          fiscalYear: contador.fiscalYear,
+          updatedAt: fechaServidor,
+        );
+      }
     }
     // Refrescar `nextInvoiceNumberProvider` desde aquí daría una dependencia
     // circular: ese provider escucha a este. Lo hace quien llama.
@@ -783,6 +795,12 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
     );
     await reloadLocal();
     if (invoice != null) {
+      // El bolo ha soltado la factura y ha cambiado de estado: que se note
+      // también en el calendario, como en cualquier otro cambio de estado.
+      final gig = await GigRepository.instance.getById(invoice.gigId);
+      if (gig != null) {
+        await sincronizarBoloEnCalendarioDesdeProvider(ref, gig);
+      }
       ref.invalidate(gigByIdProvider(invoice.gigId));
       ref.invalidate(gigsProvider);
     }

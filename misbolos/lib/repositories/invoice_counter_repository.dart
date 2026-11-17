@@ -44,6 +44,28 @@ class InvoiceCounterRepository {
     );
   }
 
+  /// Apunta la fecha que el servidor dio al subir este contador.
+  ///
+  /// Mientras el contador solo está en el dispositivo, su fecha es la del
+  /// reloj local; en cuanto sube, adopta la del servidor, que es con la que
+  /// se compara al fusionar.
+  Future<void> adoptarFechaDelServidor({
+    required String serie,
+    required int fiscalYear,
+    required DateTime updatedAt,
+  }) async {
+    final actual = await get(serie: serie, fiscalYear: fiscalYear);
+    if (actual == null) return;
+    await guardar(
+      InvoiceCounter(
+        serie: actual.serie,
+        fiscalYear: actual.fiscalYear,
+        nextNumber: actual.nextNumber,
+        updatedAt: updatedAt,
+      ),
+    );
+  }
+
   /// Aplica lo que viene de la nube, respetando quién cambió el último.
   ///
   /// Devuelve el contador que queda, que puede ser el que ya había.

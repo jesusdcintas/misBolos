@@ -10,7 +10,8 @@ import '../../models/invoice.dart';
 import '../../models/invoice_email_log.dart';
 import '../../models/gig.dart';
 import '../../providers/invoice_provider.dart';
-import '../../repositories/invoice_repository.dart';
+import '../../models/invoice_counter.dart';
+import 'invoices_list_screen.dart';
 import '../../providers/invoice_email_log_provider.dart';
 import '../../providers/client_provider.dart';
 import '../../providers/gig_provider.dart';
@@ -1008,12 +1009,35 @@ class _InvoiceDetailContent extends ConsumerWidget {
   }
 
   Future<void> _deleteInvoice(BuildContext context, WidgetRef ref) async {
+    // Si no es la última de su serie, al borrarla queda un hueco.
+    final esUltima = await ref
+        .read(invoiceRepositoryProvider)
+        .esUltimaDeLaSerie(invoice);
+    if (!context.mounted) return;
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('¿Eliminar factura?'),
-        content: Text(
-          'Se eliminará permanentemente la factura ${invoice.visualNumber}. Esta acción no se puede deshacer.',
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Se eliminará permanentemente la factura '
+              '${invoice.visualNumber}. Esta acción no se puede deshacer.',
+            ),
+            if (!esUltima) ...[
+              const SizedBox(height: 12),
+              Text(
+                'Al borrar esta factura quedará un hueco en la numeración '
+                '(${invoice.visualNumber}). Si el cliente ya tiene la '
+                'factura, lo correcto es emitir una rectificativa en lugar '
+                'de borrarla.',
+                style: TextStyle(color: context.colors.warning),
+              ),
+            ],
+          ],
         ),
         actions: [
           TextButton(
@@ -1055,25 +1079,51 @@ class _InvoiceDetailContent extends ConsumerWidget {
         );
         deleteFromDrive = alsoDrive == true;
       }
-      try {
-        await ref
-            .read(invoicesProvider.notifier)
-            .remove(invoice.id, deleteFromDrive: deleteFromDrive);
-      } on InvoiceNotLastException catch (e) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(e.mensaje)));
-        }
-        return;
-      }
+      final numerosAntes = {
+        for (final f in ref.read(invoicesProvider).valueOrNull ?? <Invoice>[])
+          if (f.fecha.year == invoice.fecha.year &&
+              f.invoiceType == invoice.invoiceType &&
+              f.id != invoice.id)
+            f.id: f.numero,
+      };
 
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Factura eliminada')));
-        context.pop();
-      }
+      await ref
+          .read(invoicesProvider.notifier)
+          .remove(invoice.id, deleteFromDrive: deleteFromDrive);
+
+      if (!context.mounted) return;
+      final sugerencia = esUltima
+          ? const <String, int>{}
+          : renumeracionParaCerrarHueco(
+              numerosPorFactura: numerosAntes,
+              numeroBorrado: invoice.numero,
+            );
+
+      final messenger = ScaffoldMessenger.of(context);
+      context.pop();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            sugerencia.isEmpty
+                ? 'Factura eliminada'
+                : 'Factura eliminada. Queda un hueco en la numeración.',
+          ),
+          duration: sugerencia.isEmpty
+              ? const Duration(seconds: 4)
+              : const Duration(seconds: 8),
+          action: sugerencia.isEmpty
+              ? null
+              : SnackBarAction(
+                  label: 'Reenumerar para cerrar el hueco',
+                  onPressed: () => mostrarDialogoReenumerar(
+                    context,
+                    ref,
+                    year: invoice.fecha.year,
+                    numerosSugeridos: sugerencia,
+                  ),
+                ),
+        ),
+      );
     }
   }
 

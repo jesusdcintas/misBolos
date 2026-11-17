@@ -57,6 +57,57 @@ void main() {
     });
   });
 
+  group('el mensaje de por qué no vale', () {
+    test('cuando el número está cogido, dice de quién es', () {
+      expect(
+        mensajeNumeroNoValido(
+          serie: 'F',
+          year: 2026,
+          numero: 27,
+          mayorUsado: 30,
+          ocupado: true,
+        ),
+        'El número 27 ya es de la factura F-2026-0027.',
+      );
+    });
+
+    test('cuando está libre pero hay posteriores, lo explica', () {
+      expect(
+        mensajeNumeroNoValido(
+          serie: 'F',
+          year: 2026,
+          numero: 27,
+          mayorUsado: 30,
+          ocupado: false,
+        ),
+        'No puedes usar el 27 porque ya existe la F-2026-0030: la numeración '
+        'no puede retroceder. Elige uno mayor que 30.',
+      );
+    });
+  });
+
+  group('cerrar el hueco de una factura borrada', () {
+    test('solo bajan las posteriores, y una sola posición', () {
+      expect(
+        renumeracionParaCerrarHueco(
+          numerosPorFactura: {'a': 1, 'b': 2, 'c': 4, 'd': 5},
+          numeroBorrado: 3,
+        ),
+        {'c': 3, 'd': 4},
+      );
+    });
+
+    test('si el hueco es el último, no hay nada que mover', () {
+      expect(
+        renumeracionParaCerrarHueco(
+          numerosPorFactura: {'a': 1, 'b': 2},
+          numeroBorrado: 3,
+        ),
+        isEmpty,
+      );
+    });
+  });
+
   test('la serie sale del tipo de factura', () {
     expect(serieDeFactura(InvoiceType.normal), 'F');
     expect(serieDeFactura(InvoiceType.rectifying), 'R');
