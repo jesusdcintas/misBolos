@@ -24,6 +24,7 @@ import '../../widgets/common/acciones_factura.dart';
 import '../../widgets/common/deslizar_para_cobrar.dart';
 import '../../widgets/common/menu_acciones.dart';
 import '../../widgets/common/serpentina_celebration.dart';
+import '../../widgets/invoices/proxima_factura.dart';
 import '../../widgets/common/empty_state.dart';
 import '../../widgets/common/skeleton_loading.dart';
 import '../../core/utils/app_haptics.dart';
@@ -104,6 +105,14 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
           selectionMode
               ? _buildSelectionHeader(context, ref, selectedInvoices)
               : _buildHeader(pendingCount),
+          if (!selectionMode)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 8, 0),
+              child: ProximaFacturaLinea(
+                year:
+                    ref.watch(invoiceYearFilterProvider) ?? DateTime.now().year,
+              ),
+            ),
           Expanded(
             child: RefreshIndicator(
               onRefresh: _refreshInvoices,

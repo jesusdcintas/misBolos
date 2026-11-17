@@ -10,6 +10,7 @@ import '../../models/invoice.dart';
 import '../../models/invoice_email_log.dart';
 import '../../models/gig.dart';
 import '../../providers/invoice_provider.dart';
+import '../../repositories/invoice_repository.dart';
 import '../../providers/invoice_email_log_provider.dart';
 import '../../providers/client_provider.dart';
 import '../../providers/gig_provider.dart';
@@ -1054,9 +1055,18 @@ class _InvoiceDetailContent extends ConsumerWidget {
         );
         deleteFromDrive = alsoDrive == true;
       }
-      await ref
-          .read(invoicesProvider.notifier)
-          .remove(invoice.id, deleteFromDrive: deleteFromDrive);
+      try {
+        await ref
+            .read(invoicesProvider.notifier)
+            .remove(invoice.id, deleteFromDrive: deleteFromDrive);
+      } on InvoiceNotLastException catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(e.mensaje)));
+        }
+        return;
+      }
 
       if (context.mounted) {
         ScaffoldMessenger.of(

@@ -4,10 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/app_event.dart';
 import '../models/invoice.dart';
+import '../models/invoice_counter.dart';
 import '../models/sync_queue_item.dart';
 import '../repositories/app_event_repository.dart';
 import '../repositories/gig_repository.dart';
 import '../repositories/invoice_fiscal_record_repository.dart';
+import '../repositories/invoice_counter_repository.dart';
 import '../repositories/invoice_repository.dart';
 import '../repositories/sync_queue_repository.dart';
 import '../core/services/drive_document_sync_service.dart';
@@ -631,6 +633,28 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
       ref.invalidate(gigsProvider);
     }
     await reloadLocal();
+  }
+
+  /// Fija a mano el número de la siguiente factura del año.
+  ///
+  /// Solo toca el contador: ninguna factura cambia de número. Se sube a la
+  /// nube para que el otro dispositivo lo vea, pero si falla la subida el
+  /// cambio local vale igual.
+  Future<void> fijarProximoNumero({
+    required int year,
+    required int numero,
+  }) async {
+    final repository = ref.read(invoiceRepositoryProvider);
+    await repository.fijarProximoNumero(year: year, numero: numero);
+
+    final contador = await InvoiceCounterRepository.instance.get(
+      serie: serieDeFactura(InvoiceType.normal),
+      fiscalYear: year,
+    );
+    if (contador != null) {
+      await SupabaseService.instance.uploadInvoiceCounter(contador);
+    }
+    ref.invalidate(nextInvoiceNumberProvider(year));
   }
 
   Future<Invoice> createRectifyingInvoice(

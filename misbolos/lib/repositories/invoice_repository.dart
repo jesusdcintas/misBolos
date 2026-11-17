@@ -4,7 +4,27 @@ import 'package:uuid/uuid.dart';
 import '../database/database_helper.dart';
 import '../models/gig.dart';
 import '../models/invoice.dart';
+import '../models/invoice_counter.dart';
+import 'invoice_counter_repository.dart';
 import 'invoice_fiscal_record_repository.dart';
+
+/// Se ha intentado borrar una factura que no es la última de su serie.
+///
+/// Borrarla dejaría un hueco en la numeración, que es justo lo que no puede
+/// pasar: para anular una factura del medio se emite una rectificativa.
+class InvoiceNotLastException implements Exception {
+  final Invoice invoice;
+
+  const InvoiceNotLastException(this.invoice);
+
+  String get mensaje =>
+      'Solo puedes borrar la última factura de la serie. Borrar la '
+      '${invoice.visualNumber} dejaría un hueco en la numeración; para '
+      'anularla, emite una factura rectificativa.';
+
+  @override
+  String toString() => mensaje;
+}
 
 class InvoiceNumberChangeSource {
   static const createInvoice = 'create_invoice';
@@ -137,7 +157,10 @@ class InvoiceRepository {
     return getNextNumberForYear(DateTime.now().year);
   }
 
-  Future<int> getNextNumberForYear(
+  /// El número más alto ya usado en [year] por esa serie.
+  ///
+  /// Las borradas no cuentan: su número vuelve a estar libre.
+  Future<int> mayorNumeroUsado(
     int year, {
     InvoiceType invoiceType = InvoiceType.normal,
   }) async {
@@ -152,8 +175,68 @@ class InvoiceRepository {
       ''',
       [year, invoiceType.dbValue],
     );
-    final maxNum = result.first['max_num'] as int?;
-    return (maxNum ?? 0) + 1;
+    return (result.first['max_num'] as int?) ?? 0;
+  }
+
+  /// El número que le toca a la siguiente factura.
+  ///
+  /// Sale de combinar lo ya usado con el contador que el usuario haya fijado
+  /// a mano, así que borrar la última libera su número aunque haya contador.
+  Future<int> getNextNumberForYear(
+    int year, {
+    InvoiceType invoiceType = InvoiceType.normal,
+  }) async {
+    final contador = await InvoiceCounterRepository.instance.get(
+      serie: serieDeFactura(invoiceType),
+      fiscalYear: year,
+    );
+    return proximoNumeroFactura(
+      mayorUsado: await mayorNumeroUsado(year, invoiceType: invoiceType),
+      contadorFijado: contador?.nextNumber,
+    );
+  }
+
+  /// Fija a mano el número de la siguiente factura.
+  ///
+  /// Solo toca el contador: ninguna factura cambia de número, así que no
+  /// choca con el bloqueo de cambios automáticos de `upsert`.
+  Future<void> fijarProximoNumero({
+    required int year,
+    required int numero,
+    InvoiceType invoiceType = InvoiceType.normal,
+  }) async {
+    final mayorUsado = await mayorNumeroUsado(year, invoiceType: invoiceType);
+    if (!sePuedeFijarNumero(numero, mayorUsado: mayorUsado)) {
+      throw StateError(
+        'El número $numero ya es de una factura de $year. La numeración no '
+        'puede repetirse ni retroceder: elige uno mayor que $mayorUsado.',
+      );
+    }
+
+    await InvoiceCounterRepository.instance.guardar(
+      InvoiceCounter(
+        serie: serieDeFactura(invoiceType),
+        fiscalYear: year,
+        nextNumber: numero,
+        updatedAt: DateTime.now(),
+      ),
+    );
+    debugPrint(
+      '[InvoiceNumber] contador fijado serie=${serieDeFactura(invoiceType)} '
+      'year=$year next=$numero',
+    );
+  }
+
+  /// Si [invoice] es la última de su serie y año.
+  ///
+  /// Solo esa se puede borrar: cualquier otra dejaría un hueco en la
+  /// numeración.
+  Future<bool> esUltimaDeLaSerie(Invoice invoice) async {
+    final mayorUsado = await mayorNumeroUsado(
+      invoice.fecha.year,
+      invoiceType: invoice.invoiceType,
+    );
+    return invoice.numero >= mayorUsado;
   }
 
   Future<void> insert(Invoice invoice) async {
@@ -345,13 +428,26 @@ class InvoiceRepository {
     });
   }
 
+  /// Borra una factura a petición del usuario.
+  ///
+  /// Solo deja borrar la última de su serie y año: borrar una del medio
+  /// dejaría un hueco en la numeración. Los borrados que llegan por
+  /// sincronización desde otro dispositivo usan [delete] y no pasan por
+  /// aquí, porque allí el borrado ya está hecho.
   Future<Invoice?> deleteAndUnlinkGig(String id) async {
     final db = await DatabaseHelper.instance.database;
+    final invoice = await getById(id);
+    if (invoice != null &&
+        invoice.deletedAt == null &&
+        !await esUltimaDeLaSerie(invoice)) {
+      throw InvoiceNotLastException(invoice);
+    }
+
     return db.transaction((txn) async {
-      final invoice = await _loadInvoiceForDelete(txn, id);
-      if (invoice == null) return null;
-      await _softDeleteInvoiceAndSyncGig(txn, invoice);
-      return invoice;
+      final actual = await _loadInvoiceForDelete(txn, id);
+      if (actual == null) return null;
+      await _softDeleteInvoiceAndSyncGig(txn, actual);
+      return actual;
     });
   }
 
