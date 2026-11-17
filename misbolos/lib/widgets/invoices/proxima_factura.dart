@@ -77,6 +77,9 @@ Future<void> mostrarDialogoProximaFactura(
     await ref
         .read(invoicesProvider.notifier)
         .fijarProximoNumero(year: year, numero: numero);
+    // El contador no cambia la lista de facturas, así que hay que pedir el
+    // número otra vez a mano.
+    ref.invalidate(nextInvoiceNumberProvider(year));
     messenger.showSnackBar(
       SnackBar(
         content: Text(

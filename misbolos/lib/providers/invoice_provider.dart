@@ -654,7 +654,8 @@ class InvoicesNotifier extends AsyncNotifier<List<Invoice>> {
     if (contador != null) {
       await SupabaseService.instance.uploadInvoiceCounter(contador);
     }
-    ref.invalidate(nextInvoiceNumberProvider(year));
+    // Refrescar `nextInvoiceNumberProvider` desde aquí daría una dependencia
+    // circular: ese provider escucha a este. Lo hace quien llama.
   }
 
   Future<Invoice> createRectifyingInvoice(
