@@ -1663,19 +1663,75 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         ref.invalidate(estadoDriveProvider);
         await _avisarCarpetasCreadas();
       },
+      alFallar: _ofrecerRecuperarCarpeta,
       progressLabel: 'Creando carpetas en tu Drive…',
       errorPrefix: 'No se pudo crear la estructura de Drive',
     );
   }
 
   Future<void> _openDriveFolder(String folderId) async {
-    await _runDriveAction(
-      () async {
-        await GoogleDriveService.instance.openFolder(folderId);
-      },
-      progressLabel: 'Abriendo carpeta en Google Drive...',
-      errorPrefix: 'No se pudo abrir la carpeta de Drive',
+    // Sin pasar por _runDriveAction: su guardia `if (_driveBusy) return` no
+    // dice nada, y entonces el botón parecía que no hacía nada.
+    try {
+      final revision = await GoogleDriveService.instance.revisarRaiz();
+      if (!revision.sePuedeUsar) {
+        if (mounted) await _ofrecerRecuperarCarpeta(revision);
+        return;
+      }
+      await GoogleDriveService.instance.openFolder(folderId);
+    } catch (e) {
+      if (mounted) {
+        _showDriveMessage('No se pudo abrir la carpeta de Drive: $e');
+      }
+    }
+  }
+
+  /// La carpeta de trabajo ya no sirve: se le ofrece al usuario rehacerla.
+  Future<void> _ofrecerRecuperarCarpeta(RevisionRaizDrive revision) async {
+    final eleccion = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('No encuentro tu carpeta de Drive'),
+        content: Text(
+          '${revision.mensaje}\n\nPuedes crear otra con el mismo nombre o '
+          'elegir una carpeta que ya tengas.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Ahora no'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'elegir'),
+            child: const Text('Elegir otra carpeta'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, 'crear'),
+            child: const Text('Crear carpeta MisBolos de nuevo'),
+          ),
+        ],
+      ),
     );
+    if (!mounted || eleccion == null) return;
+
+    if (eleccion == 'crear') {
+      await _runDriveAction(
+        () async {
+          final setup = await GoogleDriveService.instance.setupWorkspace();
+          ref.invalidate(settingsProvider);
+          ref.invalidate(estadoDriveProvider);
+          _refreshDriveConnectionStatus();
+          if (!setup.ready) {
+            throw Exception(setup.message ?? 'No se pudo crear la carpeta.');
+          }
+        },
+        progressLabel: 'Creando la carpeta de MisBolos…',
+        successMessage: 'Carpeta de MisBolos creada de nuevo',
+        errorPrefix: 'No se pudo crear la carpeta',
+      );
+      return;
+    }
+    _showDrivePanel();
   }
 
   Future<void> _syncDriveDocuments() async {
@@ -1815,18 +1871,28 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     String? progressLabel,
     String? successMessage,
     required String errorPrefix,
+
+    /// Qué hacer si la carpeta de trabajo ya no sirve.
+    Future<void> Function(RevisionRaizDrive)? alFallar,
   }) async {
     if (_driveBusy) return;
     setState(() {
       _driveBusy = true;
       _driveProgressLabel = progressLabel ?? 'Procesando en Google Drive...';
     });
+    RevisionRaizDrive? revisionFallida;
     try {
       await action();
       _driveConnectionError = false;
       if (mounted && successMessage != null) {
         _showDriveMessage(successMessage);
       }
+    } on RaizDriveNoDisponible catch (e) {
+      _driveConnectionError = true;
+      // Se atiende al final: si se hiciera aquí, _driveBusy seguiría activo
+      // y la acción de recuperación se quedaría en nada.
+      revisionFallida = e.revision;
+      if (mounted && alFallar == null) _showDriveMessage(e.mensaje);
     } catch (e) {
       _driveConnectionError = true;
       if (mounted) {
@@ -1840,6 +1906,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           _driveProgressLabel = '';
         });
       }
+    }
+
+    if (revisionFallida != null && alFallar != null && mounted) {
+      await alFallar(revisionFallida);
     }
   }
 
@@ -1868,9 +1938,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   void _showDriveMessage(String message, {SnackBarAction? accion}) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message), action: accion));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        action: accion,
+        // Con acción, Flutter deja el aviso fijo por defecto; aquí tiene que
+        // irse solo, con tiempo de sobra para leerlo y pulsar.
+        persist: false,
+        duration: Duration(seconds: accion == null ? 4 : 8),
+      ),
+    );
   }
 
   /// El aviso de que ya están las carpetas, con un atajo para ir a verlas.

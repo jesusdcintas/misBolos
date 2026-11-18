@@ -23,10 +23,6 @@ class SettingsRepository {
 
   Future<void> updateField(String key, dynamic value) async {
     final db = await DatabaseHelper.instance.database;
-    await db.update(
-      'app_settings',
-      {key: value},
-      where: 'id = 1',
-    );
+    await db.update('app_settings', {key: value}, where: 'id = 1');
   }
 }

@@ -755,6 +755,7 @@ class DriveDocumentSyncService {
   Future<DriveReuploadResult> uploadAllDocumentsToDrive({
     String reason = 'drive_reupload',
   }) async {
+    await _drive.exigirRaizUsable();
     final totalWatch = Stopwatch()..start();
     debugPrint('[DRIVE][REUPLOAD] start reason=$reason');
     await _drive.ensureRootFolder();
@@ -1085,11 +1086,88 @@ class DriveDocumentSyncService {
     );
   }
 
+  /// Vuelve a subir los documentos cuyo PDF ya no está en Drive.
+  ///
+  /// Pasa cuando el usuario borra ficheros o carpetas desde Drive: la app
+  /// sigue guardando el id y cree que ya está subido, así que nunca lo
+  /// vuelve a intentar. Aquí se comprueba de verdad y se resube solo lo que
+  /// falta, sin duplicar lo que sí está.
+  Future<int> resubirDocumentosPerdidos({
+    String reason = 'drive_reupload_perdidos',
+  }) async {
+    await _drive.exigirRaizUsable();
+
+    final invoices = await _invoiceRepository.getAll();
+    final expenses = await _expenseRepository.getAll();
+    final assets = await _assetRepository.getAll();
+
+    final idDrivePorDocumento = <String, String?>{
+      for (final i in invoices) 'invoice:${i.id}': i.driveFileId,
+      for (final e in expenses)
+        if (e.id != null) 'expense:${e.id}': e.driveFileId,
+      for (final a in assets)
+        if (a.id != null) 'asset:${a.id}': a.driveFileId,
+    };
+
+    final vivos = await _drive.comprobarFicheros(
+      idDrivePorDocumento.values.whereType<String>(),
+    );
+    final perdidos = documentosConFicheroPerdido(
+      idDrivePorDocumento: idDrivePorDocumento,
+      vivoPorFichero: vivos,
+    );
+    debugPrint(
+      '[DRIVE][RESUBIR] reason=$reason revisados=${idDrivePorDocumento.length} '
+      'perdidos=${perdidos.length}',
+    );
+    if (perdidos.isEmpty) return 0;
+
+    final total = perdidos.length;
+    var hechos = 0;
+    String etiqueta(int n) => 'Subiendo documentos a tu Drive… $n de $total';
+    _startProgress(label: etiqueta(0), total: total);
+
+    try {
+      for (final clave in perdidos) {
+        final partes = clave.split(':');
+        final tipo = partes.first;
+        final id = partes.sublist(1).join(':');
+        try {
+          switch (tipo) {
+            case 'invoice':
+              await _invoiceRepository.limpiarDriveFileId(id);
+              await syncInvoiceById(id);
+            case 'expense':
+              await _expenseRepository.limpiarDriveFileId(int.parse(id));
+              await syncExpenseById(int.parse(id));
+            case 'asset':
+              await _assetRepository.limpiarDriveFileId(int.parse(id));
+              await syncAssetById(int.parse(id));
+          }
+        } catch (e) {
+          debugPrint('[DRIVE][RESUBIR][ERROR] $clave: $e');
+        }
+        hechos++;
+        _updateProgress(
+          label: etiqueta(hechos),
+          processed: hechos,
+          total: total,
+        );
+      }
+    } finally {
+      _finishProgress();
+    }
+
+    debugPrint('[DRIVE][RESUBIR] done resubidos=$hechos');
+    return hechos;
+  }
+
   Future<DriveStructureResult> createStructureForExistingDocuments({
     String reason = 'drive_create_structure',
   }) async {
     final watch = Stopwatch()..start();
     debugPrint('[DRIVE][STRUCTURE] start reason=$reason');
+    await _drive.exigirRaizUsable();
     await _drive.ensureRootFolder();
 
     final invoices = await _invoiceRepository.getAll();
@@ -1148,6 +1226,9 @@ class DriveDocumentSyncService {
 
     final settings = await _settingsRepository.get();
     await EstadoDriveStore.marcarCarpetasCreadas(settings.driveRootFolderId);
+
+    // Ya que están las carpetas, revisar si algún PDF se quedó por el camino.
+    await resubirDocumentosPerdidos(reason: 'tras_crear_estructura');
 
     watch.stop();
     debugPrint(

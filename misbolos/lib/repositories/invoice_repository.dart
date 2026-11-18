@@ -295,6 +295,26 @@ class InvoiceRepository {
     });
   }
 
+  /// Olvida el fichero de Drive que tenía guardado.
+  ///
+  /// Se usa cuando el PDF ya no está en Drive: así el camino normal de
+  /// subida lo vuelve a crear en lugar de intentar actualizar un fichero
+  /// que ya no existe.
+  Future<void> limpiarDriveFileId(String id) async {
+    final db = await DatabaseHelper.instance.database;
+    await db.update(
+      'invoices',
+      {
+        'drive_file_id': null,
+        'drive_file_url': null,
+        'drive_synced_at': null,
+        'drive_sync_status': 'pending',
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
   Future<void> updateDriveMetadata({
     required String id,
     required String driveFileId,
