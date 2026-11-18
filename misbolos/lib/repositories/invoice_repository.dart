@@ -4,6 +4,8 @@ import 'package:uuid/uuid.dart';
 import '../database/database_helper.dart';
 import '../models/gig.dart';
 import '../models/invoice.dart';
+import '../models/invoice_counter.dart';
+import 'invoice_counter_repository.dart';
 import 'invoice_fiscal_record_repository.dart';
 
 class InvoiceNumberChangeSource {
@@ -137,7 +139,10 @@ class InvoiceRepository {
     return getNextNumberForYear(DateTime.now().year);
   }
 
-  Future<int> getNextNumberForYear(
+  /// El número más alto ya usado en [year] por esa serie.
+  ///
+  /// Las borradas no cuentan: su número vuelve a estar libre.
+  Future<int> mayorNumeroUsado(
     int year, {
     InvoiceType invoiceType = InvoiceType.normal,
   }) async {
@@ -152,8 +157,95 @@ class InvoiceRepository {
       ''',
       [year, invoiceType.dbValue],
     );
-    final maxNum = result.first['max_num'] as int?;
-    return (maxNum ?? 0) + 1;
+    return (result.first['max_num'] as int?) ?? 0;
+  }
+
+  /// Si [numero] es de alguna factura viva de ese año y serie.
+  Future<bool> existeNumero(
+    int year,
+    int numero, {
+    InvoiceType invoiceType = InvoiceType.normal,
+  }) async {
+    final db = await DatabaseHelper.instance.database;
+    final filas = await db.rawQuery(
+      '''
+      SELECT 1
+      FROM invoices
+      WHERE CAST(strftime('%Y', fecha) AS INTEGER) = ?
+        AND numero = ?
+        AND deleted_at IS NULL
+        AND invoice_type = ?
+      LIMIT 1
+      ''',
+      [year, numero, invoiceType.dbValue],
+    );
+    return filas.isNotEmpty;
+  }
+
+  /// El número que le toca a la siguiente factura.
+  ///
+  /// Sale de combinar lo ya usado con el contador que el usuario haya fijado
+  /// a mano, así que borrar la última libera su número aunque haya contador.
+  Future<int> getNextNumberForYear(
+    int year, {
+    InvoiceType invoiceType = InvoiceType.normal,
+  }) async {
+    final contador = await InvoiceCounterRepository.instance.get(
+      serie: serieDeFactura(invoiceType),
+      fiscalYear: year,
+    );
+    return proximoNumeroFactura(
+      mayorUsado: await mayorNumeroUsado(year, invoiceType: invoiceType),
+      contadorFijado: contador?.nextNumber,
+    );
+  }
+
+  /// Fija a mano el número de la siguiente factura.
+  ///
+  /// Solo toca el contador: ninguna factura cambia de número, así que no
+  /// choca con el bloqueo de cambios automáticos de `upsert`.
+  Future<void> fijarProximoNumero({
+    required int year,
+    required int numero,
+    InvoiceType invoiceType = InvoiceType.normal,
+  }) async {
+    final mayorUsado = await mayorNumeroUsado(year, invoiceType: invoiceType);
+    if (!sePuedeFijarNumero(numero, mayorUsado: mayorUsado)) {
+      throw StateError(
+        mensajeNumeroNoValido(
+          serie: serieDeFactura(invoiceType),
+          year: year,
+          numero: numero,
+          mayorUsado: mayorUsado,
+          ocupado: await existeNumero(year, numero, invoiceType: invoiceType),
+        ),
+      );
+    }
+
+    await InvoiceCounterRepository.instance.guardar(
+      InvoiceCounter(
+        serie: serieDeFactura(invoiceType),
+        fiscalYear: year,
+        nextNumber: numero,
+        updatedAt: DateTime.now(),
+      ),
+    );
+    debugPrint(
+      '[InvoiceNumber] contador fijado serie=${serieDeFactura(invoiceType)} '
+      'year=$year next=$numero',
+    );
+  }
+
+  /// Si [invoice] es la última de su serie y año.
+  ///
+  /// Solo esa se puede borrar: cualquier otra dejaría un hueco en la
+  /// numeración.
+  Future<bool> esUltimaDeLaSerie(Invoice invoice) async {
+    final mayorUsado = await mayorNumeroUsado(
+      invoice.fecha.year,
+      invoiceType: invoice.invoiceType,
+    );
+    return invoice.numero >= mayorUsado;
   }
 
   Future<void> insert(Invoice invoice) async {
@@ -365,13 +457,17 @@ class InvoiceRepository {
     });
   }
 
+  /// Borra una factura a petición del usuario.
+  ///
+  /// Se puede borrar cualquiera, también una del medio: el aviso de que
+  /// dejará un hueco lo da la pantalla antes de llegar aquí.
   Future<Invoice?> deleteAndUnlinkGig(String id) async {
     final db = await DatabaseHelper.instance.database;
     return db.transaction((txn) async {
-      final invoice = await _loadInvoiceForDelete(txn, id);
-      if (invoice == null) return null;
-      await _softDeleteInvoiceAndSyncGig(txn, invoice);
-      return invoice;
+      final actual = await _loadInvoiceForDelete(txn, id);
+      if (actual == null) return null;
+      await _softDeleteInvoiceAndSyncGig(txn, actual);
+      return actual;
     });
   }
 
@@ -697,11 +793,23 @@ class InvoiceRepository {
     );
 
     if (remainingRows.isEmpty) {
+      // Sin factura, el bolo vuelve al estado de antes de facturar. Un bolo
+      // privado vuelve a su confirmado privado, no al oficial.
+      final gigRows = await db.query(
+        'gigs',
+        columns: ['facturable'],
+        where: 'id = ?',
+        whereArgs: [gigId],
+        limit: 1,
+      );
+      final facturable = gigRows.isEmpty || (gigRows.first['facturable'] != 0);
       await db.update(
         'gigs',
         {
           'invoice_id': null,
-          'status': GigStatus.confirmado.dbValue,
+          'status': facturable
+              ? GigStatus.confirmado.dbValue
+              : GigStatus.confirmadoB.dbValue,
           'updated_at': DateTime.now().toIso8601String(),
         },
         where: 'id = ?',

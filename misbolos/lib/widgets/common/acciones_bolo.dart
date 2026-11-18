@@ -9,6 +9,7 @@ import '../../core/utils/sincronizar_bolo_calendario.dart';
 import '../../models/franja_bolo.dart';
 import '../../models/gig.dart';
 import '../../providers/gig_provider.dart';
+import '../../providers/invoice_provider.dart';
 import 'menu_acciones.dart';
 
 /// Ruta para duplicar un bolo: mismo cliente, caché, franja y facturable, con
@@ -63,7 +64,7 @@ List<AccionRapida> accionesRapidasDeBolo(
           icono: Icons.receipt_outlined,
           etiqueta: 'Ver factura',
           color: colors.success,
-          alPulsar: () => context.push('/invoice/${gig.invoiceId}'),
+          alPulsar: () => abrirFacturaDeBolo(context, ref, gig),
         ),
         AccionBolo.cancelar => AccionRapida(
           icono: Icons.cancel_outlined,
@@ -73,6 +74,30 @@ List<AccionRapida> accionesRapidasDeBolo(
         ),
       },
   ];
+}
+
+/// Abre la factura de un bolo, si todavía existe.
+///
+/// Una factura borrada deja el enlace colgando, y empujar a su pantalla
+/// acababa en un error. Aquí se comprueba antes y se avisa sin más.
+Future<void> abrirFacturaDeBolo(
+  BuildContext context,
+  WidgetRef ref,
+  Gig gig,
+) async {
+  final id = gig.invoiceId?.trim();
+  final messenger = ScaffoldMessenger.of(context);
+  final factura = id == null || id.isEmpty
+      ? null
+      : await ref.read(invoiceByIdProvider(id).future);
+
+  if (factura == null || factura.deletedAt != null) {
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Esta factura ya no existe')),
+    );
+    return;
+  }
+  if (context.mounted) context.push('/invoice/${factura.id}');
 }
 
 /// Cancela un bolo con aviso de «Deshacer», sin preguntar antes.

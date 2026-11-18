@@ -10,6 +10,7 @@ import '../repositories/client_repository.dart';
 import '../repositories/expense_repository.dart';
 import '../repositories/asset_repository.dart';
 import '../repositories/gig_repository.dart';
+import '../repositories/invoice_counter_repository.dart';
 import '../repositories/invoice_repository.dart';
 import '../repositories/settings_repository.dart';
 import '../repositories/sync_queue_repository.dart';
@@ -574,6 +575,11 @@ class SyncNotifier extends StateNotifier<SyncState> {
         '[SYNC][DATA] assets: count=${cloudAssets.length}, downloaded=${cloudAssets.length}, '
         'uploaded=0, skipped=${cloudAssets.length - assetsChanged}, time=${assetsWatch.elapsedMilliseconds} ms',
       );
+
+      // Contadores de numeración fijados a mano en otro dispositivo.
+      for (final contador in await _supabase.downloadInvoiceCounters()) {
+        await InvoiceCounterRepository.instance.fusionarDesdeNube(contador);
+      }
 
       // Guardar settings si existen en la nube
       if (cloudSettings != null) {
