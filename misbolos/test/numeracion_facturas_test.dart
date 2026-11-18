@@ -169,6 +169,20 @@ void main() {
       expect(await _repo.getNextNumberForYear(2026), 16);
     });
 
+    test('con contador alto: crear, borrar y poder fijar el 1', () async {
+      // Fijar 57, crear la 57 y borrarla. Sin facturas vivas, la validación
+      // ignora la borrada: cualquier número desde 1 vuelve a valer.
+      await _repo.fijarProximoNumero(year: 2026, numero: 57);
+      final factura = await _crearFactura('inv-57', 57, DateTime(2026, 5, 1));
+      expect(await _repo.getNextNumberForYear(2026), 58);
+
+      await _repo.deleteAndUnlinkGig(factura.id);
+      expect(await _repo.mayorNumeroUsado(2026), 0);
+
+      await _repo.fijarProximoNumero(year: 2026, numero: 1);
+      expect(await _repo.getNextNumberForYear(2026), 1);
+    });
+
     test('sin contador: crear la 1 y borrarla devuelve el 1', () async {
       expect(await _repo.getNextNumberForYear(2026), 1);
       final factura = await _crearFactura('inv-1', 1, DateTime(2026, 2, 1));
