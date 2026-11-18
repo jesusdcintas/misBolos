@@ -98,24 +98,20 @@ void main() {
     expect(find.text('Inversión'), findsOneWidget);
   });
 
-  testWidgets('solo el gasto se puede deslizar para borrar', (tester) async {
+  testWidgets('deslizar ya no borra: en la lista no hay nada deslizable', (
+    tester,
+  ) async {
     await _montar(tester);
 
-    final deslizables = tester.widgetList<Dismissible>(
-      find.byType(Dismissible),
-    );
+    // Borrar un gasto vive en su detalle, con su confirmación y la pregunta
+    // de Drive. Aquí no hay Dismissible que pueda romper la lista.
+    expect(find.byType(Dismissible), findsNothing);
+  });
 
-    // Las inversiones son de solo lectura: no se deslizan.
-    expect(deslizables.length, 1);
+  testWidgets('se entra al detalle tocando la tarjeta', (tester) async {
+    await _montar(tester);
 
-    final gasto = deslizables.first;
-    expect(gasto.direction, DismissDirection.endToStart);
-    // La regla de Flutter: con fondo secundario tiene que haber principal.
-    expect(
-      gasto.secondaryBackground == null || gasto.background != null,
-      isTrue,
-      reason: 'un Dismissible así rompe la lista entera al pintarse',
-    );
-    expect(gasto.background, isNotNull);
+    expect(find.byType(InkWell), findsWidgets);
+    expect(tester.takeException(), isNull);
   });
 }
