@@ -16,6 +16,7 @@ import '../../providers/invoice_email_log_provider.dart';
 import '../../providers/client_provider.dart';
 import '../../providers/gig_provider.dart';
 import '../../providers/settings_provider.dart';
+import '../../providers/tutorial_provider.dart';
 import '../../services/pdf_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/google_auth_service.dart';
@@ -940,9 +941,16 @@ class _InvoiceDetailContent extends ConsumerWidget {
         settings: settings,
       );
 
-      await Share.shareXFiles([
-        XFile(file.path),
-      ], sharePositionOrigin: shareOrigin);
+      // Paso de la guía: compartir cuenta en cuanto se abre la hoja del
+      // sistema, aunque luego el usuario la cancele.
+      await ref.read(tutorialProvider.notifier).marcarFacturaCompartida();
+
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(file.path)],
+          sharePositionOrigin: shareOrigin,
+        ),
+      );
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(

@@ -41,11 +41,12 @@ Future<void> compartirPdfDeFactura(
       client: client,
       settings: settings,
     );
+    // Paso de la guía: compartir cuenta en cuanto se abre la hoja del
+    // sistema, se haga desde donde se haga y aunque luego se cancele.
+    await ref.read(tutorialProvider.notifier).marcarFacturaCompartida();
     await SharePlus.instance.share(
       ShareParams(files: [XFile(fichero.path)], sharePositionOrigin: origen),
     );
-    // Paso de la guía: compartir cuenta, se haga desde donde se haga.
-    await ref.read(tutorialProvider.notifier).marcarFacturaCompartida();
   } catch (e) {
     messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
   }
@@ -135,6 +136,10 @@ Future<void> enviarFacturaPorEmail(
   );
   if (confirmado != true) return;
 
+  // Paso de la guía: enviar por correo también cuenta como compartir. Se
+  // marca al confirmar el envío, aunque luego la red falle.
+  await ref.read(tutorialProvider.notifier).marcarFacturaCompartida();
+
   try {
     await ref.read(invoiceEmailSendProvider.notifier).send(invoice);
 
@@ -159,7 +164,6 @@ Future<void> enviarFacturaPorEmail(
       );
     }
 
-    await ref.read(tutorialProvider.notifier).marcarFacturaCompartida();
     messenger.showSnackBar(
       SnackBar(content: Text('Factura enviada a ${client.email}')),
     );
