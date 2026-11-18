@@ -213,7 +213,9 @@ class _GastosInversionesScreenState
         );
         return false;
       },
-      secondaryBackground: FondoDeslizar(
+      // Con una sola dirección va en `background`: Flutter lo usa para las
+      // dos, y poner solo `secondaryBackground` rompe la lista entera.
+      background: FondoDeslizar(
         color: context.colors.error,
         icono: Icons.delete_outline,
         etiqueta: 'Borrar',
