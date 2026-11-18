@@ -18,6 +18,9 @@ class TarjetaGuiaInicio extends StatelessWidget {
   final void Function(PasoGuia) alSaltar;
   final VoidCallback alOcultar;
 
+  /// Para quien ya tiene sus datos en una hoja de cálculo.
+  final VoidCallback alImportar;
+
   const TarjetaGuiaInicio({
     super.key,
     required this.pasos,
@@ -25,6 +28,7 @@ class TarjetaGuiaInicio extends StatelessWidget {
     required this.alHacerlo,
     required this.alSaltar,
     required this.alOcultar,
+    required this.alImportar,
   });
 
   @override
@@ -70,6 +74,7 @@ class TarjetaGuiaInicio extends StatelessWidget {
                 abierto: estado.paso == siguiente,
                 alHacerlo: () => alHacerlo(estado.paso),
                 alSaltar: () => alSaltar(estado.paso),
+                alImportar: alImportar,
               ),
             Align(
               alignment: Alignment.centerRight,
@@ -93,12 +98,14 @@ class _Paso extends StatelessWidget {
   final bool abierto;
   final VoidCallback alHacerlo;
   final VoidCallback alSaltar;
+  final VoidCallback alImportar;
 
   const _Paso({
     required this.estado,
     required this.abierto,
     required this.alHacerlo,
     required this.alSaltar,
+    required this.alImportar,
   });
 
   @override
@@ -185,6 +192,19 @@ class _Paso extends StatelessWidget {
                     ),
                   ),
                 ],
+              ),
+            ),
+          if (abierto && paso == PasoGuia.cliente)
+            Padding(
+              padding: const EdgeInsets.only(left: 32),
+              child: TextButton(
+                onPressed: () {
+                  Hapticos.toque();
+                  alImportar();
+                },
+                child: const Text(
+                  '¿Ya tienes clientes y bolos en Excel? Impórtalos',
+                ),
               ),
             ),
         ],

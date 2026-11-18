@@ -138,8 +138,11 @@ ContentAlign _alineacion(PasoTour paso, double altoPantalla) {
 /// pide el usuario con el botón de ayuda. Y el encargo caduca, para que
 /// nunca aparezca un tour por sorpresa un rato después.
 class TourPorEncargo extends ConsumerStatefulWidget {
-  final Tour tour;
-  final List<PasoTour> Function() pasos;
+  /// Los tours que esta pantalla sabe enseñar, con sus pasos.
+  ///
+  /// Casi siempre es uno, pero el detalle de factura enseña tres distintos
+  /// según lo que haya pedido la guía.
+  final Map<Tour, List<PasoTour> Function()> tours;
 
   /// Mientras la pantalla carga no se enseña nada.
   final bool listo;
@@ -149,10 +152,19 @@ class TourPorEncargo extends ConsumerStatefulWidget {
 
   final Widget child;
 
-  const TourPorEncargo({
+  TourPorEncargo({
     super.key,
-    required this.tour,
-    required this.pasos,
+    required Tour tour,
+    required List<PasoTour> Function() pasos,
+    required this.child,
+    this.listo = true,
+    this.activo = true,
+  }) : tours = {tour: pasos};
+
+  /// Para las pantallas que pueden enseñar más de un tour.
+  const TourPorEncargo.varios({
+    super.key,
+    required this.tours,
     required this.child,
     this.listo = true,
     this.activo = true,
@@ -165,6 +177,7 @@ class TourPorEncargo extends ConsumerStatefulWidget {
 class _TourPorEncargoState extends ConsumerState<TourPorEncargo> {
   bool _lanzando = false;
   bool _encargoVivo = false;
+  Tour? _encargado;
   TutorialNotifier? _tutorial;
 
   @override
@@ -185,11 +198,16 @@ class _TourPorEncargoState extends ConsumerState<TourPorEncargo> {
   @override
   Widget build(BuildContext context) {
     final datos = ref.watch(tutorialProvider).valueOrNull;
-    final encargado = datos?.encargoVigente(widget.tour) ?? false;
-    _encargoVivo = datos?.tourPendiente == widget.tour;
+    final pendiente = datos?.tourPendiente;
+    _encargoVivo = pendiente != null && widget.tours.containsKey(pendiente);
+    final encargado =
+        pendiente != null &&
+        _encargoVivo &&
+        (datos?.encargoVigente(pendiente) ?? false);
 
     if (encargado && widget.listo && widget.activo && !_lanzando) {
       _lanzando = true;
+      _encargado = pendiente;
       WidgetsBinding.instance.addPostFrameCallback((_) => _lanzar());
     }
     return widget.child;
@@ -200,8 +218,12 @@ class _TourPorEncargoState extends ConsumerState<TourPorEncargo> {
     await Future<void>.delayed(const Duration(milliseconds: 400));
     if (!mounted) return;
 
+    final tour = _encargado;
+    final pasos = tour == null ? null : widget.tours[tour];
+    if (tour == null || pasos == null) return;
+
     await ref.read(tutorialProvider.notifier).olvidarEncargo();
     if (!mounted) return;
-    await mostrarTour(context, ref, tour: widget.tour, pasos: widget.pasos());
+    await mostrarTour(context, ref, tour: tour, pasos: pasos());
   }
 }

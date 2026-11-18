@@ -214,8 +214,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             leading: const Icon(Icons.replay),
             title: const Text('Repetir el tutorial'),
             subtitle: const Text(
-              'Vuelven a salir los tours de cada pantalla y los primeros '
-              'pasos de Inicio.',
+              'Vuelve la guía de inicio y los tours de cada pantalla. Te '
+              'llevamos a Inicio para empezar.',
             ),
             onTap: _repetirTutorial,
           ),
@@ -247,8 +247,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     await ref.read(tutorialProvider.notifier).repetirTutorial();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('El tutorial vuelve a empezar')),
+      const SnackBar(content: Text('La guía vuelve a empezar'), persist: false),
     );
+    // La guía vive en Inicio: no tiene sentido dejar al usuario en Ajustes
+    // buscándola.
+    context.go('/');
   }
 
   Widget _buildAppearanceCard() {

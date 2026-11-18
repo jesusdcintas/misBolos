@@ -31,6 +31,7 @@ import '../../core/services/guia_inicio.dart';
 import '../../core/services/google_drive_service.dart';
 import '../../providers/guia_inicio_provider.dart';
 import '../../widgets/invoices/proxima_factura.dart';
+import '../../screens/settings/import_screen.dart';
 import '../../widgets/tutorial/cierre_guia.dart';
 import '../../widgets/tutorial/tarjeta_guia_inicio.dart';
 import '../../providers/settings_provider.dart';
@@ -269,6 +270,9 @@ class _GuiaInicioState extends ConsumerState<_GuiaInicio> {
       alHacerlo: _hacerPaso,
       alSaltar: (paso) => ref.read(tutorialProvider.notifier).saltarPaso(paso),
       alOcultar: () => ref.read(tutorialProvider.notifier).ocultarTarjeta(),
+      alImportar: () => Navigator.of(
+        context,
+      ).push(MaterialPageRoute<void>(builder: (_) => const ImportScreen())),
     );
   }
 

@@ -40,6 +40,7 @@ Future<void> _montar(
             alHacerlo: alHacerlo ?? (_) {},
             alSaltar: alSaltar ?? (_) {},
             alOcultar: alOcultar ?? () {},
+            alImportar: () {},
           ),
         ),
       ),
@@ -98,6 +99,37 @@ void main() {
     expect(find.text('1 de 12'), findsOneWidget);
     expect(find.byIcon(Icons.remove_circle_outline), findsOneWidget);
     expect(find.text(PasoGuia.carpetas.detalle), findsOneWidget);
+  });
+
+  testWidgets('en el paso del cliente se ofrece importar de Excel', (
+    tester,
+  ) async {
+    var importar = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: TarjetaGuiaInicio(
+              pasos: _pasos(hechos: 5),
+              siguiente: PasoGuia.cliente,
+              alHacerlo: (_) {},
+              alSaltar: (_) {},
+              alOcultar: () {},
+              alImportar: () => importar++,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.text('¿Ya tienes clientes y bolos en Excel? Impórtalos'),
+    );
+    await tester.pump();
+
+    expect(importar, 1);
   });
 
   testWidgets('la guía se puede ocultar', (tester) async {

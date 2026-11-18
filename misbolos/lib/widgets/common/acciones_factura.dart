@@ -14,6 +14,7 @@ import '../../providers/gig_provider.dart';
 import '../../providers/invoice_email_log_provider.dart';
 import '../../providers/invoice_provider.dart';
 import '../../providers/settings_provider.dart';
+import '../../providers/tutorial_provider.dart';
 import '../../services/notification_service.dart';
 import '../../services/pdf_service.dart';
 import 'menu_acciones.dart';
@@ -43,6 +44,8 @@ Future<void> compartirPdfDeFactura(
     await SharePlus.instance.share(
       ShareParams(files: [XFile(fichero.path)], sharePositionOrigin: origen),
     );
+    // Paso de la guía: compartir cuenta, se haga desde donde se haga.
+    await ref.read(tutorialProvider.notifier).marcarFacturaCompartida();
   } catch (e) {
     messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
   }
@@ -156,6 +159,7 @@ Future<void> enviarFacturaPorEmail(
       );
     }
 
+    await ref.read(tutorialProvider.notifier).marcarFacturaCompartida();
     messenger.showSnackBar(
       SnackBar(content: Text('Factura enviada a ${client.email}')),
     );

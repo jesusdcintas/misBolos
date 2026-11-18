@@ -21,10 +21,45 @@ import '../../services/notification_service.dart';
 import '../../services/google_auth_service.dart';
 import '../../services/google_calendar_service.dart';
 import '../../widgets/common/acciones_factura.dart';
+import '../../core/services/estado_tutorial.dart';
+import '../../widgets/tutorial/lanzador_tour.dart';
+import '../../widgets/tutorial/tour.dart';
 import '../../widgets/common/serpentina_celebration.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../core/theme/app_theme_colors.dart';
 import '../../core/services/hapticos.dart';
+
+final _claveGuiaCompartir = GlobalKey();
+final _claveGuiaFacturada = GlobalKey();
+final _claveGuiaCobrada = GlobalKey();
+
+/// Los tours cortos que lanza la guía sobre esta pantalla.
+List<PasoTour> pasosGuiaCompartir() => [
+  PasoTour(
+    clave: _claveGuiaCompartir,
+    texto:
+        'Comparte el PDF por WhatsApp, por AirDrop o como prefieras. '
+        'Justo debajo lo tienes también por correo.',
+  ),
+];
+
+List<PasoTour> pasosGuiaFacturada() => [
+  PasoTour(
+    clave: _claveGuiaFacturada,
+    texto:
+        'Marca la factura como facturada cuando se la hayas mandado al '
+        'cliente. Así sabes lo que te deben.',
+  ),
+];
+
+List<PasoTour> pasosGuiaCobrada() => [
+  PasoTour(
+    clave: _claveGuiaCobrada,
+    texto:
+        'Cuando te paguen, márcala como cobrada. En la lista también '
+        'puedes deslizarla a la derecha.',
+  ),
+];
 
 class InvoiceDetailScreen extends ConsumerStatefulWidget {
   final String invoiceId;
@@ -108,59 +143,71 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
       );
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          tooltip: 'Volver',
-          onPressed: () {
-            if (context.canPop()) {
-              context.pop();
-            } else {
-              context.go('/finanzas');
-            }
-          },
-        ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(currentInvoice.visualNumber),
-            Text(
-              'Factura ${currentIndex + 1} de ${invoices.length}',
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+    // Esta pantalla sabe enseñar tres tours de la guía, según cuál se haya
+    // pedido: compartir, marcar como facturada o marcar como cobrada.
+    return TourPorEncargo.varios(
+      tours: {
+        Tour.facturaCompartir: pasosGuiaCompartir,
+        Tour.facturaEmitir: pasosGuiaFacturada,
+        Tour.facturaCobrar: pasosGuiaCobrada,
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            tooltip: 'Volver',
+            onPressed: () {
+              if (context.canPop()) {
+                context.pop();
+              } else {
+                context.go('/finanzas');
+              }
+            },
+          ),
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(currentInvoice.visualNumber),
+              Text(
+                'Factura ${currentIndex + 1} de ${invoices.length}',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            IconButton(
+              tooltip: 'Factura anterior',
+              onPressed: currentIndex == 0 ? null : goPrevious,
+              icon: const Icon(Icons.arrow_back_ios_new),
+            ),
+            IconButton(
+              tooltip: 'Factura siguiente',
+              onPressed: currentIndex == invoices.length - 1 ? null : goNext,
+              icon: const Icon(Icons.arrow_forward_ios),
             ),
           ],
         ),
-        actions: [
-          IconButton(
-            tooltip: 'Factura anterior',
-            onPressed: currentIndex == 0 ? null : goPrevious,
-            icon: const Icon(Icons.arrow_back_ios_new),
-          ),
-          IconButton(
-            tooltip: 'Factura siguiente',
-            onPressed: currentIndex == invoices.length - 1 ? null : goNext,
-            icon: const Icon(Icons.arrow_forward_ios),
-          ),
-        ],
-      ),
-      body: PageView.builder(
-        controller: _pageController,
-        itemCount: invoices.length,
-        physics: const BouncingScrollPhysics(),
-        onPageChanged: (index) {
-          setState(() => _currentIndex = index);
-          final targetId = invoices[index].id;
-          if (targetId != currentInvoiceId) {
-            context.replace('/invoice/$targetId');
-          }
-        },
-        itemBuilder: (context, index) {
-          return _InvoiceDetailContent(
-            invoiceId: invoices[index].id,
-            invoice: invoices[index],
-          );
-        },
+        body: PageView.builder(
+          controller: _pageController,
+          itemCount: invoices.length,
+          physics: const BouncingScrollPhysics(),
+          onPageChanged: (index) {
+            setState(() => _currentIndex = index);
+            final targetId = invoices[index].id;
+            if (targetId != currentInvoiceId) {
+              context.replace('/invoice/$targetId');
+            }
+          },
+          itemBuilder: (context, index) {
+            return _InvoiceDetailContent(
+              invoiceId: invoices[index].id,
+              invoice: invoices[index],
+            );
+          },
+        ),
       ),
     );
   }
@@ -669,6 +716,7 @@ class _InvoiceDetailContent extends ConsumerWidget {
         // Cambiar estado
         if (invoice.status == InvoiceStatus.borrador)
           SizedBox(
+            key: _claveGuiaFacturada,
             width: double.infinity,
             child: ElevatedButton.icon(
               onPressed: () => _markAs(context, ref, InvoiceStatus.enviada),
@@ -681,6 +729,7 @@ class _InvoiceDetailContent extends ConsumerWidget {
           ),
         if (invoice.status == InvoiceStatus.enviada)
           SizedBox(
+            key: _claveGuiaCobrada,
             width: double.infinity,
             child: ElevatedButton.icon(
               onPressed: () => _markAs(context, ref, InvoiceStatus.pagada),
@@ -737,6 +786,7 @@ class _InvoiceDetailContent extends ConsumerWidget {
 
         // Compartir
         SizedBox(
+          key: _claveGuiaCompartir,
           width: double.infinity,
           child: ElevatedButton.icon(
             onPressed: () => _share(context, ref),
