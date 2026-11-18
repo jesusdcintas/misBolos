@@ -115,6 +115,11 @@ class SenalesGuia {
   /// Pasos que el usuario ha decidido saltarse.
   final Set<PasoGuia> saltados;
 
+  /// En repaso los pasos no se dan por hechos mirando los datos, sino solo
+  /// según se completan: cada paso de [pasosRepaso] cuenta como hecho.
+  final bool modoRepaso;
+  final Set<PasoGuia> pasosRepaso;
+
   const SenalesGuia({
     this.googleConectado = false,
     this.carpetasCreadas = false,
@@ -130,6 +135,8 @@ class SenalesGuia {
     this.hayFacturaCobrada = false,
     this.hayGastoOInversion = false,
     this.saltados = const {},
+    this.modoRepaso = false,
+    this.pasosRepaso = const {},
   });
 }
 
@@ -156,20 +163,25 @@ class EstadoPasoGuia {
 
 /// Los doce pasos con lo que se sabe de cada uno.
 List<EstadoPasoGuia> pasosDeLaGuia(SenalesGuia senales) {
-  bool hecho(PasoGuia paso) => switch (paso) {
-    PasoGuia.google => senales.googleConectado,
-    PasoGuia.carpetas => senales.carpetasCreadas,
-    PasoGuia.sincronizacion => senales.primeraSincronizacionCompleta,
-    PasoGuia.datosFacturacion => senales.datosFacturacionCompletos,
-    PasoGuia.numeracion => senales.numeracionRevisada,
-    PasoGuia.cliente => senales.hayClientes,
-    PasoGuia.bolo => senales.hayBolos,
-    PasoGuia.factura => senales.hayFacturas,
-    PasoGuia.compartir => senales.facturaCompartida,
-    PasoGuia.facturada => senales.hayFacturaEmitida,
-    PasoGuia.cobrada => senales.hayFacturaCobrada,
-    PasoGuia.gasto => senales.hayGastoOInversion,
-  };
+  // En repaso solo cuenta lo que se ha ido completando: los datos que ya
+  // había no dan por hecho ningún paso.
+  bool hecho(PasoGuia paso) {
+    if (senales.modoRepaso) return senales.pasosRepaso.contains(paso);
+    return switch (paso) {
+      PasoGuia.google => senales.googleConectado,
+      PasoGuia.carpetas => senales.carpetasCreadas,
+      PasoGuia.sincronizacion => senales.primeraSincronizacionCompleta,
+      PasoGuia.datosFacturacion => senales.datosFacturacionCompletos,
+      PasoGuia.numeracion => senales.numeracionRevisada,
+      PasoGuia.cliente => senales.hayClientes,
+      PasoGuia.bolo => senales.hayBolos,
+      PasoGuia.factura => senales.hayFacturas,
+      PasoGuia.compartir => senales.facturaCompartida,
+      PasoGuia.facturada => senales.hayFacturaEmitida,
+      PasoGuia.cobrada => senales.hayFacturaCobrada,
+      PasoGuia.gasto => senales.hayGastoOInversion,
+    };
+  }
 
   return [
     for (final paso in PasoGuia.values)

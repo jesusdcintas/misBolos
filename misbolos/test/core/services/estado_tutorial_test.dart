@@ -103,6 +103,88 @@ void main() {
     });
   });
 
+  group('el repaso de la guía', () {
+    test('repetir entra en repaso con todos los pasos pendientes', () async {
+      final estado = await _estado();
+      await estado.aplicarDecision(DecisionTutorial.usuarioExistente);
+
+      await estado.repetirTutorial();
+
+      final datos = estado.datos;
+      expect(datos.modoRepaso, isTrue);
+      expect(datos.pasosRepaso, isEmpty);
+      expect(datos.tarjetaVisible, isTrue);
+    });
+
+    test('cada paso se da por hecho al marcarlo, sin tocar los demás', () async {
+      final estado = await _estado();
+      await estado.repetirTutorial();
+
+      await estado.marcarPasoRepaso(PasoGuia.cliente);
+
+      expect(estado.datos.pasosRepaso, {PasoGuia.cliente});
+    });
+
+    test('fuera de repaso, marcar un paso no hace nada', () async {
+      final estado = await _estado();
+      // Sin repetir: no hay repaso en marcha.
+      await estado.marcarPasoRepaso(PasoGuia.cliente);
+
+      expect(estado.datos.modoRepaso, isFalse);
+      expect(estado.datos.pasosRepaso, isEmpty);
+    });
+
+    test('la numeración y compartir cuentan como paso en repaso', () async {
+      final estado = await _estado();
+      await estado.repetirTutorial();
+
+      await estado.marcarNumeracionRevisada();
+      await estado.marcarFacturaCompartida();
+
+      expect(
+        estado.datos.pasosRepaso,
+        containsAll(<PasoGuia>[PasoGuia.numeracion, PasoGuia.compartir]),
+      );
+    });
+
+    test('ocultar la guía cierra el repaso', () async {
+      final estado = await _estado();
+      await estado.repetirTutorial();
+      await estado.marcarPasoRepaso(PasoGuia.google);
+
+      await estado.ocultarTarjeta();
+
+      expect(estado.datos.modoRepaso, isFalse);
+    });
+
+    test('completar los doce no apaga el repaso (lo hace ocultar)', () async {
+      final estado = await _estado();
+      await estado.repetirTutorial();
+
+      for (final paso in PasoGuia.values) {
+        await estado.marcarPasoRepaso(paso);
+      }
+
+      // Sigue en repaso para que ningún paso vuelva a quedar pendiente por
+      // mirar los datos; la guía ya enseña su cierre con los doce hechos.
+      expect(estado.datos.modoRepaso, isTrue);
+      expect(estado.datos.pasosRepaso.length, PasoGuia.values.length);
+    });
+
+    test('limpiarTodo borra también el estado del repaso', () async {
+      final estado = await _estado();
+      await estado.repetirTutorial();
+      await estado.marcarPasoRepaso(PasoGuia.google);
+
+      await EstadoTutorial.limpiarTodo();
+
+      final datos = estado.datos;
+      expect(datos.modoRepaso, isFalse);
+      expect(datos.pasosRepaso, isEmpty);
+      expect(datos.decidido, isFalse);
+    });
+  });
+
   group('el encargo de tour', () {
     test('vale para la pantalla a la que se manda al usuario', () async {
       final estado = await _estado();
@@ -125,12 +207,21 @@ void main() {
 
     test('olvidarlo lo deja sin efecto al momento', () async {
       final estado = await _estado();
-      await estado.encargarTour(Tour.perfil);
+      await estado.encargarTour(Tour.perfil, paso: PasoGuia.google);
 
       await estado.olvidarEncargo();
 
       expect(estado.datos.tourPendiente, isNull);
+      expect(estado.datos.pasoEncargado, isNull);
       expect(estado.datos.encargoVigente(Tour.perfil), isFalse);
+    });
+
+    test('recuerda qué paso lo pidió, para el repaso', () async {
+      final estado = await _estado();
+      // Varios pasos comparten el tour de Perfil: hay que saber cuál fue.
+      await estado.encargarTour(Tour.perfil, paso: PasoGuia.datosFacturacion);
+
+      expect(estado.datos.pasoEncargado, PasoGuia.datosFacturacion);
     });
 
     test('sin encargo, ningún tour salta solo', () async {

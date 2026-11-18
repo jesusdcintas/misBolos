@@ -58,12 +58,16 @@ class TutorialNotifier extends AsyncNotifier<DatosTutorial> {
       _conEstado((estado) => estado.marcarFacturaCompartida());
 
   /// Encarga el tour de la pantalla a la que se manda al usuario.
-  Future<void> encargarTour(Tour tour) =>
-      _conEstado((estado) => estado.encargarTour(tour));
+  Future<void> encargarTour(Tour tour, {PasoGuia? paso}) =>
+      _conEstado((estado) => estado.encargarTour(tour, paso: paso));
 
   /// Olvida el encargo, se haya usado o no.
   Future<void> olvidarEncargo() =>
       _conEstado((estado) => estado.olvidarEncargo());
+
+  /// Da por hecho un paso durante el repaso de la guía.
+  Future<void> marcarPasoRepaso(PasoGuia paso) =>
+      _conEstado((estado) => estado.marcarPasoRepaso(paso));
 }
 
 /// Si quien abre la app ya la usaba, con los datos que hay ahora mismo.

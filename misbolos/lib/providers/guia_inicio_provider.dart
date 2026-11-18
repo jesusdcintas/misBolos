@@ -42,6 +42,8 @@ final guiaInicioProvider = Provider<List<EstadoPasoGuia>>((ref) {
           (ref.watch(expensesProvider).valueOrNull?.isNotEmpty ?? false) ||
           (ref.watch(assetsProvider).valueOrNull?.isNotEmpty ?? false),
       saltados: tutorial?.pasosSaltados ?? const {},
+      modoRepaso: tutorial?.modoRepaso ?? false,
+      pasosRepaso: tutorial?.pasosRepaso ?? const {},
     ),
   );
 });

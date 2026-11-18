@@ -54,6 +54,7 @@ Future<bool> mostrarTour(
   required Tour tour,
   required List<PasoTour> pasos,
   bool guardarVisto = true,
+  PasoGuia? pasoRepaso,
 }) async {
   if (_hayTourAbierto) return false;
 
@@ -84,6 +85,10 @@ Future<bool> mostrarTour(
     tutorial.finish();
     if (guardarVisto) {
       unawaited(ref.read(tutorialProvider.notifier).marcarVisto(tour));
+    }
+    // En repaso, terminar el tour da por hecho su paso de la guía.
+    if (pasoRepaso != null) {
+      unawaited(ref.read(tutorialProvider.notifier).marcarPasoRepaso(pasoRepaso));
     }
   }
 
@@ -206,6 +211,7 @@ class _TourPorEncargoState extends ConsumerState<TourPorEncargo> {
   bool _lanzando = false;
   bool _encargoVivo = false;
   Tour? _encargado;
+  PasoGuia? _pasoRepaso;
   TutorialNotifier? _tutorial;
 
   @override
@@ -236,6 +242,8 @@ class _TourPorEncargoState extends ConsumerState<TourPorEncargo> {
     if (encargado && widget.listo && widget.activo && !_lanzando) {
       _lanzando = true;
       _encargado = pendiente;
+      // En repaso, el paso que pidió este tour se da por hecho al terminarlo.
+      _pasoRepaso = (datos?.modoRepaso ?? false) ? datos?.pasoEncargado : null;
       WidgetsBinding.instance.addPostFrameCallback((_) => _lanzar());
     }
     return widget.child;
@@ -250,8 +258,20 @@ class _TourPorEncargoState extends ConsumerState<TourPorEncargo> {
     final pasos = tour == null ? null : widget.tours[tour];
     if (tour == null || pasos == null) return;
 
+    final pasoRepaso = _pasoRepaso;
     await ref.read(tutorialProvider.notifier).olvidarEncargo();
     if (!mounted) return;
-    await mostrarTour(context, ref, tour: tour, pasos: pasos());
+    final mostrado = await mostrarTour(
+      context,
+      ref,
+      tour: tour,
+      pasos: pasos(),
+      pasoRepaso: pasoRepaso,
+    );
+    // Si el tour no llegó a verse (el elemento no estaba), el paso se da por
+    // hecho igual: el usuario ya está en su pantalla.
+    if (!mostrado && pasoRepaso != null) {
+      await ref.read(tutorialProvider.notifier).marcarPasoRepaso(pasoRepaso);
+    }
   }
 }

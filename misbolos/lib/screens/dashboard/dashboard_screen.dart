@@ -348,7 +348,9 @@ class _GuiaInicioState extends ConsumerState<_GuiaInicio> {
       if (!sigue || !mounted) return;
     }
 
-    await ref.read(tutorialProvider.notifier).encargarTour(destino.tour);
+    await ref
+        .read(tutorialProvider.notifier)
+        .encargarTour(destino.tour, paso: paso);
     if (!mounted) return;
 
     if (destino.aviso != null) _avisar(destino.aviso!);

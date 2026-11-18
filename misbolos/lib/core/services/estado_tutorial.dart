@@ -67,6 +67,17 @@ class DatosTutorial {
   final Tour? tourPendiente;
   final DateTime? tourPendienteDesde;
 
+  /// El paso de la guía que originó el encargo, para saber cuál dar por hecho
+  /// cuando acabe su tour (varios pasos comparten el mismo tour de Perfil).
+  final PasoGuia? pasoEncargado;
+
+  /// La guía se está repasando: los pasos no se dan por hechos mirando los
+  /// datos, sino solo según se van completando sus tours o acciones.
+  final bool modoRepaso;
+
+  /// Pasos completados durante el repaso.
+  final Set<PasoGuia> pasosRepaso;
+
   const DatosTutorial({
     required this.decidido,
     required this.vistos,
@@ -76,6 +87,9 @@ class DatosTutorial {
     this.facturaCompartida = false,
     this.tourPendiente,
     this.tourPendienteDesde,
+    this.pasoEncargado,
+    this.modoRepaso = false,
+    this.pasosRepaso = const {},
   });
 
   /// Cuánto aguanta un encargo de tour sin usarse.
@@ -110,11 +124,16 @@ class EstadoTutorial {
   static const claveFacturaCompartida = 'tutorial_v1_factura_compartida';
   static const claveTourPendiente = 'tutorial_v1_tour_pendiente';
   static const claveTourPendienteDesde = 'tutorial_v1_tour_pendiente_desde';
+  static const clavePasoEncargado = 'tutorial_v1_paso_encargado';
+  static const claveModoRepaso = 'tutorial_v1_modo_repaso';
 
   static String claveVisto(Tour tour) => 'tutorial_v1_visto_${tour.name}';
 
   static String claveSaltado(PasoGuia paso) =>
       'tutorial_v1_saltado_${paso.name}';
+
+  static String claveRepaso(PasoGuia paso) =>
+      'tutorial_v1_repaso_${paso.name}';
 
   final SharedPreferences _prefs;
 
@@ -126,6 +145,7 @@ class EstadoTutorial {
   DatosTutorial get datos {
     final nombreTour = _prefs.getString(claveTourPendiente);
     final desde = _prefs.getString(claveTourPendienteDesde);
+    final nombrePaso = _prefs.getString(clavePasoEncargado);
     return DatosTutorial(
       decidido: _prefs.getBool(claveInicializado) ?? false,
       vistos: {
@@ -143,6 +163,14 @@ class EstadoTutorial {
           ? null
           : Tour.values.where((t) => t.name == nombreTour).firstOrNull,
       tourPendienteDesde: desde == null ? null : DateTime.tryParse(desde),
+      pasoEncargado: nombrePaso == null
+          ? null
+          : PasoGuia.values.where((p) => p.name == nombrePaso).firstOrNull,
+      modoRepaso: _prefs.getBool(claveModoRepaso) ?? false,
+      pasosRepaso: {
+        for (final paso in PasoGuia.values)
+          if (_prefs.getBool(claveRepaso(paso)) ?? false) paso,
+      },
     );
   }
 
@@ -154,26 +182,53 @@ class EstadoTutorial {
   /// Apunta que ha contestado a la pregunta del número de factura.
   Future<void> marcarNumeracionRevisada() async {
     await _prefs.setBool(claveNumeracionRevisada, true);
+    await _marcarRepasoSiToca(PasoGuia.numeracion);
   }
 
   /// Apunta que ha compartido o enviado una factura.
   Future<void> marcarFacturaCompartida() async {
     await _prefs.setBool(claveFacturaCompartida, true);
+    await _marcarRepasoSiToca(PasoGuia.compartir);
   }
 
   /// Encarga un tour para la pantalla a la que se va a mandar al usuario.
-  Future<void> encargarTour(Tour tour) async {
+  ///
+  /// [paso] es el paso de la guía que lo pide, para dar por hecho ese mismo
+  /// paso (y no otro que comparta el tour) cuando el tour termine en repaso.
+  Future<void> encargarTour(Tour tour, {PasoGuia? paso}) async {
     await _prefs.setString(claveTourPendiente, tour.name);
     await _prefs.setString(
       claveTourPendienteDesde,
       DateTime.now().toIso8601String(),
     );
+    if (paso == null) {
+      await _prefs.remove(clavePasoEncargado);
+    } else {
+      await _prefs.setString(clavePasoEncargado, paso.name);
+    }
   }
 
   /// Olvida el encargo: ya se ha usado, o el usuario se fue a otra parte.
   Future<void> olvidarEncargo() async {
     await _prefs.remove(claveTourPendiente);
     await _prefs.remove(claveTourPendienteDesde);
+    await _prefs.remove(clavePasoEncargado);
+  }
+
+  /// Da por hecho un paso durante el repaso.
+  ///
+  /// Al completarse los doce, la guía enseña su tarjeta de cierre; el repaso
+  /// no se apaga aquí para que ningún paso vuelva a quedar pendiente por mirar
+  /// los datos. Se apaga al ocultar la guía.
+  Future<void> marcarPasoRepaso(PasoGuia paso) async {
+    if (!(_prefs.getBool(claveModoRepaso) ?? false)) return;
+    await _prefs.setBool(claveRepaso(paso), true);
+  }
+
+  Future<void> _marcarRepasoSiToca(PasoGuia paso) async {
+    if (_prefs.getBool(claveModoRepaso) ?? false) {
+      await marcarPasoRepaso(paso);
+    }
   }
 
   /// Apunta que [tour] ya se ha visto, para que no vuelva a saltar solo.
@@ -197,17 +252,23 @@ class EstadoTutorial {
   }
 
   /// Vuelve a dejar todos los tours y la tarjeta como el primer día.
+  ///
+  /// Entra en modo repaso: todos los pasos salen pendientes y se irán dando
+  /// por hechos según se completen sus tours o acciones, sin mirar los datos
+  /// que ya existan.
   Future<void> repetirTutorial() async {
     for (final tour in Tour.values) {
       await _prefs.remove(claveVisto(tour));
     }
     for (final paso in PasoGuia.values) {
       await _prefs.remove(claveSaltado(paso));
+      await _prefs.remove(claveRepaso(paso));
     }
     await _prefs.remove(claveTarjetaOculta);
     await _prefs.remove(claveNumeracionRevisada);
     await _prefs.remove(claveFacturaCompartida);
     await olvidarEncargo();
+    await _prefs.setBool(claveModoRepaso, true);
     // Decidido se queda: ya se sabe de qué pie calza esta instalación y, si
     // se borrara, la decisión volvería a marcarlo todo como visto.
     await _prefs.setBool(claveInicializado, true);
@@ -216,5 +277,23 @@ class EstadoTutorial {
   /// Quita la tarjeta de primeros pasos para quien no la quiera.
   Future<void> ocultarTarjeta() async {
     await _prefs.setBool(claveTarjetaOculta, true);
+    // Ocultar la guía cierra el repaso: no tiene sentido seguir contándolo.
+    await _prefs.setBool(claveModoRepaso, false);
+  }
+
+  /// Borra todo el estado del tutorial de este dispositivo.
+  ///
+  /// Se guarda en SharedPreferences, que es del dispositivo y no de la cuenta.
+  /// Al cambiar de cuenta hay que borrarlo para que la nueva empiece de cero y
+  /// no herede lo que había hecho la anterior.
+  static Future<void> limpiarTodo() async {
+    final prefs = await SharedPreferences.getInstance();
+    final claves = prefs
+        .getKeys()
+        .where((k) => k.startsWith('tutorial_v1_'))
+        .toList();
+    for (final clave in claves) {
+      await prefs.remove(clave);
+    }
   }
 }

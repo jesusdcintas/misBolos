@@ -99,6 +99,33 @@ void main() {
       expect(_estadoDe(terminada, PasoGuia.sincronizacion).enCurso, isFalse);
       expect(_estadoDe(terminada, PasoGuia.sincronizacion).hecho, isTrue);
     });
+
+    test('en repaso los datos no dan nada por hecho', () {
+      // Lo tiene todo hecho por datos, pero repasando salen pendientes: solo
+      // cuenta lo que se vaya completando.
+      final pasos = pasosDeLaGuia(
+        SenalesGuia(
+          googleConectado: true,
+          carpetasCreadas: true,
+          primeraSincronizacionCompleta: true,
+          datosFacturacionCompletos: true,
+          numeracionRevisada: true,
+          hayClientes: true,
+          hayBolos: true,
+          hayFacturas: true,
+          facturaCompartida: true,
+          hayFacturaEmitida: true,
+          hayFacturaCobrada: true,
+          hayGastoOInversion: true,
+          modoRepaso: true,
+          pasosRepaso: const {PasoGuia.google},
+        ),
+      );
+
+      expect(pasosCerrados(pasos), 1);
+      expect(_estadoDe(pasos, PasoGuia.google).hecho, isTrue);
+      expect(_estadoDe(pasos, PasoGuia.cliente).hecho, isFalse);
+    });
   });
 
   group('el siguiente paso', () {
