@@ -27,12 +27,14 @@ import '../../widgets/common/menu_acciones.dart';
 import '../../widgets/tutorial/boton_ayuda_tour.dart';
 import '../../widgets/tutorial/lanzador_tour.dart';
 import '../../widgets/tutorial/tour.dart';
-import '../../core/utils/primeros_pasos.dart';
-import '../../providers/invoice_provider.dart';
+import '../../core/services/guia_inicio.dart';
+import '../../core/services/google_drive_service.dart';
+import '../../providers/guia_inicio_provider.dart';
+import '../../widgets/invoices/proxima_factura.dart';
+import '../../widgets/tutorial/cierre_guia.dart';
+import '../../widgets/tutorial/tarjeta_guia_inicio.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/tutorial_provider.dart';
-import '../../services/google_auth_service.dart';
-import '../../widgets/dashboard/tarjeta_primeros_pasos.dart';
 
 /// Ancho a partir del cual las secciones se reparten en dos columnas. Es el
 /// mismo corte que usa la pantalla de Ajustes.
@@ -128,7 +130,7 @@ class DashboardScreen extends ConsumerWidget {
             return ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                const _PrimerosPasos(),
+                const _GuiaInicio(),
                 KeyedSubtree(
                   key: _claveTourPeriodo,
                   child: const PeriodSelector(),
@@ -222,39 +224,191 @@ class DashboardScreen extends ConsumerWidget {
   }
 }
 
-/// La tarjeta de primeros pasos con los datos que ya hay en la app.
+/// La guía de inicio, enganchada a los datos de verdad.
 ///
-/// Solo sale mientras quede algo por hacer, y nunca a quien ya usaba la app:
-/// de eso se encarga el estado del tutorial.
-class _PrimerosPasos extends ConsumerWidget {
-  const _PrimerosPasos();
+/// Lleva al usuario nuevo por el flujo real, en orden. Quien ya usaba la app
+/// no la ve nunca: de eso se encarga el estado del tutorial.
+class _GuiaInicio extends ConsumerStatefulWidget {
+  const _GuiaInicio();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final datos = ref.watch(tutorialProvider).valueOrNull;
-    if (datos == null || !datos.tarjetaVisible) return const SizedBox.shrink();
+  ConsumerState<_GuiaInicio> createState() => _GuiaInicioState();
+}
 
-    final pasos = primerosPasos(
-      settings: ref.watch(settingsProvider).valueOrNull,
-      googleConectado: ref.watch(googleAuthProvider).isSignedIn,
-      hayClientes: ref.watch(clientsProvider).valueOrNull?.isNotEmpty ?? false,
-      hayBolos: ref.watch(gigsProvider).valueOrNull?.isNotEmpty ?? false,
-      hayFacturas: ref.watch(invoicesProvider).valueOrNull?.isNotEmpty ?? false,
-    );
+class _GuiaInicioState extends ConsumerState<_GuiaInicio> {
+  @override
+  Widget build(BuildContext context) {
+    final visible = ref.watch(guiaVisibleProvider);
+    final pasos = ref.watch(guiaInicioProvider);
 
-    return TarjetaPrimerosPasos(
-      pasos: pasos,
-      alTocarPaso: (paso) {
-        final ruta = paso.ruta;
-        // Las pantallas de crear se abren encima; las pestañas se cambian.
-        if (ruta.endsWith('/new')) {
-          context.push(ruta);
-        } else {
-          context.go(ruta);
+    // Avisar cuando un paso se completa, con el siguiente a mano.
+    ref.listen<List<EstadoPasoGuia>>(guiaInicioProvider, (antes, ahora) {
+      if (antes == null || !visible) return;
+      for (final estado in ahora) {
+        final anterior = antes.firstWhere(
+          (p) => p.paso == estado.paso,
+          orElse: () => estado,
+        );
+        if (estado.hecho && !anterior.hecho) {
+          _avisarPasoCompletado(estado.paso, ahora);
+          break;
         }
-      },
+      }
+    });
+
+    if (!visible) return const SizedBox.shrink();
+    if (guiaTerminada(pasos)) {
+      return CierreGuia(
+        alOcultar: () => ref.read(tutorialProvider.notifier).ocultarTarjeta(),
+      );
+    }
+
+    return TarjetaGuiaInicio(
+      pasos: pasos,
+      siguiente: siguientePaso(pasos),
+      alHacerlo: _hacerPaso,
+      alSaltar: (paso) => ref.read(tutorialProvider.notifier).saltarPaso(paso),
       alOcultar: () => ref.read(tutorialProvider.notifier).ocultarTarjeta(),
     );
+  }
+
+  void _avisarPasoCompletado(PasoGuia hecho, List<EstadoPasoGuia> pasos) {
+    final siguiente = siguientePaso(pasos);
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        persist: false,
+        duration: const Duration(seconds: 8),
+        content: Text(
+          siguiente == null
+              ? 'Paso completado · Ya está todo'
+              : 'Paso completado · Siguiente: ${siguiente.titulo}',
+        ),
+        action: hecho == PasoGuia.carpetas
+            ? SnackBarAction(label: 'Abrir Drive', onPressed: _abrirDrive)
+            : siguiente == null
+            ? null
+            : SnackBarAction(
+                label: 'Continuar',
+                onPressed: () => _hacerPaso(siguiente),
+              ),
+      ),
+    );
+  }
+
+  Future<void> _abrirDrive() async {
+    final settings = await ref.read(settingsProvider.future);
+    final raiz = settings.driveRootFolderId?.trim();
+    if (!mounted) return;
+    if (raiz == null || raiz.isEmpty) {
+      _avisar('Todavía no has elegido carpeta de trabajo en Drive.');
+      return;
+    }
+    try {
+      await GoogleDriveService.instance.openFolder(raiz);
+    } catch (e) {
+      if (mounted) _avisar('No se pudo abrir Drive: $e');
+    }
+  }
+
+  void _avisar(String mensaje, {SnackBarAction? accion}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(mensaje),
+        action: accion,
+        persist: false,
+        duration: Duration(seconds: accion == null ? 5 : 8),
+      ),
+    );
+  }
+
+  Future<void> _hacerPaso(PasoGuia paso) async {
+    // El del número de factura se resuelve aquí mismo, con una pregunta.
+    if (paso == PasoGuia.numeracion) {
+      await _preguntarPorLaNumeracion();
+      return;
+    }
+
+    final destino = destinoDelPaso(
+      paso,
+      boloSinFacturaId: ref.read(boloSinFacturaProvider),
+      facturaRecienteId: ref.read(facturaRecienteProvider),
+    );
+
+    // Crear una factura no es un ensayo: conviene decirlo antes.
+    if (paso == PasoGuia.factura && destino.aviso == null) {
+      final sigue = await _confirmarFacturaReal();
+      if (!sigue || !mounted) return;
+    }
+
+    await ref.read(tutorialProvider.notifier).encargarTour(destino.tour);
+    if (!mounted) return;
+
+    if (destino.aviso != null) _avisar(destino.aviso!);
+    // Las pestañas se cambian; lo demás se abre encima.
+    if (destino.ruta == '/calendar' || destino.ruta == '/finanzas') {
+      context.go(destino.ruta);
+    } else {
+      context.push(destino.ruta);
+    }
+  }
+
+  Future<bool> _confirmarFacturaReal() async {
+    final seguir = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Vas a crear una factura de verdad'),
+        content: const Text(
+          'Esta factura es real y tendrá número. Si solo quieres probar, al '
+          'final de la guía te enseñamos a borrarla para que la numeración '
+          'vuelva atrás.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Ahora no'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Entendido'),
+          ),
+        ],
+      ),
+    );
+    return seguir == true;
+  }
+
+  Future<void> _preguntarPorLaNumeracion() async {
+    final yaFacturaba = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Tu próxima factura'),
+        content: const Text(
+          '¿Ya has emitido facturas este año fuera de MisBolos?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('No, empiezo de cero'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Sí, ya he facturado'),
+          ),
+        ],
+      ),
+    );
+    if (yaFacturaba == null || !mounted) return;
+
+    await ref.read(tutorialProvider.notifier).marcarNumeracionRevisada();
+    if (!mounted) return;
+    if (yaFacturaba) {
+      await mostrarDialogoProximaFactura(context, ref, DateTime.now().year);
+    } else {
+      _avisar('Perfecto: tu primera factura será la número 1.');
+    }
   }
 }
 

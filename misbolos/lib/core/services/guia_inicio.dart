@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import '../../models/app_settings.dart';
+
 /// Cada tramo del tutorial: los de pantalla completa y los cortos que lanza
 /// la guía para señalar un solo elemento.
 enum Tour {
@@ -72,6 +74,17 @@ extension PasoGuiaTexto on PasoGuia {
     PasoGuia.cobrada => 'Y así sabes qué has cobrado.',
     PasoGuia.gasto => 'Lo que te gastas también cuenta para tus impuestos.',
   };
+}
+
+/// Si los datos de facturación están lo bastante completos para emitir.
+///
+/// Nombre, NIF y dirección son los que el PDF necesita sí o sí; el logo es
+/// un adorno.
+bool datosFiscalesCompletos(AppSettings? settings) {
+  if (settings == null) return false;
+  return settings.emisorNombre.trim().isNotEmpty &&
+      settings.emisorNIF.trim().isNotEmpty &&
+      settings.emisorDireccion.trim().isNotEmpty;
 }
 
 /// Lo que la app sabe ahora mismo, para decidir qué pasos están hechos.

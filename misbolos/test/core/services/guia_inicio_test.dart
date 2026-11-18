@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:misbolos/core/services/guia_inicio.dart';
+import 'package:misbolos/models/app_settings.dart';
 
 /// Señales de alguien que acaba de instalar la app.
 const _recienLlegado = SenalesGuia();
@@ -148,6 +149,42 @@ void main() {
       );
 
       expect(guiaTerminada(pasos), isTrue);
+    });
+  });
+
+  group('los datos de facturación', () {
+    AppSettings ajustes({
+      String nombre = '',
+      String nif = '',
+      String direccion = '',
+    }) => AppSettings(
+      emisorNombre: nombre,
+      emisorNIF: nif,
+      emisorDireccion: direccion,
+    );
+
+    test('hacen falta nombre, NIF y dirección; el logo no', () {
+      expect(datosFiscalesCompletos(null), isFalse);
+      expect(datosFiscalesCompletos(ajustes()), isFalse);
+      expect(
+        datosFiscalesCompletos(ajustes(nombre: 'Jesús', nif: '12345678Z')),
+        isFalse,
+      );
+      expect(
+        datosFiscalesCompletos(
+          ajustes(nombre: 'Jesús', nif: '12345678Z', direccion: 'Calle 1'),
+        ),
+        isTrue,
+      );
+    });
+
+    test('los espacios en blanco no cuentan', () {
+      expect(
+        datosFiscalesCompletos(
+          ajustes(nombre: '   ', nif: '12345678Z', direccion: 'Calle 1'),
+        ),
+        isFalse,
+      );
     });
   });
 

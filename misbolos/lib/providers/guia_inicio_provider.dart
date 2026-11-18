@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/services/guia_inicio.dart';
-import '../core/utils/primeros_pasos.dart';
 import '../models/invoice.dart';
 import 'assets_provider.dart';
 import 'client_provider.dart';
