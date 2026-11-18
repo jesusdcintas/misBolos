@@ -14,6 +14,9 @@ import '../../providers/invoice_provider.dart';
 import '../../services/google_auth_service.dart';
 import '../../services/google_calendar_service.dart';
 import '../../widgets/common/acciones_bolo.dart';
+import '../../core/services/estado_tutorial.dart';
+import '../../widgets/tutorial/lanzador_tour.dart';
+import '../../widgets/tutorial/tour.dart';
 import '../../widgets/common/status_badge.dart';
 import '../../widgets/common/facturable_badge.dart';
 import '../../widgets/common/franja_badge.dart';
@@ -53,7 +56,23 @@ class GigDetailScreen extends ConsumerWidget {
 
 class _GigDetailContent extends ConsumerWidget {
   final Gig gig;
-  const _GigDetailContent({required this.gig});
+
+  // Clave del tour por instancia: dos detalles de bolo apilados (push sobre
+  // push) compartían una GlobalKey global y reventaban.
+  final GlobalKey _claveGuiaFacturar = GlobalKey();
+
+  _GigDetailContent({required this.gig});
+
+  /// El tour corto que lanza la guía al abrir el bolo que falta por facturar.
+  List<PasoTour> _pasosGuiaFacturarBolo() => [
+    PasoTour(
+      clave: _claveGuiaFacturar,
+      redondo: false,
+      texto:
+          'Desde aquí sale la factura del bolo, con el cliente y el caché '
+          'ya puestos. Solo hay que revisarla y guardar.',
+    ),
+  ];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -62,97 +81,102 @@ class _GigDetailContent extends ConsumerWidget {
         ? ref.watch(invoiceByIdProvider(gig.invoiceId!))
         : null;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(AppStrings.detalleBolo),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.edit),
-            onPressed: () => context.push('/gig/edit/${gig.id}'),
-          ),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // Fecha
-          Hero(
-            tag: 'gig-${gig.id}',
-            child: Card(
-              margin: EdgeInsets.zero,
-              child: ListTile(
-                leading: Icon(
-                  Icons.calendar_today,
-                  color: context.colors.accentSoft,
+    // La guía manda aquí para que el usuario facture su primer bolo.
+    return TourPorEncargo(
+      tour: Tour.boloAFacturar,
+      pasos: _pasosGuiaFacturarBolo,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text(AppStrings.detalleBolo),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.edit),
+              onPressed: () => context.push('/gig/edit/${gig.id}'),
+            ),
+          ],
+        ),
+        body: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            // Fecha
+            Hero(
+              tag: 'gig-${gig.id}',
+              child: Card(
+                margin: EdgeInsets.zero,
+                child: ListTile(
+                  leading: Icon(
+                    Icons.calendar_today,
+                    color: context.colors.accentSoft,
+                  ),
+                  title: const Text(AppStrings.fecha),
+                  subtitle: Text(DateFormatter.dayOfWeek(gig.fecha)),
                 ),
-                title: const Text(AppStrings.fecha),
-                subtitle: Text(DateFormatter.dayOfWeek(gig.fecha)),
               ),
             ),
-          ),
 
-          // Cliente
-          Card(
-            margin: EdgeInsets.zero,
-            child: clientAsync.when(
-              data: (client) => ListTile(
-                leading: Icon(Icons.person, color: context.colors.accentSoft),
-                title: const Text(AppStrings.cliente),
-                subtitle: Text(client?.displayName ?? 'Desconocido'),
-                onTap: client != null
-                    ? () => context.push('/client/${client.id}')
-                    : null,
-              ),
-              loading: () => const ListTile(title: Text('Cargando...')),
-              error: (_, __) => const ListTile(title: Text('Error')),
-            ),
-          ),
-
-          // Caché
-          if (gig.cachet != null)
+            // Cliente
             Card(
               margin: EdgeInsets.zero,
-              child: ListTile(
-                leading: Icon(Icons.euro, color: context.colors.accentSoft),
-                title: const Text(AppStrings.cachet),
-                subtitle: Text(CurrencyFormatter.format(gig.cachet!)),
+              child: clientAsync.when(
+                data: (client) => ListTile(
+                  leading: Icon(Icons.person, color: context.colors.accentSoft),
+                  title: const Text(AppStrings.cliente),
+                  subtitle: Text(client?.displayName ?? 'Desconocido'),
+                  onTap: client != null
+                      ? () => context.push('/client/${client.id}')
+                      : null,
+                ),
+                loading: () => const ListTile(title: Text('Cargando...')),
+                error: (_, __) => const ListTile(title: Text('Error')),
               ),
             ),
 
-          // Notas
-          if (gig.notas != null && gig.notas!.isNotEmpty)
-            Card(
-              margin: EdgeInsets.zero,
-              child: ListTile(
-                leading: Icon(Icons.notes, color: context.colors.accentSoft),
-                title: const Text(AppStrings.notas),
-                subtitle: Text(gig.notas!),
+            // Caché
+            if (gig.cachet != null)
+              Card(
+                margin: EdgeInsets.zero,
+                child: ListTile(
+                  leading: Icon(Icons.euro, color: context.colors.accentSoft),
+                  title: const Text(AppStrings.cachet),
+                  subtitle: Text(CurrencyFormatter.format(gig.cachet!)),
+                ),
               ),
+
+            // Notas
+            if (gig.notas != null && gig.notas!.isNotEmpty)
+              Card(
+                margin: EdgeInsets.zero,
+                child: ListTile(
+                  leading: Icon(Icons.notes, color: context.colors.accentSoft),
+                  title: const Text(AppStrings.notas),
+                  subtitle: Text(gig.notas!),
+                ),
+              ),
+
+            const SizedBox(height: 16),
+
+            // Badge estado y facturable
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                FacturableBadge(facturable: gig.facturable, large: true),
+                const SizedBox(width: 6),
+                FranjaBadge(franja: gig.franja),
+                const SizedBox(width: 12),
+                StatusBadge(
+                  status: gig.status,
+                  facturable: gig.facturable,
+                  large: true,
+                ),
+              ],
             ),
 
-          const SizedBox(height: 16),
+            const SizedBox(height: 24),
 
-          // Badge estado y facturable
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              FacturableBadge(facturable: gig.facturable, large: true),
-              const SizedBox(width: 6),
-              FranjaBadge(franja: gig.franja),
-              const SizedBox(width: 12),
-              StatusBadge(
-                status: gig.status,
-                facturable: gig.facturable,
-                large: true,
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 24),
-
-          // Acciones según estado
-          ..._buildActions(context, ref, gig, invoiceAsync),
-        ],
+            // Acciones según estado
+            ..._buildActions(context, ref, gig, invoiceAsync),
+          ],
+        ),
       ),
     );
   }
@@ -169,11 +193,14 @@ class _GigDetailContent extends ConsumerWidget {
       switch (gig.status) {
         case GigStatus.confirmado:
           actions.add(
-            _ActionButton(
-              label: AppStrings.generarFactura,
-              icon: Icons.receipt_long,
-              color: context.colors.accentSoft,
-              onPressed: () => _generateInvoice(context, ref, gig),
+            KeyedSubtree(
+              key: _claveGuiaFacturar,
+              child: _ActionButton(
+                label: AppStrings.generarFactura,
+                icon: Icons.receipt_long,
+                color: context.colors.accentSoft,
+                onPressed: () => _generateInvoice(context, ref, gig),
+              ),
             ),
           );
           break;

@@ -8,7 +8,11 @@ import '../../models/expense.dart';
 import '../../providers/assets_provider.dart';
 import '../../providers/expenses_provider.dart';
 import '../../providers/sync_provider.dart';
+import '../../core/services/estado_tutorial.dart';
 import '../../widgets/common/empty_state.dart';
+import '../../widgets/tutorial/lanzador_tour.dart';
+import '../../widgets/tutorial/tour.dart';
+import 'finanzas_screen.dart';
 import '../../core/services/hapticos.dart';
 import '../../core/utils/tirar_para_sincronizar.dart';
 
@@ -26,6 +30,13 @@ final _movimientoSortProvider = StateProvider<_MovimientoSortOption>(
 ///
 /// Los gastos ([Expense]) son el repositorio canónico y editable. Los assets
 /// ([Asset]) son registros legacy que se muestran en modo solo-lectura.
+/// Los pasos del tour de Gastos, para el botón de ayuda de Finanzas.
+///
+/// Las claves viven en la instancia montada (una sola: pestaña de Finanzas),
+/// registrada mientras está en pantalla. Sin GlobalKey global compartida.
+List<PasoTour> pasosTourGastos() =>
+    _GastosInversionesScreenState._pasosActuales();
+
 class GastosInversionesScreen extends ConsumerStatefulWidget {
   const GastosInversionesScreen({super.key});
 
@@ -36,9 +47,29 @@ class GastosInversionesScreen extends ConsumerStatefulWidget {
 
 class _GastosInversionesScreenState
     extends ConsumerState<GastosInversionesScreen> {
+  static _GastosInversionesScreenState? _actual;
+
+  static List<PasoTour> _pasosActuales() {
+    final actual = _actual;
+    if (actual == null) return const [];
+    return pasosDeGastos(
+      anadir: actual._claveTourAnadir,
+      gasto: actual._claveTourGasto,
+    );
+  }
+
+  final GlobalKey _claveTourAnadir = GlobalKey();
+  final GlobalKey _claveTourGasto = GlobalKey();
+
   bool _entered = false;
   ExpensesNotifier? _expensesNotifier;
   AssetsNotifier? _assetsNotifier;
+
+  @override
+  void initState() {
+    super.initState();
+    _actual = this;
+  }
 
   @override
   void didChangeDependencies() {
@@ -55,6 +86,7 @@ class _GastosInversionesScreenState
 
   @override
   void dispose() {
+    if (_actual == this) _actual = null;
     _expensesNotifier?.leaveScreen();
     _assetsNotifier?.leaveScreen();
     super.dispose();
@@ -81,7 +113,7 @@ class _GastosInversionesScreenState
     final assets = assetsAsync.valueOrNull ?? const <Asset>[];
     final isLoading = expensesAsync.isLoading && assetsAsync.isLoading;
 
-    return Scaffold(
+    final pantalla = Scaffold(
       body: Builder(
         builder: (context) {
           if (isLoading) {
@@ -124,7 +156,9 @@ class _GastosInversionesScreenState
                     ),
                   )
                 else
-                  ...filtered.map(_tarjeta),
+                  ...filtered.indexed.map(
+                    (par) => _tarjeta(par.$2, primero: par.$1 == 0),
+                  ),
                 const SizedBox(height: 84),
               ],
             ),
@@ -132,6 +166,7 @@ class _GastosInversionesScreenState
         },
       ),
       floatingActionButton: FloatingActionButton(
+        key: _claveTourAnadir,
         onPressed: () {
           Hapticos.toque();
           context.push('/expense/new');
@@ -139,12 +174,24 @@ class _GastosInversionesScreenState
         child: const Icon(Icons.add),
       ),
     );
+
+    // El tour espera a que la pestaña de Gastos esté a la vista.
+    return TourPorEncargo(
+      tour: Tour.gastos,
+      listo: !isLoading,
+      activo: ref.watch(finanzasTabProvider) == 1,
+      pasos: () =>
+          pasosDeGastos(anadir: _claveTourAnadir, gasto: _claveTourGasto),
+      child: pantalla,
+    );
   }
 
-  Widget _tarjeta(_MovimientoItem item) {
+  Widget _tarjeta(_MovimientoItem item, {bool primero = false}) {
     // Borrar un gasto se hace desde su detalle, con su confirmación y la
-    // pregunta de Drive: aquí deslizar ya no borra nada.
+    // pregunta de Drive: aquí deslizar ya no borra nada. La clave es para
+    // que el tour pueda señalar la primera tarjeta.
     return Padding(
+      key: primero ? _claveTourGasto : null,
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       child: _MovimientoCard(item: item),
     );

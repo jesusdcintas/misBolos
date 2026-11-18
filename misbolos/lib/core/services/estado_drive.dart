@@ -39,4 +39,20 @@ class EstadoDriveStore {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_clave(id), true);
   }
+
+  /// Olvida las carpetas creadas de todas las carpetas de trabajo.
+  ///
+  /// Estas marcas viven en SharedPreferences, que es del dispositivo y no de
+  /// la cuenta: al cambiar de cuenta hay que borrarlas para que la nueva no
+  /// herede el «ya está» de la anterior.
+  static Future<void> limpiarTodo() async {
+    final prefs = await SharedPreferences.getInstance();
+    final claves = prefs
+        .getKeys()
+        .where((k) => k.startsWith('drive_carpetas_creadas_'))
+        .toList();
+    for (final clave in claves) {
+      await prefs.remove(clave);
+    }
+  }
 }

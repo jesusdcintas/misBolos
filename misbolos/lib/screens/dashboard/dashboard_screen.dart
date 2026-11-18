@@ -21,15 +21,34 @@ import '../../widgets/dashboard/period_selector.dart';
 import '../../widgets/dashboard/taxes_period_card.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/utils/tirar_para_sincronizar.dart';
+import '../../core/services/estado_tutorial.dart';
 import '../../widgets/common/acciones_bolo.dart';
 import '../../widgets/common/menu_acciones.dart';
+import '../../widgets/tutorial/boton_ayuda_tour.dart';
+import '../../widgets/tutorial/lanzador_tour.dart';
+import '../../widgets/tutorial/tour.dart';
+import '../../core/services/guia_inicio.dart';
+import '../../core/services/google_drive_service.dart';
+import '../../providers/guia_inicio_provider.dart';
+import '../../widgets/invoices/proxima_factura.dart';
+import '../../screens/settings/import_screen.dart';
+import '../../widgets/tutorial/cierre_guia.dart';
+import '../../widgets/tutorial/tarjeta_guia_inicio.dart';
+import '../../providers/settings_provider.dart';
+import '../../providers/tutorial_provider.dart';
 
 /// Ancho a partir del cual las secciones se reparten en dos columnas. Es el
 /// mismo corte que usa la pantalla de Ajustes.
 const double _anchoDosColumnas = 700;
 
 class DashboardScreen extends ConsumerWidget {
-  const DashboardScreen({super.key});
+  // Claves del tour por instancia, no globales compartidas.
+  final GlobalKey _claveTourPeriodo = GlobalKey();
+  final GlobalKey _claveTourIngresos = GlobalKey();
+  final GlobalKey _claveTourImpuestos = GlobalKey();
+  final GlobalKey _claveTourAnadir = GlobalKey();
+
+  DashboardScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -40,7 +59,7 @@ class DashboardScreen extends ConsumerWidget {
     final pendingAsync = ref.watch(pendingInvoicesProvider);
     final overdueAsync = ref.watch(overdueInvoicesProvider);
 
-    return Scaffold(
+    final pantalla = Scaffold(
       appBar: AppBar(
         title: const Text(AppStrings.dashboard),
         actions: [
@@ -53,6 +72,15 @@ class DashboardScreen extends ConsumerWidget {
             icon: const Icon(Icons.bar_chart),
             tooltip: 'Estadísticas',
             onPressed: () => context.push('/stats'),
+          ),
+          BotonAyudaTour(
+            tour: Tour.inicio,
+            pasos: () => pasosDeInicio(
+              periodo: _claveTourPeriodo,
+              ingresos: _claveTourIngresos,
+              impuestos: _claveTourImpuestos,
+              anadir: _claveTourAnadir,
+            ),
           ),
         ],
       ),
@@ -72,14 +100,19 @@ class DashboardScreen extends ConsumerWidget {
             final ingresos = statsAsync.when(
               // El periodo se cambia con las flechas del selector: deslizar
               // aquí se comía gestos de la lista y confundía más que ayudaba.
-              data: (stats) => IncomePeriodCard(stats: stats, period: period),
+              data: (stats) => KeyedSubtree(
+                key: _claveTourIngresos,
+                child: IncomePeriodCard(stats: stats, period: period),
+              ),
               loading: () => const DashboardSkeleton(),
               error: (e, _) => Text('Error: $e'),
             );
 
             final impuestos = fiscalAsync.when(
-              data: (summary) =>
-                  TaxesPeriodCard(summary: summary, period: period),
+              data: (summary) => KeyedSubtree(
+                key: _claveTourImpuestos,
+                child: TaxesPeriodCard(summary: summary, period: period),
+              ),
               loading: () => const DashboardSkeleton(),
               error: (e, _) => Text('Error: $e'),
             );
@@ -99,7 +132,11 @@ class DashboardScreen extends ConsumerWidget {
             return ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                const PeriodSelector(),
+                const _GuiaInicio(),
+                KeyedSubtree(
+                  key: _claveTourPeriodo,
+                  child: const PeriodSelector(),
+                ),
                 const SizedBox(height: 16),
 
                 // Aviso de impagos: es global, no sigue el periodo.
@@ -147,29 +184,238 @@ class DashboardScreen extends ConsumerWidget {
           },
         ),
       ),
-      floatingActionButton: ExpandableFAB(
+      floatingActionButton: KeyedSubtree(
+        key: _claveTourAnadir,
+        child: ExpandableFAB(
+          actions: [
+            FABAction(
+              icon: Icons.music_note,
+              label: 'Nuevo bolo',
+              color: context.colors.accentSoft,
+              onTap: (ctx) => ctx.push('/gig/new'),
+            ),
+            FABAction(
+              icon: Icons.person_add,
+              label: 'Nuevo cliente',
+              color: context.colors.purple,
+              onTap: (ctx) => ctx.push('/client/new'),
+            ),
+            FABAction(
+              icon: Icons.euro_outlined,
+              label: 'Nuevo gasto o inversión',
+              color: context.colors.warning,
+              onTap: (ctx) => ctx.push('/expense/new'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    // El tour de Inicio salta la primera vez, con los datos ya cargados.
+    return TourPorEncargo(
+      tour: Tour.inicio,
+      listo: statsAsync.hasValue,
+      pasos: () => pasosDeInicio(
+        periodo: _claveTourPeriodo,
+        ingresos: _claveTourIngresos,
+        impuestos: _claveTourImpuestos,
+        anadir: _claveTourAnadir,
+      ),
+      child: pantalla,
+    );
+  }
+}
+
+/// La guía de inicio, enganchada a los datos de verdad.
+///
+/// Lleva al usuario nuevo por el flujo real, en orden. Quien ya usaba la app
+/// no la ve nunca: de eso se encarga el estado del tutorial.
+class _GuiaInicio extends ConsumerStatefulWidget {
+  const _GuiaInicio();
+
+  @override
+  ConsumerState<_GuiaInicio> createState() => _GuiaInicioState();
+}
+
+class _GuiaInicioState extends ConsumerState<_GuiaInicio> {
+  @override
+  Widget build(BuildContext context) {
+    final visible = ref.watch(guiaVisibleProvider);
+    final pasos = ref.watch(guiaInicioProvider);
+
+    // Avisar cuando un paso se completa, con el siguiente a mano.
+    ref.listen<List<EstadoPasoGuia>>(guiaInicioProvider, (antes, ahora) {
+      if (antes == null || !visible) return;
+      for (final estado in ahora) {
+        final anterior = antes.firstWhere(
+          (p) => p.paso == estado.paso,
+          orElse: () => estado,
+        );
+        if (estado.hecho && !anterior.hecho) {
+          _avisarPasoCompletado(estado.paso, ahora);
+          break;
+        }
+      }
+    });
+
+    if (!visible) return const SizedBox.shrink();
+    if (guiaTerminada(pasos)) {
+      return CierreGuia(
+        alOcultar: () => ref.read(tutorialProvider.notifier).ocultarTarjeta(),
+      );
+    }
+
+    return TarjetaGuiaInicio(
+      pasos: pasos,
+      siguiente: siguientePaso(pasos),
+      alHacerlo: _hacerPaso,
+      alSaltar: (paso) => ref.read(tutorialProvider.notifier).saltarPaso(paso),
+      alOcultar: () => ref.read(tutorialProvider.notifier).ocultarTarjeta(),
+      alImportar: () => Navigator.of(
+        context,
+      ).push(MaterialPageRoute<void>(builder: (_) => const ImportScreen())),
+    );
+  }
+
+  void _avisarPasoCompletado(PasoGuia hecho, List<EstadoPasoGuia> pasos) {
+    final siguiente = siguientePaso(pasos);
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        persist: false,
+        duration: const Duration(seconds: 8),
+        content: Text(
+          siguiente == null
+              ? 'Paso completado · Ya está todo'
+              : 'Paso completado · Siguiente: ${siguiente.titulo}',
+        ),
+        action: hecho == PasoGuia.carpetas
+            ? SnackBarAction(label: 'Abrir Drive', onPressed: _abrirDrive)
+            : siguiente == null
+            ? null
+            : SnackBarAction(
+                label: 'Continuar',
+                onPressed: () => _hacerPaso(siguiente),
+              ),
+      ),
+    );
+  }
+
+  Future<void> _abrirDrive() async {
+    final settings = await ref.read(settingsProvider.future);
+    final raiz = settings.driveRootFolderId?.trim();
+    if (!mounted) return;
+    if (raiz == null || raiz.isEmpty) {
+      _avisar('Todavía no has elegido carpeta de trabajo en Drive.');
+      return;
+    }
+    try {
+      await GoogleDriveService.instance.openFolder(raiz);
+    } catch (e) {
+      if (mounted) _avisar('No se pudo abrir Drive: $e');
+    }
+  }
+
+  void _avisar(String mensaje, {SnackBarAction? accion}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(mensaje),
+        action: accion,
+        persist: false,
+        duration: Duration(seconds: accion == null ? 5 : 8),
+      ),
+    );
+  }
+
+  Future<void> _hacerPaso(PasoGuia paso) async {
+    // El del número de factura se resuelve aquí mismo, con una pregunta.
+    if (paso == PasoGuia.numeracion) {
+      await _preguntarPorLaNumeracion();
+      return;
+    }
+
+    final destino = destinoDelPaso(
+      paso,
+      boloSinFacturaId: ref.read(boloSinFacturaProvider),
+      facturaRecienteId: ref.read(facturaRecienteProvider),
+    );
+
+    // Crear una factura no es un ensayo: conviene decirlo antes.
+    if (paso == PasoGuia.factura && destino.aviso == null) {
+      final sigue = await _confirmarFacturaReal();
+      if (!sigue || !mounted) return;
+    }
+
+    await ref
+        .read(tutorialProvider.notifier)
+        .encargarTour(destino.tour, paso: paso);
+    if (!mounted) return;
+
+    if (destino.aviso != null) _avisar(destino.aviso!);
+    // Las pestañas se cambian; lo demás se abre encima.
+    if (destino.ruta == '/calendar' || destino.ruta.startsWith('/finanzas')) {
+      context.go(destino.ruta);
+    } else {
+      context.push(destino.ruta);
+    }
+  }
+
+  Future<bool> _confirmarFacturaReal() async {
+    final seguir = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Vas a crear una factura de verdad'),
+        content: const Text(
+          'Esta factura es real y tendrá número. Si solo quieres probar, al '
+          'final de la guía te enseñamos a borrarla para que la numeración '
+          'vuelva atrás.',
+        ),
         actions: [
-          FABAction(
-            icon: Icons.music_note,
-            label: 'Nuevo bolo',
-            color: context.colors.accentSoft,
-            onTap: (ctx) => ctx.push('/gig/new'),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Ahora no'),
           ),
-          FABAction(
-            icon: Icons.person_add,
-            label: 'Nuevo cliente',
-            color: context.colors.purple,
-            onTap: (ctx) => ctx.push('/client/new'),
-          ),
-          FABAction(
-            icon: Icons.euro_outlined,
-            label: 'Nuevo gasto o inversión',
-            color: context.colors.warning,
-            onTap: (ctx) => ctx.push('/expense/new'),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Entendido'),
           ),
         ],
       ),
     );
+    return seguir == true;
+  }
+
+  Future<void> _preguntarPorLaNumeracion() async {
+    final yaFacturaba = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Tu próxima factura'),
+        content: const Text(
+          '¿Ya has emitido facturas este año fuera de MisBolos?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('No, empiezo de cero'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Sí, ya he facturado'),
+          ),
+        ],
+      ),
+    );
+    if (yaFacturaba == null || !mounted) return;
+
+    await ref.read(tutorialProvider.notifier).marcarNumeracionRevisada();
+    if (!mounted) return;
+    if (yaFacturaba) {
+      await mostrarDialogoProximaFactura(context, ref, DateTime.now().year);
+    } else {
+      _avisar('Perfecto: tu primera factura será la número 1.');
+    }
   }
 }
 

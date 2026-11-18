@@ -6,8 +6,13 @@ import 'package:share_plus/share_plus.dart';
 import 'dart:io';
 
 import '../../core/config/fiscal.dart';
+import '../../core/services/estado_tutorial.dart';
 import '../../widgets/fiscal/retencion_irpf_info.dart';
+import '../../providers/tutorial_provider.dart';
 import '../../widgets/invoices/proxima_factura.dart';
+import '../../widgets/tutorial/boton_ayuda_tour.dart';
+import '../../widgets/tutorial/lanzador_tour.dart';
+import '../../widgets/tutorial/tour.dart';
 import '../../models/app_settings.dart';
 import '../../models/gig.dart';
 import '../../models/pdf_theme.dart';
@@ -27,6 +32,9 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+  // Clave del tour por instancia, no global compartida.
+  final _claveTourRetencion = GlobalKey();
+
   double _ivaDefault = 0.21;
   double _irpfDefault = 0.15;
   double _logoSize = 180;
@@ -71,8 +79,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Widget build(BuildContext context) {
     final settingsAsync = ref.watch(settingsProvider);
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Ajustes')),
+    final pantalla = Scaffold(
+      appBar: AppBar(
+        title: const Text('Ajustes'),
+        actions: [
+          BotonAyudaTour(
+            tour: Tour.ajustes,
+            pasos: () => pasosDeAjustes(retencion: _claveTourRetencion),
+          ),
+        ],
+      ),
       body: settingsAsync.when(
         data: (settings) {
           _loadSettings(settings);
@@ -122,6 +138,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         ],
                         const SizedBox(height: 12),
                         _buildAdvancedCard(),
+                        const SizedBox(height: 12),
+                        _buildTutorialCard(),
                         const SizedBox(height: 18),
                         Card(
                           child: Padding(
@@ -143,6 +161,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Error: $e')),
       ),
+    );
+
+    return TourPorEncargo(
+      tour: Tour.ajustes,
+      listo: settingsAsync.hasValue,
+      pasos: () => pasosDeAjustes(retencion: _claveTourRetencion),
+      child: pantalla,
     );
   }
 
@@ -178,6 +203,28 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     return const [0, 5, 15, 30].contains(seconds) ? seconds : 5;
   }
 
+  Widget _buildTutorialCard() {
+    return _sectionCard(
+      'Tutorial',
+      Icons.school_outlined,
+      Column(
+        children: [
+          ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.replay),
+            title: const Text('Repetir el tutorial'),
+            subtitle: const Text(
+              'Vuelve la guía de inicio y los tours de cada pantalla. Te '
+              'llevamos a Inicio para empezar.',
+            ),
+            onTap: _repetirTutorial,
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildNumeracionCard() {
     return _sectionCard(
       'Numeración de facturas',
@@ -194,6 +241,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _repetirTutorial() async {
+    Hapticos.toque();
+    await ref.read(tutorialProvider.notifier).repetirTutorial();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('La guía vuelve a empezar'), persist: false),
+    );
+    // La guía vive en Inicio: no tiene sentido dejar al usuario en Ajustes
+    // buscándola.
+    context.go('/');
   }
 
   Widget _buildAppearanceCard() {
@@ -462,6 +521,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               );
               final irpfValido = RetencionIrpf.esValida(_irpfDefault);
               final irpf = Column(
+                key: _claveTourRetencion,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(

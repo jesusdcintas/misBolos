@@ -15,6 +15,8 @@ import 'core/utils/date_formatter.dart';
 import 'database/database_helper.dart';
 import 'models/app_settings.dart';
 import 'models/franja_bolo.dart';
+import 'widgets/tutorial/lanzador_tour.dart';
+import 'widgets/tutorial/vigilante_tutorial.dart';
 import 'providers/assets_provider.dart';
 import 'providers/client_provider.dart';
 import 'providers/expenses_provider.dart';
@@ -115,6 +117,8 @@ final routerProvider = Provider<GoRouter>((ref) {
 
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
+    // Cierra el tour si se abre algo encima (hoja, diálogo o pantalla).
+    observers: [ObservadorTour()],
     refreshListenable: authRefresh,
     initialLocation: '/',
     redirect: (context, state) {
@@ -180,13 +184,17 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       ShellRoute(
         navigatorKey: _shellNavigatorKey,
-        builder: (context, state, child) => _ScaffoldWithNavBar(child: child),
+        // Las hojas de las pestañas van por este navegador, así que también
+        // tiene que cerrar el tour cuando se abre una.
+        observers: [ObservadorTour()],
+        builder: (context, state, child) =>
+            VigilanteTutorial(child: _ScaffoldWithNavBar(child: child)),
         routes: [
           GoRoute(
             path: '/',
             pageBuilder: (context, state) => CustomTransitionPage(
               key: state.pageKey,
-              child: const DashboardScreen(),
+              child: DashboardScreen(),
               transitionDuration: const Duration(milliseconds: 200),
               transitionsBuilder: (context, animation, secondary, child) =>
                   FadeTransition(opacity: animation, child: child),
@@ -196,7 +204,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/calendar',
             pageBuilder: (context, state) => CustomTransitionPage(
               key: state.pageKey,
-              child: const CalendarScreen(),
+              child: CalendarScreen(),
               transitionDuration: const Duration(milliseconds: 200),
               transitionsBuilder: (context, animation, secondary, child) =>
                   FadeTransition(opacity: animation, child: child),

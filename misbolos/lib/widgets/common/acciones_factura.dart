@@ -14,6 +14,7 @@ import '../../providers/gig_provider.dart';
 import '../../providers/invoice_email_log_provider.dart';
 import '../../providers/invoice_provider.dart';
 import '../../providers/settings_provider.dart';
+import '../../providers/tutorial_provider.dart';
 import '../../services/notification_service.dart';
 import '../../services/pdf_service.dart';
 import 'menu_acciones.dart';
@@ -40,6 +41,9 @@ Future<void> compartirPdfDeFactura(
       client: client,
       settings: settings,
     );
+    // Paso de la guía: compartir cuenta en cuanto se abre la hoja del
+    // sistema, se haga desde donde se haga y aunque luego se cancele.
+    await ref.read(tutorialProvider.notifier).marcarFacturaCompartida();
     await SharePlus.instance.share(
       ShareParams(files: [XFile(fichero.path)], sharePositionOrigin: origen),
     );
@@ -131,6 +135,10 @@ Future<void> enviarFacturaPorEmail(
     ),
   );
   if (confirmado != true) return;
+
+  // Paso de la guía: enviar por correo también cuenta como compartir. Se
+  // marca al confirmar el envío, aunque luego la red falle.
+  await ref.read(tutorialProvider.notifier).marcarFacturaCompartida();
 
   try {
     await ref.read(invoiceEmailSendProvider.notifier).send(invoice);

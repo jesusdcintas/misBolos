@@ -20,7 +20,11 @@ import '../../providers/sync_provider.dart';
 import '../../services/google_auth_service.dart';
 import '../../services/platform_auth_service.dart';
 import '../../services/supabase_service.dart';
+import '../../core/services/estado_tutorial.dart';
 import '../../core/theme/app_theme_colors.dart';
+import '../../widgets/tutorial/boton_ayuda_tour.dart';
+import '../../widgets/tutorial/lanzador_tour.dart';
+import '../../widgets/tutorial/tour.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -30,6 +34,11 @@ class ProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
+  // Claves del tour por instancia: dos Perfil a la vez (al borrar la cuenta,
+  // durante la redirección) compartían una GlobalKey global y reventaba.
+  final _claveTourDatosFiscales = GlobalKey();
+  final _claveTourGoogle = GlobalKey();
+
   final _driveSearchController = TextEditingController();
   List<DriveFolderResult> _driveFolderResults = [];
   bool _driveBusy = false;
@@ -80,9 +89,20 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         kBottomNavigationBarHeight +
         24;
 
-    return Scaffold(
+    final pantalla = Scaffold(
       resizeToAvoidBottomInset: true,
-      appBar: AppBar(title: const Text('Perfil')),
+      appBar: AppBar(
+        title: const Text('Perfil'),
+        actions: [
+          BotonAyudaTour(
+            tour: Tour.perfil,
+            pasos: () => pasosDePerfil(
+              datosFiscales: _claveTourDatosFiscales,
+              google: _claveTourGoogle,
+            ),
+          ),
+        ],
+      ),
       body: settingsAsync.when(
         data: (settings) {
           return SafeArea(
@@ -118,9 +138,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             const SizedBox(height: 12),
                             _buildAccountSecurityCard(),
                             const SizedBox(height: 12),
-                            _BillingFormCard(
-                              settings: settings,
-                              onSaved: _saveBilling,
+                            KeyedSubtree(
+                              key: _claveTourDatosFiscales,
+                              child: _BillingFormCard(
+                                settings: settings,
+                                onSaved: _saveBilling,
+                              ),
                             ),
                             const SizedBox(height: 32),
                           ],
@@ -136,6 +159,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Error: $e')),
       ),
+    );
+
+    return TourPorEncargo(
+      tour: Tour.perfil,
+      listo: settingsAsync.hasValue,
+      pasos: () => pasosDePerfil(
+        datosFiscales: _claveTourDatosFiscales,
+        google: _claveTourGoogle,
+      ),
+      child: pantalla,
     );
   }
 
@@ -253,6 +286,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
     final cards = [
       _serviceStatusCard(
+        clave: _claveTourGoogle,
         title: 'Cuenta Google',
         icon: Icons.account_circle_outlined,
         status: googleAuth.isSignedIn ? 'Conectada' : 'No conectada',
@@ -341,6 +375,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   Widget _serviceStatusCard({
+    Key? clave,
     required String title,
     required IconData icon,
     required String status,
@@ -368,6 +403,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         ),
       ),
       child: Card(
+        key: clave,
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onTap,

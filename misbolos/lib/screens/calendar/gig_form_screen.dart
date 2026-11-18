@@ -4,7 +4,11 @@ import 'package:go_router/go_router.dart';
 import '../../core/theme/app_theme_colors.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/utils/date_formatter.dart';
+import '../../core/services/estado_tutorial.dart';
 import '../../widgets/common/animated_facturable_toggle.dart';
+import '../../widgets/tutorial/boton_ayuda_tour.dart';
+import '../../widgets/tutorial/lanzador_tour.dart';
+import '../../widgets/tutorial/tour.dart';
 import '../../models/client.dart';
 import '../../models/franja_bolo.dart';
 import '../../models/gig.dart';
@@ -55,6 +59,13 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
   bool _facturable = true;
   // Los bolos nuevos nacen como «Todo el día».
   FranjaBolo _franja = FranjaBolo.diaCompleto;
+
+  // Los elementos que señala el tour.
+  final _claveTourCliente = GlobalKey();
+  final _claveTourCachet = GlobalKey();
+  final _claveTourFranja = GlobalKey();
+  final _claveTourFacturable = GlobalKey();
+  final _claveTourGuardar = GlobalKey();
   bool _isLoading = false;
   Gig? _existingGig;
 
@@ -128,11 +139,23 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
     final clientsAsync = ref.watch(clientsProvider);
     final isEditing = widget.gigId != null;
 
-    return FormularioConCambios(
+    final pantalla = FormularioConCambios(
       hayCambios: _hayCambios,
       child: Scaffold(
         appBar: AppBar(
           title: Text(isEditing ? AppStrings.editarBolo : AppStrings.nuevoBolo),
+          actions: [
+            BotonAyudaTour(
+              tour: Tour.nuevoBolo,
+              pasos: () => pasosDeNuevoBolo(
+                cliente: _claveTourCliente,
+                cachet: _claveTourCachet,
+                franja: _claveTourFranja,
+                facturable: _claveTourFacturable,
+                guardar: _claveTourGuardar,
+              ),
+            ),
+          ],
         ),
         body: Form(
           key: _formKey,
@@ -157,84 +180,89 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
               const SizedBox(height: 12),
 
               // Cliente
-              clientsAsync.when(
-                data: (clients) {
-                  Client? selectedClient;
-                  if (_clientId != null) {
-                    for (final client in clients) {
-                      if (client.id == _clientId) {
-                        selectedClient = client;
-                        break;
+              KeyedSubtree(
+                key: _claveTourCliente,
+                child: clientsAsync.when(
+                  data: (clients) {
+                    Client? selectedClient;
+                    if (_clientId != null) {
+                      for (final client in clients) {
+                        if (client.id == _clientId) {
+                          selectedClient = client;
+                          break;
+                        }
                       }
                     }
-                  }
-                  final selectedName = selectedClient == null
-                      ? null
-                      : (selectedClient.alias.isNotEmpty
-                            ? selectedClient.alias
-                            : selectedClient.nombre);
-                  final selectedDetails = selectedClient == null
-                      ? null
-                      : [
-                          if ((selectedClient.telefono ?? '').trim().isNotEmpty)
-                            selectedClient.telefono!.trim(),
-                          if ((selectedClient.email ?? '').trim().isNotEmpty)
-                            selectedClient.email!.trim(),
-                        ].join(' · ');
-
-                  return InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: _isLoading
+                    final selectedName = selectedClient == null
                         ? null
-                        : () async {
-                            final picked = await showClientPicker(
-                              context,
-                              ref,
-                              selectedClientId: _clientId,
-                            );
-                            if (picked == null || !mounted) return;
-                            setState(() => _clientId = picked.id);
-                          },
-                    child: InputDecorator(
-                      decoration: InputDecoration(
-                        labelText: AppStrings.cliente,
-                        prefixIcon: const Icon(Icons.person),
-                        suffixIcon: const Icon(Icons.chevron_right),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            selectedName ?? 'Seleccionar cliente',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: selectedName == null
-                                  ? context.colors.textSecondary
-                                  : context.colors.textPrimary,
-                            ),
-                          ),
-                          if (selectedDetails != null &&
-                              selectedDetails.isNotEmpty) ...[
-                            const SizedBox(height: 3),
+                        : (selectedClient.alias.isNotEmpty
+                              ? selectedClient.alias
+                              : selectedClient.nombre);
+                    final selectedDetails = selectedClient == null
+                        ? null
+                        : [
+                            if ((selectedClient.telefono ?? '')
+                                .trim()
+                                .isNotEmpty)
+                              selectedClient.telefono!.trim(),
+                            if ((selectedClient.email ?? '').trim().isNotEmpty)
+                              selectedClient.email!.trim(),
+                          ].join(' · ');
+
+                    return InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: _isLoading
+                          ? null
+                          : () async {
+                              final picked = await showClientPicker(
+                                context,
+                                ref,
+                                selectedClientId: _clientId,
+                              );
+                              if (picked == null || !mounted) return;
+                              setState(() => _clientId = picked.id);
+                            },
+                      child: InputDecorator(
+                        decoration: InputDecoration(
+                          labelText: AppStrings.cliente,
+                          prefixIcon: const Icon(Icons.person),
+                          suffixIcon: const Icon(Icons.chevron_right),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
                             Text(
-                              selectedDetails,
+                              selectedName ?? 'Seleccionar cliente',
                               style: TextStyle(
-                                fontSize: 12.5,
-                                color: context.colors.textSecondary,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: selectedName == null
+                                    ? context.colors.textSecondary
+                                    : context.colors.textPrimary,
                               ),
                             ),
+                            if (selectedDetails != null &&
+                                selectedDetails.isNotEmpty) ...[
+                              const SizedBox(height: 3),
+                              Text(
+                                selectedDetails,
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  color: context.colors.textSecondary,
+                                ),
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
-                    ),
-                  );
-                },
-                loading: () => const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                  child: Center(child: CircularProgressIndicator()),
+                    );
+                  },
+                  loading: () => const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                  error: (_, __) => const Text('Error cargando clientes'),
                 ),
-                error: (_, __) => const Text('Error cargando clientes'),
               ),
               Align(
                 alignment: Alignment.centerRight,
@@ -252,6 +280,7 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
 
               // Caché
               TextFormField(
+                key: _claveTourCachet,
                 controller: _cachetController,
                 decoration: const InputDecoration(
                   labelText: AppStrings.cachet,
@@ -286,6 +315,7 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
 
               // Franja del día
               Card(
+                key: _claveTourFranja,
                 margin: EdgeInsets.zero,
                 child: Padding(
                   padding: const EdgeInsets.all(16),
@@ -336,6 +366,7 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
 
               // Toggle facturable - MUY PROMINENTE
               AnimatedContainer(
+                key: _claveTourFacturable,
                 duration: const Duration(milliseconds: 400),
                 curve: Curves.easeOutCubic,
                 padding: const EdgeInsets.all(20),
@@ -397,6 +428,7 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
 
               // Botón guardar
               SizedBox(
+                key: _claveTourGuardar,
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   onPressed: _isLoading ? null : _save,
@@ -420,6 +452,20 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
           ),
         ),
       ),
+    );
+
+    // Solo al crear: quien edita un bolo ya sabe lo que hay en el formulario.
+    if (isEditing) return pantalla;
+    return TourPorEncargo(
+      tour: Tour.nuevoBolo,
+      pasos: () => pasosDeNuevoBolo(
+        cliente: _claveTourCliente,
+        cachet: _claveTourCachet,
+        franja: _claveTourFranja,
+        facturable: _claveTourFacturable,
+        guardar: _claveTourGuardar,
+      ),
+      child: pantalla,
     );
   }
 

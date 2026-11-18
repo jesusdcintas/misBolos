@@ -16,11 +16,15 @@ import '../../providers/invoice_email_log_provider.dart';
 import '../../providers/client_provider.dart';
 import '../../providers/gig_provider.dart';
 import '../../providers/settings_provider.dart';
+import '../../providers/tutorial_provider.dart';
 import '../../services/pdf_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/google_auth_service.dart';
 import '../../services/google_calendar_service.dart';
 import '../../widgets/common/acciones_factura.dart';
+import '../../core/services/estado_tutorial.dart';
+import '../../widgets/tutorial/lanzador_tour.dart';
+import '../../widgets/tutorial/tour.dart';
 import '../../widgets/common/serpentina_celebration.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../core/theme/app_theme_colors.dart';
@@ -37,6 +41,41 @@ class InvoiceDetailScreen extends ConsumerStatefulWidget {
 
 class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
   static const _pageAnimDuration = Duration(milliseconds: 250);
+
+  // Claves del tour por instancia, y solo en la factura que se está viendo:
+  // el PageView monta varias páginas a la vez, y una GlobalKey global repetida
+  // en dos de ellas reventaba.
+  final GlobalKey _claveGuiaCompartir = GlobalKey();
+  final GlobalKey _claveGuiaFacturada = GlobalKey();
+  final GlobalKey _claveGuiaCobrada = GlobalKey();
+
+  List<PasoTour> _pasosGuiaCompartir() => [
+    PasoTour(
+      clave: _claveGuiaCompartir,
+      texto:
+          'Comparte el PDF por WhatsApp, por AirDrop o como prefieras. '
+          'Justo debajo lo tienes también por correo.',
+    ),
+  ];
+
+  List<PasoTour> _pasosGuiaFacturada() => [
+    PasoTour(
+      clave: _claveGuiaFacturada,
+      texto:
+          'Marca la factura como facturada cuando se la hayas mandado al '
+          'cliente. Así sabes lo que te deben.',
+    ),
+  ];
+
+  List<PasoTour> _pasosGuiaCobrada() => [
+    PasoTour(
+      clave: _claveGuiaCobrada,
+      texto:
+          'Cuando te paguen, márcala como cobrada. En la lista también '
+          'puedes deslizarla a la derecha.',
+    ),
+  ];
+
   PageController? _pageController;
   bool _controllerReady = false;
   int _currentIndex = 0;
@@ -108,59 +147,75 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
       );
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          tooltip: 'Volver',
-          onPressed: () {
-            if (context.canPop()) {
-              context.pop();
-            } else {
-              context.go('/finanzas');
-            }
-          },
-        ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(currentInvoice.visualNumber),
-            Text(
-              'Factura ${currentIndex + 1} de ${invoices.length}',
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+    // Esta pantalla sabe enseñar tres tours de la guía, según cuál se haya
+    // pedido: compartir, marcar como facturada o marcar como cobrada.
+    return TourPorEncargo.varios(
+      tours: {
+        Tour.facturaCompartir: _pasosGuiaCompartir,
+        Tour.facturaEmitir: _pasosGuiaFacturada,
+        Tour.facturaCobrar: _pasosGuiaCobrada,
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            tooltip: 'Volver',
+            onPressed: () {
+              if (context.canPop()) {
+                context.pop();
+              } else {
+                context.go('/finanzas');
+              }
+            },
+          ),
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(currentInvoice.visualNumber),
+              Text(
+                'Factura ${currentIndex + 1} de ${invoices.length}',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            IconButton(
+              tooltip: 'Factura anterior',
+              onPressed: currentIndex == 0 ? null : goPrevious,
+              icon: const Icon(Icons.arrow_back_ios_new),
+            ),
+            IconButton(
+              tooltip: 'Factura siguiente',
+              onPressed: currentIndex == invoices.length - 1 ? null : goNext,
+              icon: const Icon(Icons.arrow_forward_ios),
             ),
           ],
         ),
-        actions: [
-          IconButton(
-            tooltip: 'Factura anterior',
-            onPressed: currentIndex == 0 ? null : goPrevious,
-            icon: const Icon(Icons.arrow_back_ios_new),
-          ),
-          IconButton(
-            tooltip: 'Factura siguiente',
-            onPressed: currentIndex == invoices.length - 1 ? null : goNext,
-            icon: const Icon(Icons.arrow_forward_ios),
-          ),
-        ],
-      ),
-      body: PageView.builder(
-        controller: _pageController,
-        itemCount: invoices.length,
-        physics: const BouncingScrollPhysics(),
-        onPageChanged: (index) {
-          setState(() => _currentIndex = index);
-          final targetId = invoices[index].id;
-          if (targetId != currentInvoiceId) {
-            context.replace('/invoice/$targetId');
-          }
-        },
-        itemBuilder: (context, index) {
-          return _InvoiceDetailContent(
-            invoiceId: invoices[index].id,
-            invoice: invoices[index],
-          );
-        },
+        body: PageView.builder(
+          controller: _pageController,
+          itemCount: invoices.length,
+          physics: const BouncingScrollPhysics(),
+          onPageChanged: (index) {
+            setState(() => _currentIndex = index);
+            final targetId = invoices[index].id;
+            if (targetId != currentInvoiceId) {
+              context.replace('/invoice/$targetId');
+            }
+          },
+          itemBuilder: (context, index) {
+            final activa = index == _currentIndex;
+            return _InvoiceDetailContent(
+              invoiceId: invoices[index].id,
+              invoice: invoices[index],
+              claveCompartir: activa ? _claveGuiaCompartir : null,
+              claveFacturada: activa ? _claveGuiaFacturada : null,
+              claveCobrada: activa ? _claveGuiaCobrada : null,
+            );
+          },
+        ),
       ),
     );
   }
@@ -169,7 +224,20 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
 class _InvoiceDetailContent extends ConsumerWidget {
   final String invoiceId;
   final Invoice invoice;
-  const _InvoiceDetailContent({required this.invoiceId, required this.invoice});
+
+  /// Solo las trae la página que se está viendo, para que la misma clave no
+  /// quede montada en dos páginas del PageView a la vez.
+  final GlobalKey? claveCompartir;
+  final GlobalKey? claveFacturada;
+  final GlobalKey? claveCobrada;
+
+  const _InvoiceDetailContent({
+    required this.invoiceId,
+    required this.invoice,
+    this.claveCompartir,
+    this.claveFacturada,
+    this.claveCobrada,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -669,6 +737,7 @@ class _InvoiceDetailContent extends ConsumerWidget {
         // Cambiar estado
         if (invoice.status == InvoiceStatus.borrador)
           SizedBox(
+            key: claveFacturada,
             width: double.infinity,
             child: ElevatedButton.icon(
               onPressed: () => _markAs(context, ref, InvoiceStatus.enviada),
@@ -681,6 +750,7 @@ class _InvoiceDetailContent extends ConsumerWidget {
           ),
         if (invoice.status == InvoiceStatus.enviada)
           SizedBox(
+            key: claveCobrada,
             width: double.infinity,
             child: ElevatedButton.icon(
               onPressed: () => _markAs(context, ref, InvoiceStatus.pagada),
@@ -737,6 +807,7 @@ class _InvoiceDetailContent extends ConsumerWidget {
 
         // Compartir
         SizedBox(
+          key: claveCompartir,
           width: double.infinity,
           child: ElevatedButton.icon(
             onPressed: () => _share(context, ref),
@@ -870,9 +941,16 @@ class _InvoiceDetailContent extends ConsumerWidget {
         settings: settings,
       );
 
-      await Share.shareXFiles([
-        XFile(file.path),
-      ], sharePositionOrigin: shareOrigin);
+      // Paso de la guía: compartir cuenta en cuanto se abre la hoja del
+      // sistema, aunque luego el usuario la cancele.
+      await ref.read(tutorialProvider.notifier).marcarFacturaCompartida();
+
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(file.path)],
+          sharePositionOrigin: shareOrigin,
+        ),
+      );
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(

@@ -1357,6 +1357,15 @@ class DriveDocumentSyncService {
     );
   }
 
+  /// Vacía la cola de subidas a Drive pendientes de este dispositivo.
+  ///
+  /// Al cerrar sesión o cambiar de cuenta no deben quedar subidas encoladas de
+  /// la cuenta anterior: podrían acabar en el Drive equivocado.
+  Future<void> limpiarColaPendiente() async {
+    final db = await DatabaseHelper.instance.database;
+    await db.delete('drive_sync_queue');
+  }
+
   Future<List<Map<String, Object?>>> getRecentQueueErrors({
     int limit = 5,
   }) async {

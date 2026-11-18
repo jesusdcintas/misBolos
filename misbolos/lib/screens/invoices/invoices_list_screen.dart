@@ -20,11 +20,15 @@ import '../../services/pdf_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/google_auth_service.dart';
 import '../../services/google_calendar_service.dart';
+import '../../core/services/estado_tutorial.dart';
+import '../../screens/finanzas/finanzas_screen.dart';
 import '../../widgets/common/acciones_factura.dart';
 import '../../widgets/common/deslizar_para_cobrar.dart';
 import '../../widgets/common/menu_acciones.dart';
 import '../../widgets/common/serpentina_celebration.dart';
 import '../../widgets/invoices/proxima_factura.dart';
+import '../../widgets/tutorial/lanzador_tour.dart';
+import '../../widgets/tutorial/tour.dart';
 import '../../widgets/common/empty_state.dart';
 import '../../widgets/common/skeleton_loading.dart';
 import '../../core/utils/app_haptics.dart';
@@ -50,6 +54,13 @@ final _viewModeProvider = StateProvider<InvoiceViewMode>(
 final _selectionModeProvider = StateProvider<bool>((ref) => false);
 final _selectedInvoicesProvider = StateProvider<Set<String>>((ref) => {});
 
+/// Los pasos del tour de Facturas, para el botón de ayuda de Finanzas.
+///
+/// Las claves viven en la instancia montada de la lista (hay una sola: es una
+/// pestaña de Finanzas), que se registra mientras está en pantalla. Así no hay
+/// GlobalKey global compartida.
+List<PasoTour> pasosTourFacturas() => _InvoicesListScreenState._pasosActuales();
+
 class InvoicesListScreen extends ConsumerStatefulWidget {
   const InvoicesListScreen({super.key});
 
@@ -58,9 +69,28 @@ class InvoicesListScreen extends ConsumerStatefulWidget {
 }
 
 class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
+  /// La lista que está montada ahora mismo (solo hay una: pestaña única).
+  static _InvoicesListScreenState? _actual;
+
+  /// Los pasos del tour de la lista montada, o ninguno si no hay.
+  static List<PasoTour> _pasosActuales() {
+    final actual = _actual;
+    if (actual == null) return const [];
+    return pasosDeFacturas(
+      lista: actual._claveTourLista,
+      filtros: actual._claveTourFiltros,
+      factura: actual._claveTourFactura,
+    );
+  }
+
+  final GlobalKey _claveTourLista = GlobalKey();
+  final GlobalKey _claveTourFiltros = GlobalKey();
+  final GlobalKey _claveTourFactura = GlobalKey();
+
   @override
   void initState() {
     super.initState();
+    _actual = this;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(
         ref
@@ -68,6 +98,12 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
             .refreshFromCloud(reason: 'invoices_screen_open'),
       );
     });
+  }
+
+  @override
+  void dispose() {
+    if (_actual == this) _actual = null;
+    super.dispose();
   }
 
   Future<void> _refreshInvoices() async {
@@ -99,7 +135,7 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
         selectedMonth != null ||
         clientFilter != null;
 
-    return Scaffold(
+    final pantalla = Scaffold(
       body: Column(
         children: [
           selectionMode
@@ -237,6 +273,7 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
 
                       // ── Fila 1: Chips de estado ──
                       Padding(
+                        key: _claveTourFiltros,
                         padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
                         child: SizedBox(
                           height: 36,
@@ -354,14 +391,16 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
 
                       // ── Lista o empty state ──
                       if (filtered.isEmpty)
-                        const Expanded(
-                          child: EmptyState(
+                        Expanded(
+                          key: _claveTourLista,
+                          child: const EmptyState(
                             icon: Icons.receipt_long_outlined,
                             message: AppStrings.sinFacturas,
                           ),
                         )
                       else
                         Expanded(
+                          key: _claveTourLista,
                           child: _buildInvoicesContent(
                             context,
                             ref,
@@ -395,6 +434,19 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
           ),
         ],
       ),
+    );
+
+    // El tour espera a que la pestaña de Facturas esté a la vista.
+    return TourPorEncargo(
+      tour: Tour.facturas,
+      listo: invoicesAsync.hasValue,
+      activo: ref.watch(finanzasTabProvider) == 0,
+      pasos: () => pasosDeFacturas(
+        lista: _claveTourLista,
+        filtros: _claveTourFiltros,
+        factura: _claveTourFactura,
+      ),
+      child: pantalla,
     );
   }
 
@@ -661,6 +713,10 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
     Set<String> selectedInvoices,
     InvoiceViewMode viewMode,
   ) {
+    // La primera pendiente de cobro que se ve: es la que señala el tour.
+    final pendientes = filtered.where((i) => i.status == InvoiceStatus.enviada);
+    final idPrimeraPendiente = pendientes.isEmpty ? null : pendientes.first.id;
+
     void toggleSelection(Invoice invoice, bool selected) {
       final current = ref.read(_selectedInvoicesProvider);
       if (selected) {
@@ -684,6 +740,7 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
         itemBuilder: (context, index) {
           final inv = filtered[index];
           return _InvoiceTile(
+            key: inv.id == idPrimeraPendiente ? _claveTourFactura : null,
             invoice: inv,
             selectionMode: selectionMode,
             isSelected: selectedInvoices.contains(inv.id),
@@ -1677,6 +1734,7 @@ class _InvoiceTile extends ConsumerWidget {
   final ValueChanged<bool>? onSelect;
 
   const _InvoiceTile({
+    super.key,
     required this.invoice,
     this.selectionMode = false,
     this.isSelected = false,
