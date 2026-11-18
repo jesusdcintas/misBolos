@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:misbolos/core/services/arbol_drive.dart';
 import 'package:misbolos/core/services/drive_document_sync_service.dart';
 import 'package:misbolos/models/invoice.dart';
 import 'package:misbolos/services/financial_summary_service.dart';
@@ -20,7 +21,11 @@ Invoice _invoice({
     clientId: 'client-1',
     gigId: 'gig-1',
     items: [
-      InvoiceLineItem(cantidad: 1, descripcion: 'Bolo', precioUnitario: subtotal),
+      InvoiceLineItem(
+        cantidad: 1,
+        descripcion: 'Bolo',
+        precioUnitario: subtotal,
+      ),
     ],
     subtotal: subtotal,
     ivaRate: 0.21,
@@ -76,26 +81,29 @@ void main() {
       expect(summary.irpfAIngresar, closeTo(130, 0.001));
     });
 
-    test('base 1.000 € con retención del 7 %: retenido 70, a ingresar 130, total 200', () {
-      final summary = service.calculate(
-        from: from,
-        to: to,
-        invoices: [
-          _invoice(
-            id: 'inv-1',
-            numero: 1,
-            fecha: DateTime(2026, 2, 10),
-            irpfRate: 0.07,
-          ),
-        ],
-        gigs: const [],
-      );
+    test(
+      'base 1.000 € con retención del 7 %: retenido 70, a ingresar 130, total 200',
+      () {
+        final summary = service.calculate(
+          from: from,
+          to: to,
+          invoices: [
+            _invoice(
+              id: 'inv-1',
+              numero: 1,
+              fecha: DateTime(2026, 2, 10),
+              irpfRate: 0.07,
+            ),
+          ],
+          gigs: const [],
+        );
 
-      expect(summary.irpfRetenido, closeTo(70, 0.001));
-      expect(summary.irpfAIngresar, closeTo(130, 0.001));
-      expect(summary.irpfTotal, closeTo(200, 0.001));
-      expect(summary.retencionSuperaIrpf, isFalse);
-    });
+        expect(summary.irpfRetenido, closeTo(70, 0.001));
+        expect(summary.irpfAIngresar, closeTo(130, 0.001));
+        expect(summary.irpfTotal, closeTo(200, 0.001));
+        expect(summary.retencionSuperaIrpf, isFalse);
+      },
+    );
 
     test('retención mayor que el 20 %: 0 € a ingresar y nota activada', () {
       final summary = service.calculate(
@@ -122,27 +130,30 @@ void main() {
       expect(FinancialSummaryService.irpfPagoFraccionadoRate, 0.20);
     });
 
-    test('el servicio no recibe gastos: IVA e IRPF solo dependen de facturas', () {
-      final invoices = [
-        _invoice(id: 'inv-1', numero: 1, fecha: DateTime(2026, 2, 10)),
-      ];
+    test(
+      'el servicio no recibe gastos: IVA e IRPF solo dependen de facturas',
+      () {
+        final invoices = [
+          _invoice(id: 'inv-1', numero: 1, fecha: DateTime(2026, 2, 10)),
+        ];
 
-      final primera = service.calculate(
-        from: from,
-        to: to,
-        invoices: invoices,
-        gigs: const [],
-      );
-      final segunda = service.calculate(
-        from: from,
-        to: to,
-        invoices: invoices,
-        gigs: const [],
-      );
+        final primera = service.calculate(
+          from: from,
+          to: to,
+          invoices: invoices,
+          gigs: const [],
+        );
+        final segunda = service.calculate(
+          from: from,
+          to: to,
+          invoices: invoices,
+          gigs: const [],
+        );
 
-      expect(segunda.ivaRepercutidoBruto, primera.ivaRepercutidoBruto);
-      expect(segunda.irpfAIngresar, primera.irpfAIngresar);
-    });
+        expect(segunda.ivaRepercutidoBruto, primera.ivaRepercutidoBruto);
+        expect(segunda.irpfAIngresar, primera.irpfAIngresar);
+      },
+    );
 
     test('periodo sin facturas: IVA e IRPF estimados a 0', () {
       final summary = service.calculate(
@@ -180,26 +191,26 @@ void main() {
     test('usa los nombres reales de las carpetas del sync', () {
       expect(
         DriveDocumentSyncService.buildExpensePath(DateTime(2026, 2, 10)),
-        'Contabilidad 2026/1 TRIMESTRE/FEBRERO/Gastos e Inversiones',
+        'Contabilidad 2026/1 TRIMESTRE/FEBRERO/$carpetaGastosEInversiones',
       );
       expect(
         DriveDocumentSyncService.buildExpensePath(DateTime(2026, 5, 1)),
-        'Contabilidad 2026/2 TRIMESTRE/MAYO/Gastos e Inversiones',
+        'Contabilidad 2026/2 TRIMESTRE/MAYO/$carpetaGastosEInversiones',
       );
       expect(
         DriveDocumentSyncService.buildExpensePath(DateTime(2026, 8, 20)),
-        'Contabilidad 2026/3 TRIMESTRE/AGOSTO/Gastos e Inversiones',
+        'Contabilidad 2026/3 TRIMESTRE/AGOSTO/$carpetaGastosEInversiones',
       );
       expect(
         DriveDocumentSyncService.buildExpensePath(DateTime(2026, 11, 3)),
-        'Contabilidad 2026/4 TRIMESTRE/NOVIEMBRE/Gastos e Inversiones',
+        'Contabilidad 2026/4 TRIMESTRE/NOVIEMBRE/$carpetaGastosEInversiones',
       );
     });
 
     test('respeta años distintos', () {
       expect(
         DriveDocumentSyncService.buildExpensePath(DateTime(2025, 12, 31)),
-        'Contabilidad 2025/4 TRIMESTRE/DICIEMBRE/Gastos e Inversiones',
+        'Contabilidad 2025/4 TRIMESTRE/DICIEMBRE/$carpetaGastosEInversiones',
       );
     });
   });

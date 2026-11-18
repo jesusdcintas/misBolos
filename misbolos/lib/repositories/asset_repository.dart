@@ -52,6 +52,17 @@ class AssetRepository {
     );
   }
 
+  /// Olvida el fichero de Drive que tenía guardado.
+  Future<void> limpiarDriveFileId(int id) async {
+    final db = await DatabaseHelper.instance.database;
+    await db.update(
+      'assets',
+      {'drive_file_id': null, 'drive_file_url': null, 'drive_synced_at': null},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
   Future<void> updateDriveMetadata({
     required int id,
     required String driveFileId,
