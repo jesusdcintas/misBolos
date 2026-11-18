@@ -65,13 +65,14 @@ void _clearAllListFilters(WidgetRef ref) {
   ref.read(_facturableFilterProvider.notifier).state = null;
 }
 
-final _claveTourCalendario = GlobalKey();
-final _claveTourBolo = GlobalKey();
-final _claveTourFechasLibres = GlobalKey();
-final _claveTourSincronizar = GlobalKey();
-
 class CalendarScreen extends ConsumerWidget {
-  const CalendarScreen({super.key});
+  // Claves del tour por instancia, no globales compartidas.
+  final GlobalKey _claveTourCalendario = GlobalKey();
+  final GlobalKey _claveTourBolo = GlobalKey();
+  final GlobalKey _claveTourFechasLibres = GlobalKey();
+  final GlobalKey _claveTourSincronizar = GlobalKey();
+
+  CalendarScreen({super.key});
 
   Color _markerColor(BuildContext context, Gig gig) {
     if (gig.status == GigStatus.cancelado) return context.colors.error;

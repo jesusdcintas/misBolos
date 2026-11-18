@@ -24,8 +24,6 @@ import '../settings/duplicate_clients_screen.dart';
 import '../settings/import_screen.dart';
 import '../../core/services/hapticos.dart';
 
-final _claveTourRetencion = GlobalKey();
-
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
@@ -34,6 +32,9 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+  // Clave del tour por instancia, no global compartida.
+  final _claveTourRetencion = GlobalKey();
+
   double _ivaDefault = 0.21;
   double _irpfDefault = 0.15;
   double _logoSize = 180;

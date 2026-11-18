@@ -30,12 +30,12 @@ final _movimientoSortProvider = StateProvider<_MovimientoSortOption>(
 ///
 /// Los gastos ([Expense]) son el repositorio canónico y editable. Los assets
 /// ([Asset]) son registros legacy que se muestran en modo solo-lectura.
-final _claveTourAnadir = GlobalKey();
-final _claveTourGasto = GlobalKey();
-
 /// Los pasos del tour de Gastos, para el botón de ayuda de Finanzas.
+///
+/// Las claves viven en la instancia montada (una sola: pestaña de Finanzas),
+/// registrada mientras está en pantalla. Sin GlobalKey global compartida.
 List<PasoTour> pasosTourGastos() =>
-    pasosDeGastos(anadir: _claveTourAnadir, gasto: _claveTourGasto);
+    _GastosInversionesScreenState._pasosActuales();
 
 class GastosInversionesScreen extends ConsumerStatefulWidget {
   const GastosInversionesScreen({super.key});
@@ -47,9 +47,29 @@ class GastosInversionesScreen extends ConsumerStatefulWidget {
 
 class _GastosInversionesScreenState
     extends ConsumerState<GastosInversionesScreen> {
+  static _GastosInversionesScreenState? _actual;
+
+  static List<PasoTour> _pasosActuales() {
+    final actual = _actual;
+    if (actual == null) return const [];
+    return pasosDeGastos(
+      anadir: actual._claveTourAnadir,
+      gasto: actual._claveTourGasto,
+    );
+  }
+
+  final GlobalKey _claveTourAnadir = GlobalKey();
+  final GlobalKey _claveTourGasto = GlobalKey();
+
   bool _entered = false;
   ExpensesNotifier? _expensesNotifier;
   AssetsNotifier? _assetsNotifier;
+
+  @override
+  void initState() {
+    super.initState();
+    _actual = this;
+  }
 
   @override
   void didChangeDependencies() {
@@ -66,6 +86,7 @@ class _GastosInversionesScreenState
 
   @override
   void dispose() {
+    if (_actual == this) _actual = null;
     _expensesNotifier?.leaveScreen();
     _assetsNotifier?.leaveScreen();
     super.dispose();

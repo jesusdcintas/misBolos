@@ -24,19 +24,6 @@ import '../../widgets/common/cobrado_confetti_button.dart';
 import '../../core/theme/app_theme_colors.dart';
 import '../../core/services/hapticos.dart';
 
-final _claveGuiaFacturar = GlobalKey();
-
-/// El tour corto que lanza la guía al abrir el bolo que falta por facturar.
-List<PasoTour> pasosGuiaFacturarBolo() => [
-  PasoTour(
-    clave: _claveGuiaFacturar,
-    redondo: false,
-    texto:
-        'Desde aquí sale la factura del bolo, con el cliente y el caché '
-        'ya puestos. Solo hay que revisarla y guardar.',
-  ),
-];
-
 class GigDetailScreen extends ConsumerWidget {
   final String gigId;
   const GigDetailScreen({super.key, required this.gigId});
@@ -69,7 +56,23 @@ class GigDetailScreen extends ConsumerWidget {
 
 class _GigDetailContent extends ConsumerWidget {
   final Gig gig;
-  const _GigDetailContent({required this.gig});
+
+  // Clave del tour por instancia: dos detalles de bolo apilados (push sobre
+  // push) compartían una GlobalKey global y reventaban.
+  final GlobalKey _claveGuiaFacturar = GlobalKey();
+
+  _GigDetailContent({required this.gig});
+
+  /// El tour corto que lanza la guía al abrir el bolo que falta por facturar.
+  List<PasoTour> _pasosGuiaFacturarBolo() => [
+    PasoTour(
+      clave: _claveGuiaFacturar,
+      redondo: false,
+      texto:
+          'Desde aquí sale la factura del bolo, con el cliente y el caché '
+          'ya puestos. Solo hay que revisarla y guardar.',
+    ),
+  ];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -81,7 +84,7 @@ class _GigDetailContent extends ConsumerWidget {
     // La guía manda aquí para que el usuario facture su primer bolo.
     return TourPorEncargo(
       tour: Tour.boloAFacturar,
-      pasos: pasosGuiaFacturarBolo,
+      pasos: _pasosGuiaFacturarBolo,
       child: Scaffold(
         appBar: AppBar(
           title: const Text(AppStrings.detalleBolo),

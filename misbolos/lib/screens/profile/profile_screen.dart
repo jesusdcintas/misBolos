@@ -26,9 +26,6 @@ import '../../widgets/tutorial/boton_ayuda_tour.dart';
 import '../../widgets/tutorial/lanzador_tour.dart';
 import '../../widgets/tutorial/tour.dart';
 
-final _claveTourDatosFiscales = GlobalKey();
-final _claveTourGoogle = GlobalKey();
-
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
 
@@ -37,6 +34,11 @@ class ProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
+  // Claves del tour por instancia: dos Perfil a la vez (al borrar la cuenta,
+  // durante la redirección) compartían una GlobalKey global y reventaba.
+  final _claveTourDatosFiscales = GlobalKey();
+  final _claveTourGoogle = GlobalKey();
+
   final _driveSearchController = TextEditingController();
   List<DriveFolderResult> _driveFolderResults = [];
   bool _driveBusy = false;

@@ -41,13 +41,14 @@ import '../../providers/tutorial_provider.dart';
 /// mismo corte que usa la pantalla de Ajustes.
 const double _anchoDosColumnas = 700;
 
-final _claveTourPeriodo = GlobalKey();
-final _claveTourIngresos = GlobalKey();
-final _claveTourImpuestos = GlobalKey();
-final _claveTourAnadir = GlobalKey();
-
 class DashboardScreen extends ConsumerWidget {
-  const DashboardScreen({super.key});
+  // Claves del tour por instancia, no globales compartidas.
+  final GlobalKey _claveTourPeriodo = GlobalKey();
+  final GlobalKey _claveTourIngresos = GlobalKey();
+  final GlobalKey _claveTourImpuestos = GlobalKey();
+  final GlobalKey _claveTourAnadir = GlobalKey();
+
+  DashboardScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

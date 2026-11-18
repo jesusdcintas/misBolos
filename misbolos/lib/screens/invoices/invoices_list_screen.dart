@@ -54,17 +54,12 @@ final _viewModeProvider = StateProvider<InvoiceViewMode>(
 final _selectionModeProvider = StateProvider<bool>((ref) => false);
 final _selectedInvoicesProvider = StateProvider<Set<String>>((ref) => {});
 
-final _claveTourLista = GlobalKey();
-final _claveTourFiltros = GlobalKey();
-final _claveTourFactura = GlobalKey();
-
-/// Los pasos del tour de Facturas, para el botón de ayuda de Finanzas, que
-/// es quien tiene la barra de esta pantalla.
-List<PasoTour> pasosTourFacturas() => pasosDeFacturas(
-  lista: _claveTourLista,
-  filtros: _claveTourFiltros,
-  factura: _claveTourFactura,
-);
+/// Los pasos del tour de Facturas, para el botón de ayuda de Finanzas.
+///
+/// Las claves viven en la instancia montada de la lista (hay una sola: es una
+/// pestaña de Finanzas), que se registra mientras está en pantalla. Así no hay
+/// GlobalKey global compartida.
+List<PasoTour> pasosTourFacturas() => _InvoicesListScreenState._pasosActuales();
 
 class InvoicesListScreen extends ConsumerStatefulWidget {
   const InvoicesListScreen({super.key});
@@ -74,9 +69,28 @@ class InvoicesListScreen extends ConsumerStatefulWidget {
 }
 
 class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
+  /// La lista que está montada ahora mismo (solo hay una: pestaña única).
+  static _InvoicesListScreenState? _actual;
+
+  /// Los pasos del tour de la lista montada, o ninguno si no hay.
+  static List<PasoTour> _pasosActuales() {
+    final actual = _actual;
+    if (actual == null) return const [];
+    return pasosDeFacturas(
+      lista: actual._claveTourLista,
+      filtros: actual._claveTourFiltros,
+      factura: actual._claveTourFactura,
+    );
+  }
+
+  final GlobalKey _claveTourLista = GlobalKey();
+  final GlobalKey _claveTourFiltros = GlobalKey();
+  final GlobalKey _claveTourFactura = GlobalKey();
+
   @override
   void initState() {
     super.initState();
+    _actual = this;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(
         ref
@@ -84,6 +98,12 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
             .refreshFromCloud(reason: 'invoices_screen_open'),
       );
     });
+  }
+
+  @override
+  void dispose() {
+    if (_actual == this) _actual = null;
+    super.dispose();
   }
 
   Future<void> _refreshInvoices() async {

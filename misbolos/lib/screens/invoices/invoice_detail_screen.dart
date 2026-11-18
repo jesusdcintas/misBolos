@@ -29,38 +29,6 @@ import 'package:share_plus/share_plus.dart';
 import '../../core/theme/app_theme_colors.dart';
 import '../../core/services/hapticos.dart';
 
-final _claveGuiaCompartir = GlobalKey();
-final _claveGuiaFacturada = GlobalKey();
-final _claveGuiaCobrada = GlobalKey();
-
-/// Los tours cortos que lanza la guía sobre esta pantalla.
-List<PasoTour> pasosGuiaCompartir() => [
-  PasoTour(
-    clave: _claveGuiaCompartir,
-    texto:
-        'Comparte el PDF por WhatsApp, por AirDrop o como prefieras. '
-        'Justo debajo lo tienes también por correo.',
-  ),
-];
-
-List<PasoTour> pasosGuiaFacturada() => [
-  PasoTour(
-    clave: _claveGuiaFacturada,
-    texto:
-        'Marca la factura como facturada cuando se la hayas mandado al '
-        'cliente. Así sabes lo que te deben.',
-  ),
-];
-
-List<PasoTour> pasosGuiaCobrada() => [
-  PasoTour(
-    clave: _claveGuiaCobrada,
-    texto:
-        'Cuando te paguen, márcala como cobrada. En la lista también '
-        'puedes deslizarla a la derecha.',
-  ),
-];
-
 class InvoiceDetailScreen extends ConsumerStatefulWidget {
   final String invoiceId;
   const InvoiceDetailScreen({super.key, required this.invoiceId});
@@ -72,6 +40,41 @@ class InvoiceDetailScreen extends ConsumerStatefulWidget {
 
 class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
   static const _pageAnimDuration = Duration(milliseconds: 250);
+
+  // Claves del tour por instancia, y solo en la factura que se está viendo:
+  // el PageView monta varias páginas a la vez, y una GlobalKey global repetida
+  // en dos de ellas reventaba.
+  final GlobalKey _claveGuiaCompartir = GlobalKey();
+  final GlobalKey _claveGuiaFacturada = GlobalKey();
+  final GlobalKey _claveGuiaCobrada = GlobalKey();
+
+  List<PasoTour> _pasosGuiaCompartir() => [
+    PasoTour(
+      clave: _claveGuiaCompartir,
+      texto:
+          'Comparte el PDF por WhatsApp, por AirDrop o como prefieras. '
+          'Justo debajo lo tienes también por correo.',
+    ),
+  ];
+
+  List<PasoTour> _pasosGuiaFacturada() => [
+    PasoTour(
+      clave: _claveGuiaFacturada,
+      texto:
+          'Marca la factura como facturada cuando se la hayas mandado al '
+          'cliente. Así sabes lo que te deben.',
+    ),
+  ];
+
+  List<PasoTour> _pasosGuiaCobrada() => [
+    PasoTour(
+      clave: _claveGuiaCobrada,
+      texto:
+          'Cuando te paguen, márcala como cobrada. En la lista también '
+          'puedes deslizarla a la derecha.',
+    ),
+  ];
+
   PageController? _pageController;
   bool _controllerReady = false;
   int _currentIndex = 0;
@@ -147,9 +150,9 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
     // pedido: compartir, marcar como facturada o marcar como cobrada.
     return TourPorEncargo.varios(
       tours: {
-        Tour.facturaCompartir: pasosGuiaCompartir,
-        Tour.facturaEmitir: pasosGuiaFacturada,
-        Tour.facturaCobrar: pasosGuiaCobrada,
+        Tour.facturaCompartir: _pasosGuiaCompartir,
+        Tour.facturaEmitir: _pasosGuiaFacturada,
+        Tour.facturaCobrar: _pasosGuiaCobrada,
       },
       child: Scaffold(
         appBar: AppBar(
@@ -202,9 +205,13 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
             }
           },
           itemBuilder: (context, index) {
+            final activa = index == _currentIndex;
             return _InvoiceDetailContent(
               invoiceId: invoices[index].id,
               invoice: invoices[index],
+              claveCompartir: activa ? _claveGuiaCompartir : null,
+              claveFacturada: activa ? _claveGuiaFacturada : null,
+              claveCobrada: activa ? _claveGuiaCobrada : null,
             );
           },
         ),
@@ -216,7 +223,20 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
 class _InvoiceDetailContent extends ConsumerWidget {
   final String invoiceId;
   final Invoice invoice;
-  const _InvoiceDetailContent({required this.invoiceId, required this.invoice});
+
+  /// Solo las trae la página que se está viendo, para que la misma clave no
+  /// quede montada en dos páginas del PageView a la vez.
+  final GlobalKey? claveCompartir;
+  final GlobalKey? claveFacturada;
+  final GlobalKey? claveCobrada;
+
+  const _InvoiceDetailContent({
+    required this.invoiceId,
+    required this.invoice,
+    this.claveCompartir,
+    this.claveFacturada,
+    this.claveCobrada,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -716,7 +736,7 @@ class _InvoiceDetailContent extends ConsumerWidget {
         // Cambiar estado
         if (invoice.status == InvoiceStatus.borrador)
           SizedBox(
-            key: _claveGuiaFacturada,
+            key: claveFacturada,
             width: double.infinity,
             child: ElevatedButton.icon(
               onPressed: () => _markAs(context, ref, InvoiceStatus.enviada),
@@ -729,7 +749,7 @@ class _InvoiceDetailContent extends ConsumerWidget {
           ),
         if (invoice.status == InvoiceStatus.enviada)
           SizedBox(
-            key: _claveGuiaCobrada,
+            key: claveCobrada,
             width: double.infinity,
             child: ElevatedButton.icon(
               onPressed: () => _markAs(context, ref, InvoiceStatus.pagada),
@@ -786,7 +806,7 @@ class _InvoiceDetailContent extends ConsumerWidget {
 
         // Compartir
         SizedBox(
-          key: _claveGuiaCompartir,
+          key: claveCompartir,
           width: double.infinity,
           child: ElevatedButton.icon(
             onPressed: () => _share(context, ref),
