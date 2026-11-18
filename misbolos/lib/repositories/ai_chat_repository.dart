@@ -131,9 +131,7 @@ class AiChatRepository {
     final db = await DatabaseHelper.instance.database;
     await db.update(
       'ai_chat_messages',
-      {
-        'metadata_json': metadata.isEmpty ? null : jsonEncode(metadata),
-      },
+      {'metadata_json': metadata.isEmpty ? null : jsonEncode(metadata)},
       where: 'id = ?',
       whereArgs: [messageId],
     );

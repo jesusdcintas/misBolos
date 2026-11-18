@@ -12,6 +12,7 @@ import '../models/expense.dart';
 import '../models/asset.dart';
 import '../models/gig.dart';
 import '../models/invoice.dart';
+import '../models/invoice_counter.dart';
 import '../models/invoice_fiscal_record.dart';
 import '../models/sync_queue_item.dart';
 import '../repositories/client_repository.dart';
@@ -785,6 +786,63 @@ class SupabaseService {
     } catch (e) {
       debugPrint('[Supabase] Delete client error: $e');
       rethrow;
+    }
+  }
+
+  /// Sube un contador fijado a mano.
+  ///
+  /// Solo se llama cuando el usuario fija un número: nada de empujarlo al
+  /// emitir. `updated_at` lo pone el servidor con su propio reloj.
+  /// Devuelve el `updated_at` que ha puesto el servidor, o null si falló.
+  ///
+  /// Hace falta devolverlo: al fusionar gana el cambio más reciente, y eso
+  /// solo se puede comparar si las dos fechas salen del reloj del servidor.
+  Future<DateTime?> uploadInvoiceCounter(InvoiceCounter contador) async {
+    if (!isAuthenticated) return null;
+    try {
+      final fila = await _client!
+          .from('invoice_counters')
+          .upsert({
+            'user_id': userId,
+            'serie': contador.serie,
+            'fiscal_year': contador.fiscalYear,
+            'next_number': contador.nextNumber,
+          }, onConflict: 'user_id,serie,fiscal_year')
+          .select('updated_at')
+          .maybeSingle();
+      debugPrint(
+        '[Supabase] Uploaded invoice counter '
+        '${contador.serie}-${contador.fiscalYear}=${contador.nextNumber}',
+      );
+      final valor = fila?['updated_at'];
+      if (valor is String) return DateTime.parse(valor).toLocal();
+      return null;
+    } catch (e) {
+      debugPrint('[Supabase] Upload invoice counter error: $e');
+      return null;
+    }
+  }
+
+  /// Los contadores fijados que hay en la nube.
+  Future<List<InvoiceCounter>> downloadInvoiceCounters() async {
+    if (!isAuthenticated) return const [];
+    try {
+      final filas = await _client!
+          .from('invoice_counters')
+          .select()
+          .eq('user_id', userId!);
+      return [
+        for (final fila in filas)
+          InvoiceCounter(
+            serie: fila['serie'] as String,
+            fiscalYear: (fila['fiscal_year'] as num).toInt(),
+            nextNumber: (fila['next_number'] as num).toInt(),
+            updatedAt: DateTime.parse(fila['updated_at'] as String).toLocal(),
+          ),
+      ];
+    } catch (e) {
+      debugPrint('[Supabase] Download invoice counters error: $e');
+      return const [];
     }
   }
 

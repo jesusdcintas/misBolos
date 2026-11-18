@@ -7,6 +7,7 @@ import 'dart:io';
 
 import '../../core/config/fiscal.dart';
 import '../../widgets/fiscal/retencion_irpf_info.dart';
+import '../../widgets/invoices/proxima_factura.dart';
 import '../../models/app_settings.dart';
 import '../../models/gig.dart';
 import '../../models/pdf_theme.dart';
@@ -103,6 +104,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         const SizedBox(height: 12),
                         _buildRemindersCard(settings),
                         const SizedBox(height: 12),
+                        _buildNumeracionCard(),
+                        const SizedBox(height: 12),
                         if (isWide)
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -173,6 +176,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   int _normalizeLockDelay(int seconds) {
     return const [0, 5, 15, 30].contains(seconds) ? seconds : 5;
+  }
+
+  Widget _buildNumeracionCard() {
+    return _sectionCard(
+      'Numeración de facturas',
+      Icons.tag_outlined,
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ProximaFacturaLinea(year: DateTime.now().year),
+          Text(
+            'Se usa al crear la siguiente factura. Las que ya existen no '
+            'cambian de número.',
+            style: TextStyle(color: Theme.of(context).colorScheme.outline),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildAppearanceCard() {

@@ -180,6 +180,28 @@ class GigRepository {
     return repaired;
   }
 
+  /// Suelta la factura de un bolo y lo devuelve a su estado de antes.
+  ///
+  /// Se usa cuando el bolo apunta a una factura que ya no existe: así deja de
+  /// enseñar «Ver factura» y vuelve a poder facturarse.
+  Future<void> desvincularFactura(String gigId) async {
+    final db = await DatabaseHelper.instance.database;
+    final gig = await getById(gigId);
+    if (gig == null) return;
+    await db.update(
+      'gigs',
+      {
+        'invoice_id': null,
+        'status': gig.facturable
+            ? GigStatus.confirmado.dbValue
+            : GigStatus.confirmadoB.dbValue,
+        'updated_at': DateTime.now().toIso8601String(),
+      },
+      where: 'id = ?',
+      whereArgs: [gigId],
+    );
+  }
+
   Future<void> linkInvoice(String gigId, String invoiceId) async {
     final db = await DatabaseHelper.instance.database;
     await db.update(
