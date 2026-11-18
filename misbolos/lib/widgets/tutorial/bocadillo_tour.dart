@@ -15,6 +15,9 @@ class BocadilloTour extends StatelessWidget {
   final VoidCallback alSiguiente;
   final VoidCallback alSaltar;
 
+  /// Null en el primer paso, que no tiene anterior.
+  final VoidCallback? alAnterior;
+
   const BocadilloTour({
     super.key,
     required this.numero,
@@ -22,6 +25,7 @@ class BocadilloTour extends StatelessWidget {
     required this.texto,
     required this.alSiguiente,
     required this.alSaltar,
+    this.alAnterior,
   });
 
   @override
@@ -73,6 +77,17 @@ class BocadilloTour extends StatelessWidget {
                         style: TextStyle(color: colors.textSecondary),
                       ),
                     ),
+                    if (alAnterior != null)
+                      TextButton(
+                        onPressed: () {
+                          Hapticos.seleccion();
+                          alAnterior!();
+                        },
+                        child: Text(
+                          'Anterior',
+                          style: TextStyle(color: colors.textSecondary),
+                        ),
+                      ),
                     const SizedBox(width: 4),
                     FilledButton(
                       onPressed: () {

@@ -5,6 +5,7 @@ import 'package:misbolos/core/services/estado_tutorial.dart';
 import 'package:misbolos/core/services/hapticos.dart';
 import 'package:misbolos/core/theme/app_theme.dart';
 import 'package:misbolos/providers/tutorial_provider.dart';
+import 'package:misbolos/widgets/tutorial/bocadillo_tour.dart';
 import 'package:misbolos/widgets/tutorial/boton_ayuda_tour.dart';
 import 'package:misbolos/widgets/tutorial/tour.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -87,15 +88,58 @@ void main() {
     expect(despues.tarjetaOculta, antes.tarjetaOculta);
   });
 
+  _testsSalida();
+
   testWidgets('saltarlo tampoco cambia nada', (tester) async {
     await tester.pumpWidget(_pantalla());
     await tester.pumpAndSettle();
 
     await tester.tap(find.byTooltip(textoAyudaTour));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Saltar'));
+    // Hay dos «Saltar»: el del bocadillo y el del paquete, que está ahí
+    // como red de seguridad por si el bocadillo no se ve.
+    expect(find.text('Saltar'), findsNWidgets(2));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(BocadilloTour),
+        matching: find.text('Saltar'),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect((await _estado(tester)).vistos, {Tour.inicio});
+  });
+}
+
+/// Lo que no puede volver a pasar: que el tour deje la pantalla muerta.
+void _testsSalida() {
+  testWidgets('tocar fuera del bocadillo cierra el tour', (tester) async {
+    await tester.pumpWidget(_pantalla());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip(textoAyudaTour));
+    await tester.pumpAndSettle();
+    expect(find.byType(BocadilloTour), findsOneWidget);
+
+    // Una esquina cualquiera, lejos del elemento señalado.
+    await tester.tapAt(const Offset(20, 120));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(BocadilloTour), findsNothing);
+  });
+
+  testWidgets('el primer paso no ofrece «Anterior»', (tester) async {
+    await tester.pumpWidget(_pantalla());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip(textoAyudaTour));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Anterior'), findsNothing);
+
+    // Cerrarlo antes de salir: si no, el siguiente tour no podría abrirse,
+    // porque solo puede haber uno en pantalla.
+    await tester.tapAt(const Offset(20, 120));
+    await tester.pumpAndSettle();
   });
 }

@@ -57,7 +57,9 @@ Future<bool> mostrarTour(
     }
   }
 
-  TutorialCoachMark(
+  // Sin la referencia no se puede cerrar el tour desde el velo.
+  late final TutorialCoachMark tutorial;
+  tutorial = TutorialCoachMark(
     targets: [
       for (final (indice, paso) in visibles.indexed)
         TargetFocus(
@@ -66,6 +68,8 @@ Future<bool> mostrarTour(
           shape: paso.redondo ? ShapeLightFocus.Circle : ShapeLightFocus.RRect,
           radius: 14,
           enableTargetTab: false,
+          // Tocar fuera del bocadillo cierra el tour, siempre.
+          enableOverlayTab: true,
           contents: [
             TargetContent(
               align: _alineacion(paso, alto),
@@ -75,6 +79,7 @@ Future<bool> mostrarTour(
                 texto: paso.texto,
                 alSiguiente: controlador.next,
                 alSaltar: controlador.skip,
+                alAnterior: indice == 0 ? null : controlador.previous,
               ),
             ),
           ],
@@ -83,8 +88,28 @@ Future<bool> mostrarTour(
     colorShadow: scheme.scrim,
     opacityShadow: 0.72,
     paddingFocus: 8,
-    // El botón de saltar va dentro del bocadillo, junto al progreso.
-    hideSkip: true,
+    // Red de seguridad: el bocadillo lleva su «Saltar», pero si por lo que
+    // sea no se ve, el del paquete sigue ahí y tocar fuera cierra el tour.
+    // Sin esto, un objetivo fuera de pantalla dejaba la app bloqueada.
+    hideSkip: false,
+    textSkip: 'Saltar',
+    onClickOverlay: (_) {
+      // Cerrar a mano además de pedir el skip: si no, el tour se daba por
+      // abierto para siempre y el siguiente ya no salía.
+      terminar();
+      tutorial.skip();
+    },
+    // Antes de cada paso, traer el elemento a la vista: en Perfil y en
+    // Ajustes muchos quedan por debajo del pliegue.
+    beforeFocus: (objetivo) async {
+      final destino = objetivo.keyTarget?.currentContext;
+      if (destino == null) return;
+      await Scrollable.ensureVisible(
+        destino,
+        duration: duracion,
+        alignment: 0.3,
+      );
+    },
     pulseEnable: !sinAnimaciones,
     focusAnimationDuration: duracion,
     unFocusAnimationDuration: duracion,
@@ -93,7 +118,8 @@ Future<bool> mostrarTour(
       terminar();
       return true;
     },
-  ).show(context: context);
+  );
+  tutorial.show(context: context);
 
   return true;
 }
