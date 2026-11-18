@@ -234,6 +234,15 @@ void main() {
       expect(destino.aviso, contains('Ábrela desde la lista'));
     });
 
+    test('el gasto lleva a la pestaña de Gastos con su tour', () {
+      final destino = destinoDelPaso(PasoGuia.gasto);
+
+      // A la pestaña de Gastos de Finanzas, no al formulario suelto: así el
+      // tour tiene montado el botón de añadir al que señalar.
+      expect(destino.ruta, '/finanzas?tab=gastos');
+      expect(destino.tour, Tour.gastos);
+    });
+
     test('cada paso tiene título y explicación', () {
       for (final paso in PasoGuia.values) {
         expect(paso.titulo, isNotEmpty, reason: paso.name);

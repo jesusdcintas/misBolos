@@ -353,7 +353,7 @@ class _GuiaInicioState extends ConsumerState<_GuiaInicio> {
 
     if (destino.aviso != null) _avisar(destino.aviso!);
     // Las pestañas se cambian; lo demás se abre encima.
-    if (destino.ruta == '/calendar' || destino.ruta == '/finanzas') {
+    if (destino.ruta == '/calendar' || destino.ruta.startsWith('/finanzas')) {
       context.go(destino.ruta);
     } else {
       context.push(destino.ruta);

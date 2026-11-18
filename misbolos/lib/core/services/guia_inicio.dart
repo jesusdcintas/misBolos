@@ -17,7 +17,6 @@ enum Tour {
   facturaCompartir,
   facturaEmitir,
   facturaCobrar,
-  nuevoGasto,
 }
 
 /// Los pasos de la guía de inicio, en el orden en que se hacen.
@@ -266,6 +265,8 @@ DestinoPaso destinoDelPaso(
       };
       return DestinoPaso('/invoice/$facturaRecienteId', tour);
     case PasoGuia.gasto:
-      return const DestinoPaso('/expense/new', Tour.nuevoGasto);
+      // A la pestaña de Gastos de Finanzas, no al formulario: el tour señala
+      // el botón de añadir de esa lista, que es lo que el usuario busca.
+      return const DestinoPaso('/finanzas?tab=gastos', Tour.gastos);
   }
 }
