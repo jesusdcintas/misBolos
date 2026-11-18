@@ -12,6 +12,33 @@ import 'tour.dart';
 /// Solo puede haber un tour en pantalla: ninguno salta encima de otro.
 bool _hayTourAbierto = false;
 
+/// Cómo cerrar el tour que está abierto ahora mismo, si lo hay.
+///
+/// Lo usa el observador de navegación: si se abre un diálogo, una hoja o una
+/// pantalla con el tour puesto, su velo se quedaría por encima comiéndose los
+/// toques, así que hay que cerrarlo.
+void Function()? _cerrarTourActivo;
+
+/// Cierra el tour abierto, venga de donde venga (navegación, otra pantalla).
+void cerrarTourActivo() => _cerrarTourActivo?.call();
+
+/// Observa la navegación para cerrar el tour en cuanto algo se abre encima.
+///
+/// El velo del tour vive en el overlay raíz, por encima de cualquier hoja o
+/// diálogo que se abra después; sin esto, se quedaba tapando un panel y no
+/// dejaba ni escribir.
+class ObservadorTour extends NavigatorObserver {
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    cerrarTourActivo();
+  }
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    cerrarTourActivo();
+  }
+}
+
 /// Enseña [pasos] como un tour sobre la pantalla actual.
 ///
 /// Los pasos cuyo elemento no esté en pantalla (una lista vacía, un botón que
@@ -48,17 +75,20 @@ Future<bool> mostrarTour(
 
   _hayTourAbierto = true;
   var cerrado = false;
+  late final TutorialCoachMark tutorial;
   void terminar() {
     if (cerrado) return;
     cerrado = true;
     _hayTourAbierto = false;
+    _cerrarTourActivo = null;
+    tutorial.finish();
     if (guardarVisto) {
       unawaited(ref.read(tutorialProvider.notifier).marcarVisto(tour));
     }
   }
 
-  // Sin la referencia no se puede cerrar el tour desde el velo.
-  late final TutorialCoachMark tutorial;
+  // Para poder cerrarlo si algo se abre encima.
+  _cerrarTourActivo = terminar;
   tutorial = TutorialCoachMark(
     targets: [
       for (final (indice, paso) in visibles.indexed)
@@ -67,8 +97,10 @@ Future<bool> mostrarTour(
           keyTarget: paso.clave,
           shape: paso.redondo ? ShapeLightFocus.Circle : ShapeLightFocus.RRect,
           radius: 14,
-          enableTargetTab: false,
-          // Tocar fuera del bocadillo cierra el tour, siempre.
+          // Tocar el elemento señalado, o fuera del bocadillo, cierra el
+          // tour: así el usuario puede usar lo que el tour le enseña sin que
+          // el velo le coma los toques.
+          enableTargetTab: true,
           enableOverlayTab: true,
           contents: [
             TargetContent(
@@ -85,6 +117,7 @@ Future<bool> mostrarTour(
           ],
         ),
     ],
+    onClickTarget: (_) => terminar(),
     colorShadow: scheme.scrim,
     opacityShadow: 0.72,
     paddingFocus: 8,
@@ -93,12 +126,7 @@ Future<bool> mostrarTour(
     // Sin esto, un objetivo fuera de pantalla dejaba la app bloqueada.
     hideSkip: false,
     textSkip: 'Saltar',
-    onClickOverlay: (_) {
-      // Cerrar a mano además de pedir el skip: si no, el tour se daba por
-      // abierto para siempre y el siguiente ya no salía.
-      terminar();
-      tutorial.skip();
-    },
+    onClickOverlay: (_) => terminar(),
     // Antes de cada paso, traer el elemento a la vista: en Perfil y en
     // Ajustes muchos quedan por debajo del pliegue.
     beforeFocus: (objetivo) async {
