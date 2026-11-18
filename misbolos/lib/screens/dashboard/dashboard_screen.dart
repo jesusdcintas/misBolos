@@ -21,7 +21,6 @@ import '../../widgets/dashboard/period_selector.dart';
 import '../../widgets/dashboard/taxes_period_card.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/utils/tirar_para_sincronizar.dart';
-import '../../widgets/common/deslizar_horizontal.dart';
 import '../../widgets/common/acciones_bolo.dart';
 import '../../widgets/common/menu_acciones.dart';
 
@@ -71,16 +70,9 @@ class DashboardScreen extends ConsumerWidget {
             final dosColumnas = constraints.maxWidth >= _anchoDosColumnas;
 
             final ingresos = statsAsync.when(
-              data: (stats) => DeslizarHorizontal(
-                onAnterior: () =>
-                    ref.read(dashboardPeriodProvider.notifier).state =
-                        period.previous,
-                onSiguiente: period.next.isFuture
-                    ? null
-                    : () => ref.read(dashboardPeriodProvider.notifier).state =
-                          period.next,
-                child: IncomePeriodCard(stats: stats, period: period),
-              ),
+              // El periodo se cambia con las flechas del selector: deslizar
+              // aquí se comía gestos de la lista y confundía más que ayudaba.
+              data: (stats) => IncomePeriodCard(stats: stats, period: period),
               loading: () => const DashboardSkeleton(),
               error: (e, _) => Text('Error: $e'),
             );
@@ -104,20 +96,10 @@ class DashboardScreen extends ConsumerWidget {
               error: (_, __) => const SizedBox.shrink(),
             );
 
-            void irA(DashboardPeriod destino) =>
-                ref.read(dashboardPeriodProvider.notifier).state = destino;
-
             return ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                DeslizarHorizontal(
-                  onAnterior: () => irA(period.previous),
-                  // El mismo límite que la flecha derecha del selector.
-                  onSiguiente: period.next.isFuture
-                      ? null
-                      : () => irA(period.next),
-                  child: const PeriodSelector(),
-                ),
+                const PeriodSelector(),
                 const SizedBox(height: 16),
 
                 // Aviso de impagos: es global, no sigue el periodo.
