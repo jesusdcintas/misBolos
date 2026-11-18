@@ -1,3 +1,9 @@
+import 'arbol_drive.dart';
+import 'estado_raiz_drive.dart';
+
+export 'arbol_drive.dart';
+export 'estado_raiz_drive.dart';
+
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -34,8 +40,8 @@ class DriveMonthFolders {
   final String quarterFolderId;
   final String monthFolderId;
   final String facturasFolderId;
-  final String gastosFolderId;
-  final String inversionesFolderId;
+
+  /// Donde van los adjuntos de gastos y de inversiones.
   final String gastosInversionesFolderId;
 
   const DriveMonthFolders({
@@ -43,8 +49,6 @@ class DriveMonthFolders {
     required this.quarterFolderId,
     required this.monthFolderId,
     required this.facturasFolderId,
-    required this.gastosFolderId,
-    required this.inversionesFolderId,
     required this.gastosInversionesFolderId,
   });
 }
@@ -78,16 +82,25 @@ class DriveExistingFileResult {
 }
 
 class DriveWorkspaceSetupResult {
+  /// Si Drive queda usable: hay cuenta y carpeta de trabajo elegida.
   final bool ready;
+
   final bool autoConfigured;
   final String? message;
   final DriveFolderResult? folder;
+
+  /// Si además se pudo montar el árbol de carpetas del año.
+  ///
+  /// Va aparte de [ready] a propósito: que falle una carpeta no deja Drive
+  /// sin conectar, y se vuelve a intentar solo cuando haga falta.
+  final bool estructuraCompleta;
 
   const DriveWorkspaceSetupResult({
     required this.ready,
     required this.autoConfigured,
     this.message,
     this.folder,
+    this.estructuraCompleta = true,
   });
 }
 
@@ -288,11 +301,27 @@ class GoogleDriveService {
 
       selected ??= await _createRootFolder(defaultFolderName);
       await selectRootFolder(selected);
-      await createFullYearStructure(DateTime.now().year);
+
+      // A partir de aquí Drive ya está conectado y con carpeta: si alguna
+      // carpeta del año falla, se avisa, pero la conexión es buena.
+      var estructuraCompleta = true;
+      String? aviso;
+      try {
+        await createFullYearStructure(DateTime.now().year);
+      } catch (e) {
+        estructuraCompleta = false;
+        aviso =
+            'Drive quedó conectado, pero no se pudieron crear todas las '
+            'carpetas del año. Puedes reintentarlo desde «Crear estructura».';
+        debugPrint('[DRIVE][SETUP] estructura incompleta: $e');
+      }
+
       return DriveWorkspaceSetupResult(
         ready: true,
         autoConfigured: true,
         folder: selected,
+        estructuraCompleta: estructuraCompleta,
+        message: aviso,
       );
     } catch (e) {
       return DriveWorkspaceSetupResult(
@@ -406,6 +435,99 @@ class GoogleDriveService {
     return _requiredRootFolderId();
   }
 
+  /// Mira si la carpeta de trabajo sigue viva en Drive.
+  ///
+  /// Una carpeta en la papelera admite hijos nuevos sin rechistar, así que
+  /// sin esta comprobación la app creaba el árbol dentro de la basura y
+  /// decía que todo estaba listo.
+  Future<RevisionRaizDrive> revisarRaiz() async {
+    final settings = await _settingsRepository.get();
+    final folderId = settings.driveRootFolderId?.trim();
+    if (folderId == null || folderId.isEmpty) {
+      return revisarRaizDrive(folderId: null, existe: false, enPapelera: false);
+    }
+
+    try {
+      final api = await _driveApi();
+      final folder =
+          await api.files.get(
+                folderId,
+                $fields: 'id,trashed',
+                supportsAllDrives: true,
+              )
+              as drive.File;
+      return revisarRaizDrive(
+        folderId: folderId,
+        existe: folder.id != null,
+        enPapelera: folder.trashed == true,
+      );
+    } catch (e) {
+      debugPrint('[DRIVE][RAIZ] no accesible id=$folderId error=$e');
+      return revisarRaizDrive(
+        folderId: folderId,
+        existe: false,
+        enPapelera: false,
+      );
+    }
+  }
+
+  /// Si estos ficheros siguen vivos en Drive.
+  ///
+  /// Una llamada por fichero, que es lo que hay: Drive no deja preguntar por
+  /// varios ids a la vez. Van en paralelo con tope para no castigar la cuota.
+  /// Un fichero que no se pueda consultar se queda fuera del resultado, para
+  /// que quien decida no lo tome por perdido.
+  Future<Map<String, bool>> comprobarFicheros(
+    Iterable<String> idsFichero, {
+    int limite = 5,
+  }) async {
+    final ids = idsFichero
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toSet();
+    if (ids.isEmpty) return const {};
+
+    final api = await _driveApi();
+    final vivos = <String, bool>{};
+
+    await ejecutarEnParalelo([
+      for (final id in ids)
+        () async {
+          try {
+            final fichero =
+                await api.files.get(
+                      id,
+                      $fields: 'id,trashed',
+                      supportsAllDrives: true,
+                    )
+                    as drive.File;
+            vivos[id] = fichero.id != null && fichero.trashed != true;
+          } catch (e) {
+            final texto = e.toString();
+            // Un 404 es un «ya no está»; lo demás es duda y se deja fuera.
+            if (texto.contains('404') || texto.contains('notFound')) {
+              vivos[id] = false;
+            } else {
+              debugPrint('[DRIVE][FICHEROS] no se pudo comprobar $id: $e');
+            }
+          }
+        },
+    ], limite: limite);
+
+    return vivos;
+  }
+
+  /// Igual que [revisarRaiz], pero se planta si no se puede usar.
+  ///
+  /// Además vacía las cachés de ids: si la raíz ya no vale, lo que hubiera
+  /// apuntado dentro tampoco.
+  Future<void> exigirRaizUsable() async {
+    final revision = await revisarRaiz();
+    if (revision.sePuedeUsar) return;
+    _clearFolderCache();
+    throw RaizDriveNoDisponible(revision);
+  }
+
   Future<String> ensureFolder({
     required String parentId,
     required String folderName,
@@ -448,6 +570,76 @@ class GoogleDriveService {
     return id;
   }
 
+  /// Las subcarpetas que cuelgan de [parentId].
+  Future<List<CarpetaDrive>> listarSubcarpetas(String parentId) async {
+    final api = await _driveApi();
+    final resultado = await api.files.list(
+      q:
+          "mimeType = 'application/vnd.google-apps.folder' "
+          "and trashed = false "
+          "and '${_escapeQuery(parentId)}' in parents",
+      spaces: 'drive',
+      $fields: 'files(id,name)',
+      pageSize: 100,
+    );
+    return [
+      for (final f in resultado.files ?? const <drive.File>[])
+        if (f.id != null && f.name != null)
+          CarpetaDrive(id: f.id!, nombre: f.name!),
+    ];
+  }
+
+  /// Deja lista la carpeta de gastos e inversiones de un mes.
+  ///
+  /// Si existe la antigua («Gastos e Inversiones») se renombra en su sitio:
+  /// ni se crea otra ni se mueve ningún fichero. Si por lo que sea están las
+  /// dos, no se fusionan; se usa la de mayúsculas y queda el aviso en el
+  /// registro, porque juntarlas sería mover ficheros del usuario.
+  Future<String> asegurarCarpetaGastos(String monthFolderId) async {
+    final cacheKey = _folderCacheKey(monthFolderId, carpetaGastosEInversiones);
+    final cached = _folderIdCache[cacheKey];
+    if (cached != null) return cached;
+
+    final decision = decidirCarpetaGastos(
+      await listarSubcarpetas(monthFolderId),
+    );
+
+    String id;
+    switch (decision.accion) {
+      case AccionCarpetaGastos.crear:
+        id = await ensureFolder(
+          parentId: monthFolderId,
+          folderName: carpetaGastosEInversiones,
+        );
+      case AccionCarpetaGastos.usar:
+        id = decision.id!;
+      case AccionCarpetaGastos.renombrar:
+        id = decision.id!;
+        await renombrarCarpeta(id: id, nombre: carpetaGastosEInversiones);
+        debugPrint(
+          '[DRIVE][CARPETAS] renombrada a $carpetaGastosEInversiones id=$id',
+        );
+      case AccionCarpetaGastos.duplicadas:
+        id = decision.id!;
+        debugPrint(
+          '[DRIVE][CARPETAS][AVISO] en el mes $monthFolderId conviven '
+          '«$carpetaGastosEInversiones» y la antigua. Se usa la de '
+          'mayúsculas y no se toca la otra.',
+        );
+    }
+
+    _folderIdCache[cacheKey] = id;
+    return id;
+  }
+
+  Future<void> renombrarCarpeta({
+    required String id,
+    required String nombre,
+  }) async {
+    final api = await _driveApi();
+    await api.files.update(drive.File()..name = nombre, id);
+  }
+
   Future<String> ensureYearFolder({
     required String rootFolderId,
     required int year,
@@ -461,13 +653,11 @@ class GoogleDriveService {
   Future<String> ensureQuarterFolder({
     required String yearFolderId,
     required DateTime date,
-  }) async {
-    final quarterId = await ensureFolder(
+  }) {
+    return ensureFolder(
       parentId: yearFolderId,
       folderName: getQuarterName(date),
     );
-    await ensureFolder(parentId: quarterId, folderName: 'MODELOS');
-    return quarterId;
   }
 
   Future<String> ensureMonthFolder({
@@ -500,42 +690,76 @@ class GoogleDriveService {
       date: date,
     );
 
+    // Las dos no dependen la una de la otra.
+    final subcarpetas = await Future.wait([
+      ensureFolder(parentId: monthFolderId, folderName: carpetaFacturas),
+      asegurarCarpetaGastos(monthFolderId),
+    ]);
+
     final folders = DriveMonthFolders(
       yearFolderId: yearFolderId,
       quarterFolderId: quarterFolderId,
       monthFolderId: monthFolderId,
-      facturasFolderId: await ensureFolder(
-        parentId: monthFolderId,
-        folderName: 'FACTURAS',
-      ),
-      gastosFolderId: await ensureFolder(
-        parentId: monthFolderId,
-        folderName: 'GASTOS',
-      ),
-      inversionesFolderId: await ensureFolder(
-        parentId: monthFolderId,
-        folderName: 'INVERSIONES',
-      ),
-      gastosInversionesFolderId: await ensureFolder(
-        parentId: monthFolderId,
-        folderName: gastosInversionesFolderName,
-      ),
+      facturasFolderId: subcarpetas[0],
+      gastosInversionesFolderId: subcarpetas[1],
     );
     _monthStructureCache[cacheKey] = folders;
     return folders;
   }
 
-  Future<void> createFullYearStructure(int year) async {
+  /// Deja montado el año entero en Drive.
+  ///
+  /// Los trimestres no dependen unos de otros, ni los meses dentro de un
+  /// trimestre, así que van en paralelo con un tope de llamadas a la vez para
+  /// no castigar la cuota de Drive. [alAvanzar] se llama cada vez que una
+  /// carpeta queda lista, para poder enseñar el progreso.
+  Future<void> createFullYearStructure(
+    int year, {
+    void Function(int hechas, int total)? alAvanzar,
+  }) async {
+    final total = cuentaCarpetas(arbolDeAno(year));
+    var hechas = 0;
+    void avanzar([int cuantas = 1]) {
+      hechas += cuantas;
+      alAvanzar?.call(hechas, total);
+    }
+
+    await exigirRaizUsable();
     final rootFolderId = await _requiredRootFolderId();
     final yearFolderId = await ensureYearFolder(
       rootFolderId: rootFolderId,
       year: year,
     );
+    avanzar();
     await _deleteLegacyBackupFolder(yearFolderId);
 
-    for (var month = 1; month <= 12; month++) {
-      await ensureMonthStructure(DateTime(year, month));
-    }
+    await ejecutarEnParalelo(
+      [
+        for (var trimestre = 0; trimestre < 4; trimestre++)
+          () async {
+            final primerMes = trimestre * 3 + 1;
+            // Crear aquí el trimestre deja el id en caché, así que los
+            // tres meses no se pisan buscándolo a la vez.
+            await ensureQuarterFolder(
+              yearFolderId: yearFolderId,
+              date: DateTime(year, primerMes),
+            );
+            avanzar();
+
+            await ejecutarEnParalelo([
+              for (var mes = primerMes; mes < primerMes + 3; mes++)
+                () async {
+                  await ensureMonthStructure(DateTime(year, mes));
+                  // El mes y sus dos carpetas.
+                  avanzar(3);
+                },
+            ]);
+          },
+      ],
+      // Los trimestres abren tres meses cada uno: con dos a la vez ya se
+      // sostienen seis llamadas simultáneas.
+      limite: 2,
+    );
   }
 
   Future<DriveFolderResult> _createRootFolder(String name) async {
@@ -760,6 +984,7 @@ class GoogleDriveService {
 
   Future<void> openFolder(String folderId) async {
     final uri = Uri.parse('https://drive.google.com/drive/folders/$folderId');
+    debugPrint('[DRIVE][ABRIR] $uri');
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
       throw Exception('No se pudo abrir la carpeta de Drive.');
     }
@@ -978,35 +1203,6 @@ class GoogleDriveService {
     );
   }
 }
-
-String getQuarterName(DateTime date) {
-  if (date.month <= 3) return '1 TRIMESTRE';
-  if (date.month <= 6) return '2 TRIMESTRE';
-  if (date.month <= 9) return '3 TRIMESTRE';
-  return '4 TRIMESTRE';
-}
-
-String getMonthName(DateTime date) {
-  const months = [
-    'ENERO',
-    'FEBRERO',
-    'MARZO',
-    'ABRIL',
-    'MAYO',
-    'JUNIO',
-    'JULIO',
-    'AGOSTO',
-    'SEPTIEMBRE',
-    'OCTUBRE',
-    'NOVIEMBRE',
-    'DICIEMBRE',
-  ];
-  return months[date.month - 1];
-}
-
-String getYearFolderName(DateTime date) => 'Contabilidad ${date.year}';
-
-const String gastosInversionesFolderName = 'Gastos e Inversiones';
 
 String sanitizeDriveFileName(String input) {
   final sanitized = input

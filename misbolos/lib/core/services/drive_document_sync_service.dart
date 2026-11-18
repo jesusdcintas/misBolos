@@ -20,6 +20,7 @@ import '../../repositories/settings_repository.dart';
 import '../../services/pdf_service.dart';
 import '../../services/ai_attachment_service.dart';
 import '../../services/supabase_service.dart';
+import 'estado_drive.dart';
 import 'google_drive_service.dart';
 
 class DriveProgressSnapshot {
@@ -188,7 +189,7 @@ class DriveDocumentSyncService {
       getYearFolderName(fecha),
       getQuarterName(fecha),
       getMonthName(fecha),
-      gastosInversionesFolderName,
+      carpetaGastosEInversiones,
     ].join('/');
   }
 
@@ -210,6 +211,7 @@ class DriveDocumentSyncService {
       '[DRIVE][MOVE] expense/${expense.id} -> ${buildExpensePath(expense.fecha)}',
     );
   }
+
   static const String errorMissingFile = 'failed_file_missing';
   static const String errorDevicePath = 'device_path_unavailable';
   static const String errorBadFileDescriptor = 'bad_file_descriptor';
@@ -242,7 +244,11 @@ class DriveDocumentSyncService {
     );
   }
 
-  void _updateProgress({required String label, required int processed, required int total}) {
+  void _updateProgress({
+    required String label,
+    required int processed,
+    required int total,
+  }) {
     progress.value = DriveProgressSnapshot(
       active: true,
       label: label,
@@ -315,7 +321,8 @@ class DriveDocumentSyncService {
       'entity_id': entityId,
       'action': action,
       'local_file_path': _safeLocalPath(localFilePath),
-      'target_folder_type': targetFolderType ?? _defaultTargetFolder(normalizedType),
+      'target_folder_type':
+          targetFolderType ?? _defaultTargetFolder(normalizedType),
       'attempts': 0,
       'last_error': null,
       'last_error_code': null,
@@ -327,7 +334,8 @@ class DriveDocumentSyncService {
       'file_size_bytes': fileSizeBytes,
       'drive_file_id': driveFileId,
       'remote_folder_id': remoteFolderId,
-      'logical_path': logicalPath ?? '${_defaultTargetFolder(normalizedType)}/$entityId',
+      'logical_path':
+          logicalPath ?? '${_defaultTargetFolder(normalizedType)}/$entityId',
       'updated_at': now,
     };
     if (existing.isEmpty) {
@@ -747,6 +755,7 @@ class DriveDocumentSyncService {
   Future<DriveReuploadResult> uploadAllDocumentsToDrive({
     String reason = 'drive_reupload',
   }) async {
+    await _drive.exigirRaizUsable();
     final totalWatch = Stopwatch()..start();
     debugPrint('[DRIVE][REUPLOAD] start reason=$reason');
     await _drive.ensureRootFolder();
@@ -773,7 +782,9 @@ class DriveDocumentSyncService {
     );
     final assets = await _assetRepository.getAll();
     final totalItems =
-        invoices.length + expenses.where((e) => e.id != null).length + assets.where((a) => a.id != null).length;
+        invoices.length +
+        expenses.where((e) => e.id != null).length +
+        assets.where((a) => a.id != null).length;
     var processedItems = 0;
     _startProgress(label: 'Subiendo documentos a Drive...', total: totalItems);
     final assetYears = assets.map((e) => e.fechaCompra.year).toSet().toList()
@@ -1001,7 +1012,7 @@ class DriveDocumentSyncService {
                   candidate,
                   File(path ?? 'adjunto.pdf'),
                 ),
-                parentFolderId: monthFolders.inversionesFolderId,
+                parentFolderId: monthFolders.gastosInversionesFolderId,
               );
               await _assetRepository.updateDriveMetadata(
                 id: candidate.id!,
@@ -1075,11 +1086,88 @@ class DriveDocumentSyncService {
     );
   }
 
+  /// Vuelve a subir los documentos cuyo PDF ya no está en Drive.
+  ///
+  /// Pasa cuando el usuario borra ficheros o carpetas desde Drive: la app
+  /// sigue guardando el id y cree que ya está subido, así que nunca lo
+  /// vuelve a intentar. Aquí se comprueba de verdad y se resube solo lo que
+  /// falta, sin duplicar lo que sí está.
+  Future<int> resubirDocumentosPerdidos({
+    String reason = 'drive_reupload_perdidos',
+  }) async {
+    await _drive.exigirRaizUsable();
+
+    final invoices = await _invoiceRepository.getAll();
+    final expenses = await _expenseRepository.getAll();
+    final assets = await _assetRepository.getAll();
+
+    final idDrivePorDocumento = <String, String?>{
+      for (final i in invoices) 'invoice:${i.id}': i.driveFileId,
+      for (final e in expenses)
+        if (e.id != null) 'expense:${e.id}': e.driveFileId,
+      for (final a in assets)
+        if (a.id != null) 'asset:${a.id}': a.driveFileId,
+    };
+
+    final vivos = await _drive.comprobarFicheros(
+      idDrivePorDocumento.values.whereType<String>(),
+    );
+    final perdidos = documentosConFicheroPerdido(
+      idDrivePorDocumento: idDrivePorDocumento,
+      vivoPorFichero: vivos,
+    );
+    debugPrint(
+      '[DRIVE][RESUBIR] reason=$reason revisados=${idDrivePorDocumento.length} '
+      'perdidos=${perdidos.length}',
+    );
+    if (perdidos.isEmpty) return 0;
+
+    final total = perdidos.length;
+    var hechos = 0;
+    String etiqueta(int n) => 'Subiendo documentos a tu Drive… $n de $total';
+    _startProgress(label: etiqueta(0), total: total);
+
+    try {
+      for (final clave in perdidos) {
+        final partes = clave.split(':');
+        final tipo = partes.first;
+        final id = partes.sublist(1).join(':');
+        try {
+          switch (tipo) {
+            case 'invoice':
+              await _invoiceRepository.limpiarDriveFileId(id);
+              await syncInvoiceById(id);
+            case 'expense':
+              await _expenseRepository.limpiarDriveFileId(int.parse(id));
+              await syncExpenseById(int.parse(id));
+            case 'asset':
+              await _assetRepository.limpiarDriveFileId(int.parse(id));
+              await syncAssetById(int.parse(id));
+          }
+        } catch (e) {
+          debugPrint('[DRIVE][RESUBIR][ERROR] $clave: $e');
+        }
+        hechos++;
+        _updateProgress(
+          label: etiqueta(hechos),
+          processed: hechos,
+          total: total,
+        );
+      }
+    } finally {
+      _finishProgress();
+    }
+
+    debugPrint('[DRIVE][RESUBIR] done resubidos=$hechos');
+    return hechos;
+  }
+
   Future<DriveStructureResult> createStructureForExistingDocuments({
     String reason = 'drive_create_structure',
   }) async {
     final watch = Stopwatch()..start();
     debugPrint('[DRIVE][STRUCTURE] start reason=$reason');
+    await _drive.exigirRaizUsable();
     await _drive.ensureRootFolder();
 
     final invoices = await _invoiceRepository.getAll();
@@ -1098,16 +1186,49 @@ class DriveDocumentSyncService {
 
     debugPrint('[DRIVE][STRUCTURE] years=$years');
     var foldersEnsured = 0;
-    for (final year in years) {
-      try {
-        await _drive.createFullYearStructure(year);
-        foldersEnsured++;
-      } catch (e, st) {
-        debugPrint('[DRIVE][STRUCTURE][ERROR] year=$year exception=$e');
-        debugPrint('[DRIVE][STRUCTURE][ERROR] year=$year stack=$st');
-        rethrow;
+
+    // El total se sabe de antemano: el árbol de un año son 41 carpetas.
+    final total = years.fold<int>(
+      0,
+      (suma, year) => suma + cuentaCarpetas(arbolDeAno(year)),
+    );
+    var hechas = 0;
+    String etiqueta(int hechas) =>
+        'Creando carpetas en tu Drive… $hechas de $total';
+    _startProgress(label: etiqueta(0), total: total);
+
+    try {
+      for (final year in years) {
+        final base = hechas;
+        try {
+          await _drive.createFullYearStructure(
+            year,
+            alAvanzar: (hechasDelAno, _) {
+              hechas = base + hechasDelAno;
+              _updateProgress(
+                label: etiqueta(hechas),
+                processed: hechas,
+                total: total,
+              );
+            },
+          );
+          foldersEnsured++;
+        } catch (e, st) {
+          debugPrint('[DRIVE][STRUCTURE][ERROR] year=$year exception=$e');
+          debugPrint('[DRIVE][STRUCTURE][ERROR] year=$year stack=$st');
+          rethrow;
+        }
+        hechas = base + cuentaCarpetas(arbolDeAno(year));
       }
+    } finally {
+      _finishProgress();
     }
+
+    final settings = await _settingsRepository.get();
+    await EstadoDriveStore.marcarCarpetasCreadas(settings.driveRootFolderId);
+
+    // Ya que están las carpetas, revisar si algún PDF se quedó por el camino.
+    await resubirDocumentosPerdidos(reason: 'tras_crear_estructura');
 
     watch.stop();
     debugPrint(
@@ -1307,7 +1428,9 @@ class DriveDocumentSyncService {
       final entityId = (item['entity_id'] as String?) ?? '';
       final lockKey = '$entityType::$entityId';
       if (!_entityLocks.add(lockKey)) {
-        debugPrint('[DriveUploadWorker] skipped lock entity=$entityType/$entityId');
+        debugPrint(
+          '[DriveUploadWorker] skipped lock entity=$entityType/$entityId',
+        );
         continue;
       }
       final attempts = (item['attempts'] as int?) ?? 0;
@@ -1357,7 +1480,9 @@ class DriveDocumentSyncService {
               where: 'id = ?',
               whereArgs: [id],
             );
-            debugPrint('[DriveUploadWorker] skipped: already uploaded entity=invoice/$entityId');
+            debugPrint(
+              '[DriveUploadWorker] skipped: already uploaded entity=invoice/$entityId',
+            );
             succeeded++;
             continue;
           }
@@ -1965,12 +2090,12 @@ class DriveDocumentSyncService {
       final monthFolders = await _drive.ensureMonthStructure(asset.fechaCompra);
       listWatch.stop();
       _driveListMs += listWatch.elapsedMilliseconds;
-      folderId = monthFolders.inversionesFolderId;
+      folderId = monthFolders.gastosInversionesFolderId;
       final uploaded = await _uploadOrUpdate(
         existingFileId: asset.driveFileId,
         file: stableFile,
         fileName: _assetFileName(asset, stableFile),
-        parentFolderId: monthFolders.inversionesFolderId,
+        parentFolderId: monthFolders.gastosInversionesFolderId,
         mimeType: _mimeTypeFor(stableFile.path),
       );
       await _assetRepository.update(

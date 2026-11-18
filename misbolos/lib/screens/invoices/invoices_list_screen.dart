@@ -26,6 +26,7 @@ import '../../widgets/common/acciones_factura.dart';
 import '../../widgets/common/deslizar_para_cobrar.dart';
 import '../../widgets/common/menu_acciones.dart';
 import '../../widgets/common/serpentina_celebration.dart';
+import '../../widgets/invoices/proxima_factura.dart';
 import '../../widgets/tutorial/lanzador_tour.dart';
 import '../../widgets/tutorial/tour.dart';
 import '../../widgets/common/empty_state.dart';
@@ -120,6 +121,14 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
           selectionMode
               ? _buildSelectionHeader(context, ref, selectedInvoices)
               : _buildHeader(pendingCount),
+          if (!selectionMode)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 8, 0),
+              child: ProximaFacturaLinea(
+                year:
+                    ref.watch(invoiceYearFilterProvider) ?? DateTime.now().year,
+              ),
+            ),
           Expanded(
             child: RefreshIndicator(
               onRefresh: _refreshInvoices,
@@ -636,7 +645,7 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
                 return PopupMenuButton<String>(
                   onSelected: (value) {
                     if (value == 'renumber') {
-                      _showRenumberDialog(context, ref);
+                      mostrarDialogoReenumerar(context, ref);
                     }
                   },
                   itemBuilder: (context) => [
@@ -2219,9 +2228,18 @@ class _InvoiceNumberBadge extends StatelessWidget {
   }
 }
 
-Future<void> _showRenumberDialog(BuildContext context, WidgetRef ref) async {
+/// Abre la herramienta de reenumeración.
+///
+/// [numerosSugeridos] precarga los campos, para la propuesta de cerrar un
+/// hueco. No cambia nada: el usuario sigue teniendo que confirmar.
+Future<void> mostrarDialogoReenumerar(
+  BuildContext context,
+  WidgetRef ref, {
+  int? year,
+  Map<String, int>? numerosSugeridos,
+}) async {
   final selectedYear =
-      ref.read(invoiceYearFilterProvider) ?? DateTime.now().year;
+      year ?? ref.read(invoiceYearFilterProvider) ?? DateTime.now().year;
   final invoices = await ref.read(invoicesProvider.future);
   final years =
       invoices
@@ -2238,6 +2256,7 @@ Future<void> _showRenumberDialog(BuildContext context, WidgetRef ref) async {
     builder: (_) => _ManualRenumberDialog(
       initialYear: selectedYear,
       availableYears: availableYears,
+      numerosSugeridos: numerosSugeridos,
     ),
   );
 }
@@ -2246,9 +2265,13 @@ class _ManualRenumberDialog extends ConsumerStatefulWidget {
   final int initialYear;
   final List<int> availableYears;
 
+  /// Números propuestos por factura, si se viene de cerrar un hueco.
+  final Map<String, int>? numerosSugeridos;
+
   const _ManualRenumberDialog({
     required this.initialYear,
     required this.availableYears,
+    this.numerosSugeridos,
   });
 
   @override
@@ -2287,10 +2310,12 @@ class _ManualRenumberDialogState extends ConsumerState<_ManualRenumberDialog> {
   }
 
   TextEditingController _controllerFor(Invoice invoice) {
-    return _numberControllers.putIfAbsent(
-      invoice.id,
-      () => TextEditingController(text: invoice.numero.toString()),
-    );
+    return _numberControllers.putIfAbsent(invoice.id, () {
+      final sugerido = widget.numerosSugeridos?[invoice.id];
+      return TextEditingController(
+        text: (sugerido ?? invoice.numero).toString(),
+      );
+    });
   }
 
   GlobalKey _fieldKeyFor(String invoiceId) {

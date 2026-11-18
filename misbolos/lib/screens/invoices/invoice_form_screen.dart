@@ -16,6 +16,7 @@ import '../../models/app_settings.dart';
 import '../../providers/invoice_provider.dart';
 import '../../providers/client_provider.dart';
 import '../../providers/gig_provider.dart';
+import '../../repositories/gig_repository.dart';
 import '../../providers/settings_provider.dart';
 import '../../core/theme/app_theme_colors.dart';
 import '../../core/services/hapticos.dart';
@@ -73,7 +74,6 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
   bool _applyIrpf = false;
   DateTime _fecha = DateTime.now();
 
-
   DateTime _asDateOnly(DateTime value) =>
       DateTime(value.year, value.month, value.day);
 
@@ -129,7 +129,16 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
             final existingInvoice = await ref.read(
               invoiceByIdProvider(_gig!.invoiceId!).future,
             );
-            if (existingInvoice != null) {
+            if (existingInvoice == null || existingInvoice.deletedAt != null) {
+              // El bolo apunta a una factura borrada: se suelta el enlace,
+              // que si no el formulario intentaba actualizarla y no pasaba
+              // nada, sin decir por qué.
+              final boloId = _gig!.id;
+              await GigRepository.instance.desvincularFactura(boloId);
+              ref.invalidate(gigByIdProvider(boloId));
+              ref.invalidate(gigsProvider);
+              _gig = await ref.read(gigByIdProvider(boloId).future) ?? _gig;
+            } else {
               _existingInvoice = existingInvoice;
               _ivaRate = existingInvoice.ivaRate;
               _irpfRate = existingInvoice.irpfRate;
@@ -207,119 +216,120 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
     return FormularioConCambios(
       hayCambios: _hayCambios,
       child: Scaffold(
-      appBar: AppBar(
-        title: Text(isEditing ? 'Editar Factura' : 'Nueva Factura'),
-        actions: [
-          if (!_isLoading && !_isSaving && !isLocked)
-            IconButton(
-              onPressed: _save,
-              icon: const Icon(Icons.check),
-              tooltip: 'Guardar factura',
-            ),
-        ],
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : isLocked
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.lock_outline, size: 42),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Factura bloqueada por modo fiscal estricto',
-                      style: Theme.of(context).textTheme.titleMedium,
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Para corregirla, crea una factura rectificativa desde el detalle de la factura.',
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
+        appBar: AppBar(
+          title: Text(isEditing ? 'Editar Factura' : 'Nueva Factura'),
+          actions: [
+            if (!_isLoading && !_isSaving && !isLocked)
+              IconButton(
+                onPressed: _save,
+                icon: const Icon(Icons.check),
+                tooltip: 'Guardar factura',
               ),
-            )
-          : Form(
-              key: _formKey,
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  // Info del emisor y cliente
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+          ],
+        ),
+        body: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : isLocked
+            ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (_settings != null)
-                        Expanded(child: _buildEmisorCard()),
-                      const SizedBox(width: 12),
-                      if (_client != null) Expanded(child: _buildClientCard()),
+                      const Icon(Icons.lock_outline, size: 42),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Factura bloqueada por modo fiscal estricto',
+                        style: Theme.of(context).textTheme.titleMedium,
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Para corregirla, crea una factura rectificativa desde el detalle de la factura.',
+                        textAlign: TextAlign.center,
+                      ),
                     ],
                   ),
-                  const SizedBox(height: 16),
+                ),
+              )
+            : Form(
+                key: _formKey,
+                child: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    // Info del emisor y cliente
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (_settings != null)
+                          Expanded(child: _buildEmisorCard()),
+                        const SizedBox(width: 12),
+                        if (_client != null)
+                          Expanded(child: _buildClientCard()),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
 
-                  // Fecha de factura
-                  _buildFechaSelector(),
-                  const SizedBox(height: 16),
+                    // Fecha de factura
+                    _buildFechaSelector(),
+                    const SizedBox(height: 16),
 
-                  // Líneas de factura
-                  _buildSectionTitle('Líneas de factura'),
-                  const SizedBox(height: 8),
-                  ..._buildLineItems(),
-                  const SizedBox(height: 8),
-                  _buildAddLineButton(),
-                  const SizedBox(height: 24),
+                    // Líneas de factura
+                    _buildSectionTitle('Líneas de factura'),
+                    const SizedBox(height: 8),
+                    ..._buildLineItems(),
+                    const SizedBox(height: 8),
+                    _buildAddLineButton(),
+                    const SizedBox(height: 24),
 
-                  // Impuestos y retención
-                  _buildSectionTitle('Impuestos'),
-                  const SizedBox(height: 8),
-                  _buildIvaSelector(),
-                  const SizedBox(height: 16),
-                  _buildIrpfSection(),
-                  const SizedBox(height: 24),
+                    // Impuestos y retención
+                    _buildSectionTitle('Impuestos'),
+                    const SizedBox(height: 8),
+                    _buildIvaSelector(),
+                    const SizedBox(height: 16),
+                    _buildIrpfSection(),
+                    const SizedBox(height: 24),
 
-                  // Resumen de totales
-                  _buildTotalsCard(),
-                  const SizedBox(height: 24),
+                    // Resumen de totales
+                    _buildTotalsCard(),
+                    const SizedBox(height: 24),
 
-                  // Botón de guardar
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton.icon(
-                      onPressed: _isSaving ? null : _save,
-                      icon: _isSaving
-                          ? SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onPrimary,
-                              ),
-                            )
-                          : const Icon(Icons.save),
-                      label: Text(
-                        _isSaving
-                            ? 'Guardando...'
-                            : (_existingInvoice != null
-                                  ? 'Guardar cambios'
-                                  : 'Crear factura'),
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                    // Botón de guardar
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton.icon(
+                        onPressed: _isSaving ? null : _save,
+                        icon: _isSaving
+                            ? SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onPrimary,
+                                ),
+                              )
+                            : const Icon(Icons.save),
+                        label: Text(
+                          _isSaving
+                              ? 'Guardando...'
+                              : (_existingInvoice != null
+                                    ? 'Guardar cambios'
+                                    : 'Crear factura'),
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 32),
-                ],
+                    const SizedBox(height: 32),
+                  ],
+                ),
               ),
-            ),
-    ),
+      ),
     );
   }
 
@@ -671,7 +681,10 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
               const SizedBox(height: 12),
               Text(
                 'Selecciona el porcentaje de retención:',
-                style: TextStyle(fontSize: 13, color: context.colors.textSecondary),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: context.colors.textSecondary,
+                ),
               ),
               const SizedBox(height: 8),
               Wrap(
@@ -684,7 +697,9 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                   return ChoiceChip(
                     label: Text(RetencionIrpf.etiqueta(rate)),
                     selected: isSelected,
-                    selectedColor: context.colors.accentSoft.withValues(alpha: 0.2),
+                    selectedColor: context.colors.accentSoft.withValues(
+                      alpha: 0.2,
+                    ),
                     onSelected: (selected) {
                       if (selected) {
                         setState(() => _irpfRate = rate);
@@ -772,12 +787,30 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
     );
   }
 
+  /// Un aviso corto: si algo no se puede hacer, hay que decirlo.
+  void _avisar(String mensaje) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(mensaje)));
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) {
       Hapticos.error();
+      _avisar('Revisa los campos marcados en rojo.');
       return;
     }
-    if (_gig == null || _client == null) return;
+    if (_gig == null || _client == null) {
+      Hapticos.error();
+      _avisar(
+        _gig == null
+            ? 'No encuentro el bolo de esta factura. Vuelve atrás y ábrelo '
+                  'otra vez.'
+            : 'El bolo no tiene cliente. Asígnale uno antes de facturar.',
+      );
+      return;
+    }
     if (_existingInvoice?.isFiscallyLocked == true) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
