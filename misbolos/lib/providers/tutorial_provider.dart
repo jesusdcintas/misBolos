@@ -41,9 +41,29 @@ class TutorialNotifier extends AsyncNotifier<DatosTutorial> {
   Future<void> repetirTutorial() =>
       _conEstado((estado) => estado.repetirTutorial());
 
-  /// Quita la tarjeta de primeros pasos.
+  /// Quita la guía de inicio.
   Future<void> ocultarTarjeta() =>
       _conEstado((estado) => estado.ocultarTarjeta());
+
+  /// El usuario se salta un paso de la guía.
+  Future<void> saltarPaso(PasoGuia paso) =>
+      _conEstado((estado) => estado.saltarPaso(paso));
+
+  /// Ha contestado a la pregunta del número de factura.
+  Future<void> marcarNumeracionRevisada() =>
+      _conEstado((estado) => estado.marcarNumeracionRevisada());
+
+  /// Ha compartido o enviado una factura.
+  Future<void> marcarFacturaCompartida() =>
+      _conEstado((estado) => estado.marcarFacturaCompartida());
+
+  /// Encarga el tour de la pantalla a la que se manda al usuario.
+  Future<void> encargarTour(Tour tour) =>
+      _conEstado((estado) => estado.encargarTour(tour));
+
+  /// Olvida el encargo, se haya usado o no.
+  Future<void> olvidarEncargo() =>
+      _conEstado((estado) => estado.olvidarEncargo());
 }
 
 /// Si quien abre la app ya la usaba, con los datos que hay ahora mismo.

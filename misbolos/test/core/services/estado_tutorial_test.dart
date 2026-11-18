@@ -62,6 +62,87 @@ void main() {
     });
   });
 
+  group('la guía de inicio', () {
+    test('saltarse un paso no toca los demás', () async {
+      final estado = await _estado();
+      await estado.aplicarDecision(DecisionTutorial.usuarioNuevo);
+
+      await estado.saltarPaso(PasoGuia.carpetas);
+
+      expect(estado.datos.pasosSaltados, {PasoGuia.carpetas});
+    });
+
+    test('los eventos de la guía se apuntan', () async {
+      final estado = await _estado();
+      expect(estado.datos.numeracionRevisada, isFalse);
+      expect(estado.datos.facturaCompartida, isFalse);
+
+      await estado.marcarNumeracionRevisada();
+      await estado.marcarFacturaCompartida();
+
+      expect(estado.datos.numeracionRevisada, isTrue);
+      expect(estado.datos.facturaCompartida, isTrue);
+    });
+
+    test('repetir la guía borra pasos saltados y eventos', () async {
+      final estado = await _estado();
+      await estado.aplicarDecision(DecisionTutorial.usuarioNuevo);
+      await estado.saltarPaso(PasoGuia.gasto);
+      await estado.marcarNumeracionRevisada();
+      await estado.marcarFacturaCompartida();
+      await estado.ocultarTarjeta();
+
+      await estado.repetirTutorial();
+
+      final datos = estado.datos;
+      expect(datos.pasosSaltados, isEmpty);
+      expect(datos.numeracionRevisada, isFalse);
+      expect(datos.facturaCompartida, isFalse);
+      expect(datos.tarjetaVisible, isTrue);
+      expect(datos.vistos, isEmpty);
+    });
+  });
+
+  group('el encargo de tour', () {
+    test('vale para la pantalla a la que se manda al usuario', () async {
+      final estado = await _estado();
+      await estado.encargarTour(Tour.perfil);
+
+      final datos = estado.datos;
+      expect(datos.encargoVigente(Tour.perfil), isTrue);
+      expect(datos.encargoVigente(Tour.ajustes), isFalse);
+    });
+
+    test('caduca a los pocos minutos', () async {
+      final estado = await _estado();
+      await estado.encargarTour(Tour.perfil);
+      final datos = estado.datos;
+
+      // Al rato ya no salta por sorpresa.
+      final despues = DateTime.now().add(const Duration(minutes: 5));
+      expect(datos.encargoVigente(Tour.perfil, ahora: despues), isFalse);
+    });
+
+    test('olvidarlo lo deja sin efecto al momento', () async {
+      final estado = await _estado();
+      await estado.encargarTour(Tour.perfil);
+
+      await estado.olvidarEncargo();
+
+      expect(estado.datos.tourPendiente, isNull);
+      expect(estado.datos.encargoVigente(Tour.perfil), isFalse);
+    });
+
+    test('sin encargo, ningún tour salta solo', () async {
+      final estado = await _estado();
+      await estado.aplicarDecision(DecisionTutorial.usuarioNuevo);
+
+      for (final tour in Tour.values) {
+        expect(estado.datos.encargoVigente(tour), isFalse, reason: tour.name);
+      }
+    });
+  });
+
   group('usuario nuevo o de los de antes', () {
     DecisionTutorial decidir({
       bool yaDecidido = false,

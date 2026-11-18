@@ -1,7 +1,8 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Cada tramo del tutorial: uno por pantalla.
-enum Tour { inicio, agenda, nuevoBolo, facturas, gastos, perfil, ajustes }
+import 'guia_inicio.dart';
+
+export 'guia_inicio.dart';
 
 /// Lo que hay que hacer con la primera decisión del tutorial.
 enum DecisionTutorial {
@@ -47,14 +48,46 @@ class DatosTutorial {
   /// Los tours que ya se han visto.
   final Set<Tour> vistos;
 
-  /// Si la tarjeta de primeros pasos se ha ocultado a mano.
+  /// Si la guía de inicio se ha ocultado a mano.
   final bool tarjetaOculta;
+
+  /// Pasos que el usuario ha decidido saltarse.
+  final Set<PasoGuia> pasosSaltados;
+
+  /// El usuario ya ha contestado a la pregunta del número de factura.
+  final bool numeracionRevisada;
+
+  /// El usuario ya ha compartido o enviado una factura.
+  final bool facturaCompartida;
+
+  /// El tour que la guía ha encargado al mandar al usuario a una pantalla.
+  ///
+  /// Caduca: si no se muestra, no debe saltar por sorpresa media hora
+  /// después.
+  final Tour? tourPendiente;
+  final DateTime? tourPendienteDesde;
 
   const DatosTutorial({
     required this.decidido,
     required this.vistos,
     required this.tarjetaOculta,
+    this.pasosSaltados = const {},
+    this.numeracionRevisada = false,
+    this.facturaCompartida = false,
+    this.tourPendiente,
+    this.tourPendienteDesde,
   });
+
+  /// Cuánto aguanta un encargo de tour sin usarse.
+  static const caducidadEncargo = Duration(minutes: 3);
+
+  /// Si [tour] es el que la guía encargó y el encargo sigue fresco.
+  bool encargoVigente(Tour tour, {DateTime? ahora}) {
+    if (tourPendiente != tour) return false;
+    final desde = tourPendienteDesde;
+    if (desde == null) return false;
+    return (ahora ?? DateTime.now()).difference(desde) < caducidadEncargo;
+  }
 
   bool estaVisto(Tour tour) => vistos.contains(tour);
 
@@ -73,7 +106,15 @@ class EstadoTutorial {
   static const claveInicializado = 'tutorial_v1_inicializado';
   static const claveTarjetaOculta = 'tutorial_v1_tarjeta_oculta';
 
+  static const claveNumeracionRevisada = 'tutorial_v1_numeracion_revisada';
+  static const claveFacturaCompartida = 'tutorial_v1_factura_compartida';
+  static const claveTourPendiente = 'tutorial_v1_tour_pendiente';
+  static const claveTourPendienteDesde = 'tutorial_v1_tour_pendiente_desde';
+
   static String claveVisto(Tour tour) => 'tutorial_v1_visto_${tour.name}';
+
+  static String claveSaltado(PasoGuia paso) =>
+      'tutorial_v1_saltado_${paso.name}';
 
   final SharedPreferences _prefs;
 
@@ -82,14 +123,58 @@ class EstadoTutorial {
   static Future<EstadoTutorial> abrir() async =>
       EstadoTutorial(await SharedPreferences.getInstance());
 
-  DatosTutorial get datos => DatosTutorial(
-    decidido: _prefs.getBool(claveInicializado) ?? false,
-    vistos: {
-      for (final tour in Tour.values)
-        if (_prefs.getBool(claveVisto(tour)) ?? false) tour,
-    },
-    tarjetaOculta: _prefs.getBool(claveTarjetaOculta) ?? false,
-  );
+  DatosTutorial get datos {
+    final nombreTour = _prefs.getString(claveTourPendiente);
+    final desde = _prefs.getString(claveTourPendienteDesde);
+    return DatosTutorial(
+      decidido: _prefs.getBool(claveInicializado) ?? false,
+      vistos: {
+        for (final tour in Tour.values)
+          if (_prefs.getBool(claveVisto(tour)) ?? false) tour,
+      },
+      tarjetaOculta: _prefs.getBool(claveTarjetaOculta) ?? false,
+      pasosSaltados: {
+        for (final paso in PasoGuia.values)
+          if (_prefs.getBool(claveSaltado(paso)) ?? false) paso,
+      },
+      numeracionRevisada: _prefs.getBool(claveNumeracionRevisada) ?? false,
+      facturaCompartida: _prefs.getBool(claveFacturaCompartida) ?? false,
+      tourPendiente: nombreTour == null
+          ? null
+          : Tour.values.where((t) => t.name == nombreTour).firstOrNull,
+      tourPendienteDesde: desde == null ? null : DateTime.tryParse(desde),
+    );
+  }
+
+  /// Apunta que el usuario se salta [paso].
+  Future<void> saltarPaso(PasoGuia paso) async {
+    await _prefs.setBool(claveSaltado(paso), true);
+  }
+
+  /// Apunta que ha contestado a la pregunta del número de factura.
+  Future<void> marcarNumeracionRevisada() async {
+    await _prefs.setBool(claveNumeracionRevisada, true);
+  }
+
+  /// Apunta que ha compartido o enviado una factura.
+  Future<void> marcarFacturaCompartida() async {
+    await _prefs.setBool(claveFacturaCompartida, true);
+  }
+
+  /// Encarga un tour para la pantalla a la que se va a mandar al usuario.
+  Future<void> encargarTour(Tour tour) async {
+    await _prefs.setString(claveTourPendiente, tour.name);
+    await _prefs.setString(
+      claveTourPendienteDesde,
+      DateTime.now().toIso8601String(),
+    );
+  }
+
+  /// Olvida el encargo: ya se ha usado, o el usuario se fue a otra parte.
+  Future<void> olvidarEncargo() async {
+    await _prefs.remove(claveTourPendiente);
+    await _prefs.remove(claveTourPendienteDesde);
+  }
 
   /// Apunta que [tour] ya se ha visto, para que no vuelva a saltar solo.
   Future<void> marcarVisto(Tour tour) async {
@@ -116,7 +201,13 @@ class EstadoTutorial {
     for (final tour in Tour.values) {
       await _prefs.remove(claveVisto(tour));
     }
+    for (final paso in PasoGuia.values) {
+      await _prefs.remove(claveSaltado(paso));
+    }
     await _prefs.remove(claveTarjetaOculta);
+    await _prefs.remove(claveNumeracionRevisada);
+    await _prefs.remove(claveFacturaCompartida);
+    await olvidarEncargo();
     // Decidido se queda: ya se sabe de qué pie calza esta instalación y, si
     // se borrara, la decisión volvería a marcarlo todo como visto.
     await _prefs.setBool(claveInicializado, true);
