@@ -4,9 +4,15 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../core/services/drive_document_sync_service.dart';
+import '../core/services/estado_drive.dart';
+import '../core/services/estado_tutorial.dart';
+import '../core/services/google_drive_service.dart';
 import '../services/google_auth_service.dart';
 import '../services/platform_auth_service.dart';
 import '../services/supabase_service.dart';
+import 'estado_drive_provider.dart';
+import 'tutorial_provider.dart';
 
 enum AuthStatus { unknown, authenticated, unauthenticated, loading, error }
 
@@ -203,9 +209,25 @@ class AuthController extends Notifier<AuthUiState> {
   Future<bool> signOut() async {
     state = const AuthUiState(status: AuthStatus.loading);
     try {
+      // Mientras la base del usuario sigue activa: vaciar su cola de subidas a
+      // Drive y soltar la carpeta de trabajo, para que no viajen a otra cuenta.
+      await DriveDocumentSyncService.instance.limpiarColaPendiente();
+      await GoogleDriveService.instance.signOut();
+
+      // Cerrar la sesión de MisBolos.
       await SupabaseService.instance.signOut();
-      await PlatformAuthService.instance.signOut();
-      await GoogleAuthService.instance.signOut();
+
+      // Desligar Google del dispositivo: tokens, sesión de plataforma y el
+      // estado que ve Perfil. Sin esto, la cuenta nueva heredaba el Google de
+      // la anterior y podía subir documentos a su Drive.
+      await ref.read(googleAuthProvider.notifier).signOut();
+
+      // Marcas globales del dispositivo (no van por usuario).
+      await EstadoDriveStore.limpiarTodo();
+      await EstadoTutorial.limpiarTodo();
+      ref.invalidate(estadoDriveProvider);
+      ref.invalidate(tutorialProvider);
+
       state = const AuthUiState(status: AuthStatus.unauthenticated);
       return true;
     } catch (e) {
