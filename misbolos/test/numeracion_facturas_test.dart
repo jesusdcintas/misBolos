@@ -214,6 +214,82 @@ void main() {
     );
   });
 
+  group('volver a facturar un bolo', () {
+    test(
+      'tras borrar su factura, el bolo se puede facturar otra vez',
+      () async {
+        // Crear el bolo y su factura, y dejarla emitida.
+        await GigRepository.instance.insert(
+          Gig(
+            id: 'gig-1',
+            fecha: DateTime(2026, 4, 10),
+            clientId: 'client-1',
+            status: GigStatus.confirmado,
+          ),
+        );
+        final primera = _factura('inv-1', 1, DateTime(2026, 4, 10), 'gig-1');
+        await _repo.insertAndLinkGig(primera);
+        await _repo.updateStatus('inv-1', InvoiceStatus.enviada);
+
+        var bolo = await GigRepository.instance.getById('gig-1');
+        expect(bolo?.status, GigStatus.facturado);
+        expect(bolo?.invoiceId, 'inv-1');
+
+        // Borrarla devuelve el bolo a confirmado y sin factura.
+        await _repo.deleteAndUnlinkGig('inv-1');
+        bolo = await GigRepository.instance.getById('gig-1');
+        expect(bolo?.status, GigStatus.confirmado);
+        expect(bolo?.invoiceId, isNull);
+
+        // Y se puede volver a facturar, reusando el número liberado.
+        expect(await _repo.getNextNumberForYear(2026), 1);
+        final segunda = _factura('inv-2', 1, DateTime(2026, 4, 10), 'gig-1');
+        await _repo.insertAndLinkGig(segunda);
+
+        bolo = await GigRepository.instance.getById('gig-1');
+        expect(bolo?.status, GigStatus.facturado);
+        expect(bolo?.invoiceId, 'inv-2');
+        expect((await _repo.getByGigId('gig-1'))?.id, 'inv-2');
+      },
+    );
+
+    test('un bolo que apunta a una factura borrada se suelta', () async {
+      // El enlace puede sobrevivir a una sincronización: pasara como pasara,
+      // el bolo tiene que poder volver a facturarse.
+      final factura = await _crearFactura('inv-1', 1, DateTime(2026, 4, 10));
+      await _repo.delete(factura.id);
+      await GigRepository.instance.linkInvoice('gig-inv-1', factura.id);
+
+      var bolo = await GigRepository.instance.getById('gig-inv-1');
+      expect(bolo?.invoiceId, factura.id, reason: 'parte del enlace colgando');
+
+      await GigRepository.instance.desvincularFactura('gig-inv-1');
+
+      bolo = await GigRepository.instance.getById('gig-inv-1');
+      expect(bolo?.invoiceId, isNull);
+      expect(bolo?.status, GigStatus.confirmado);
+    });
+
+    test('un bolo privado vuelve a su estado privado al soltarla', () async {
+      await GigRepository.instance.insert(
+        Gig(
+          id: 'gig-privado',
+          fecha: DateTime(2026, 4, 10),
+          clientId: 'client-1',
+          facturable: false,
+          status: GigStatus.confirmadoB,
+        ),
+      );
+      await GigRepository.instance.linkInvoice('gig-privado', 'inv-fantasma');
+
+      await GigRepository.instance.desvincularFactura('gig-privado');
+
+      final bolo = await GigRepository.instance.getById('gig-privado');
+      expect(bolo?.invoiceId, isNull);
+      expect(bolo?.status, GigStatus.confirmadoB);
+    });
+  });
+
   group('el bolo al borrar su factura', () {
     test('suelta la factura y vuelve a confirmado', () async {
       final factura = await _crearFactura('inv-1', 1, DateTime(2026, 2, 1));
