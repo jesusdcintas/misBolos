@@ -359,7 +359,7 @@ class CalendarScreen extends ConsumerWidget {
     );
 
     // El tour de Agenda va sobre el calendario, así que espera a esa vista.
-    return TourAlEntrar(
+    return TourPorEncargo(
       tour: Tour.agenda,
       listo: gigsAsync.hasValue && isCalendarView,
       pasos: () => pasosDeAgenda(

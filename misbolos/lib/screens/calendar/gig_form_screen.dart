@@ -456,7 +456,7 @@ class _GigFormScreenState extends ConsumerState<GigFormScreen> {
 
     // Solo al crear: quien edita un bolo ya sabe lo que hay en el formulario.
     if (isEditing) return pantalla;
-    return TourAlEntrar(
+    return TourPorEncargo(
       tour: Tour.nuevoBolo,
       pasos: () => pasosDeNuevoBolo(
         cliente: _claveTourCliente,

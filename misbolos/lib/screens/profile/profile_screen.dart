@@ -159,7 +159,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       ),
     );
 
-    return TourAlEntrar(
+    return TourPorEncargo(
       tour: Tour.perfil,
       listo: settingsAsync.hasValue,
       pasos: () => pasosDePerfil(

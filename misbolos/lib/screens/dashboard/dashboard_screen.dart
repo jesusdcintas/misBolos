@@ -208,7 +208,7 @@ class DashboardScreen extends ConsumerWidget {
     );
 
     // El tour de Inicio salta la primera vez, con los datos ya cargados.
-    return TourAlEntrar(
+    return TourPorEncargo(
       tour: Tour.inicio,
       listo: statsAsync.hasValue,
       pasos: () => pasosDeInicio(

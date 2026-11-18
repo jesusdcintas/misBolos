@@ -155,7 +155,7 @@ class _GastosInversionesScreenState
     );
 
     // El tour espera a que la pestaña de Gastos esté a la vista.
-    return TourAlEntrar(
+    return TourPorEncargo(
       tour: Tour.gastos,
       listo: !isLoading,
       activo: ref.watch(finanzasTabProvider) == 1,

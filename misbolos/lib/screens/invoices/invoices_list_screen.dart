@@ -417,7 +417,7 @@ class _InvoicesListScreenState extends ConsumerState<InvoicesListScreen> {
     );
 
     // El tour espera a que la pestaña de Facturas esté a la vista.
-    return TourAlEntrar(
+    return TourPorEncargo(
       tour: Tour.facturas,
       listo: invoicesAsync.hasValue,
       activo: ref.watch(finanzasTabProvider) == 0,

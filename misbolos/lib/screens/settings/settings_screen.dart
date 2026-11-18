@@ -162,7 +162,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ),
     );
 
-    return TourAlEntrar(
+    return TourPorEncargo(
       tour: Tour.ajustes,
       listo: settingsAsync.hasValue,
       pasos: () => pasosDeAjustes(retencion: _claveTourRetencion),

@@ -37,9 +37,7 @@ List<PasoTour> pasosDeInicio({
 }) => [
   PasoTour(
     clave: periodo,
-    texto:
-        'Elige si quieres ver el mes, el trimestre o el año. Desliza a los '
-        'lados para cambiar de periodo.',
+    texto: 'Elige si quieres ver el mes, el trimestre o el año.',
   ),
   PasoTour(
     clave: ingresos,
@@ -185,9 +183,8 @@ List<PasoTour> pasosDeGastos({required GlobalKey anadir, GlobalKey? gasto}) => [
     PasoTour(
       clave: gasto,
       texto:
-          'El PDF se guarda en tu Drive, ordenado por trimestre y mes. Desliza '
-          'un gasto a la izquierda para borrarlo; tienes unos segundos para '
-          'deshacerlo y el PDF se queda en Drive.',
+          'El PDF se guarda en tu Drive, en la carpeta GASTOS E INVERSIONES '
+          'del mes. Para borrar un gasto, ábrelo y usa Eliminar.',
     ),
 ];
 

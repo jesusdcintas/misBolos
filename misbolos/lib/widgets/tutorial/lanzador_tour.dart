@@ -132,19 +132,24 @@ ContentAlign _alineacion(PasoTour paso, double altoPantalla) {
   return centro > altoPantalla / 2 ? ContentAlign.top : ContentAlign.bottom;
 }
 
-/// Lanza el tour de una pantalla la primera vez que se entra en ella.
+/// Lanza el tour de una pantalla cuando la guía lo ha encargado.
 ///
-/// [listo] evita que salte mientras la pantalla carga, y [activo] sirve para
-/// las pestañas: el tour de Facturas no debe saltar hasta que su pestaña esté
-/// a la vista.
-class TourAlEntrar extends ConsumerStatefulWidget {
+/// Ya no salta solo al entrar: o lo pide la guía con «Hacerlo ahora», o lo
+/// pide el usuario con el botón de ayuda. Y el encargo caduca, para que
+/// nunca aparezca un tour por sorpresa un rato después.
+class TourPorEncargo extends ConsumerStatefulWidget {
   final Tour tour;
   final List<PasoTour> Function() pasos;
+
+  /// Mientras la pantalla carga no se enseña nada.
   final bool listo;
+
+  /// Para las pestañas: el tour de Facturas espera a que se vea la suya.
   final bool activo;
+
   final Widget child;
 
-  const TourAlEntrar({
+  const TourPorEncargo({
     super.key,
     required this.tour,
     required this.pasos,
@@ -154,19 +159,36 @@ class TourAlEntrar extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<TourAlEntrar> createState() => _TourAlEntrarState();
+  ConsumerState<TourPorEncargo> createState() => _TourPorEncargoState();
 }
 
-class _TourAlEntrarState extends ConsumerState<TourAlEntrar> {
+class _TourPorEncargoState extends ConsumerState<TourPorEncargo> {
   bool _lanzando = false;
-  int _intentos = 0;
+  bool _encargoVivo = false;
+  TutorialNotifier? _tutorial;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Hay que guardarlo: en dispose ya no se puede usar `ref`.
+    _tutorial = ref.read(tutorialProvider.notifier);
+  }
+
+  @override
+  void dispose() {
+    // Si el usuario se va sin que el tour llegara a verse, el encargo muere
+    // con la pantalla.
+    if (_encargoVivo) unawaited(_tutorial?.olvidarEncargo() ?? Future.value());
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final datos = ref.watch(tutorialProvider).valueOrNull;
-    final toca = datos?.tocaMostrar(widget.tour) ?? false;
+    final encargado = datos?.encargoVigente(widget.tour) ?? false;
+    _encargoVivo = datos?.tourPendiente == widget.tour;
 
-    if (toca && widget.listo && widget.activo && !_lanzando) {
+    if (encargado && widget.listo && widget.activo && !_lanzando) {
       _lanzando = true;
       WidgetsBinding.instance.addPostFrameCallback((_) => _lanzar());
     }
@@ -174,22 +196,12 @@ class _TourAlEntrarState extends ConsumerState<TourAlEntrar> {
   }
 
   Future<void> _lanzar() async {
-    // Un respiro para que la pantalla acabe de pintarse y para no pisar la
-    // animación de entrada.
+    // Un respiro para que la pantalla acabe de pintarse.
     await Future<void>.delayed(const Duration(milliseconds: 400));
     if (!mounted) return;
 
-    final mostrado = await mostrarTour(
-      context,
-      ref,
-      tour: widget.tour,
-      pasos: widget.pasos(),
-    );
-    if (mostrado || _intentos >= 2) return;
-
-    // Había otro tour abierto o aún no estaba el elemento: se reintenta un
-    // par de veces y se deja estar.
-    _intentos++;
-    if (mounted) setState(() => _lanzando = false);
+    await ref.read(tutorialProvider.notifier).olvidarEncargo();
+    if (!mounted) return;
+    await mostrarTour(context, ref, tour: widget.tour, pasos: widget.pasos());
   }
 }
